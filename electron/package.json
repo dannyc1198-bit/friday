@@ -1,0 +1,25 @@
+{
+  "name": "JARVIS-desktop",
+  "version": "1.0.0",
+  "description": "JARVIS \u2014 Global Peace Initiative Desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "install-startup": "node register-startup.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.wavelength.JARVIS",
+    "productName": "JARVIS",
+    "win": {
+      "target": "nsis",
+      "icon": "../apps/web/public/favicon.ico"
+    }
+  }
+}

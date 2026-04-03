@@ -113,7 +113,7 @@ Currently, testing is manual:
 1. Start dev server: `npm run dev`
 2. Open http://localhost:3000
 3. Watch Iron Man startup sequence
-4. Type messages and verify Jarvis responds
+4. Type messages and verify JARVIS responds
 5. Press Ctrl+K to open Control Center
 6. Test tool tabs (PC, Bluetooth, Smart Home)
 

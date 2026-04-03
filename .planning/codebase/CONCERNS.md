@@ -110,13 +110,13 @@
 **Voice I/O (Milestone 4):**
 - Problem: No speech-to-text or text-to-speech
 - Current workaround: Text chat only
-- Blocks: "Hey Jarvis" wake word, voice responses
+- Blocks: "Hey JARVIS" wake word, voice responses
 - Implementation complexity: High (OpenAI Whisper + TTS integration)
 
 **Frontend-Orchestrator connection:**
 - Problem: Real AI not working in UI
 - Current workaround: Mock responses in frontend
-- Blocks: Actual Jarvis functionality
+- Blocks: Actual JARVIS functionality
 - Implementation complexity: Low (API URL change + CORS)
 
 **Orchestrator dependencies not installed:**

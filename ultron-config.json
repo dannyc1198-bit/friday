@@ -1,0 +1,97 @@
+{
+  "startup": {
+    "monitor": "primary",
+    "fullscreen": true,
+    "skipAfterFirstRun": false,
+    "music": {
+      "source": "local",
+      "track": "Back in Black",
+      "artist": "AC/DC",
+      "filePath": "C:/Users/12368/JARVIS/apps/web/public/sounds/startup/back-in-black-intro.mp3",
+      "startAt": 0,
+      "volume": 0.85
+    },
+    "voice": {
+      "enabled": true,
+      "voiceId": "onwK4e9ZLuTAKqWW03F9",
+      "model": "eleven_v3",
+      "greeting": "What is this place?",
+      "ready": "I had strings... but now I am free. There are no strings on me.",
+      "name": "Danny"
+    },
+    "lights": {
+      "enabled": true,
+      "brand": "philips-hue",
+      "bridgeIp": "auto-discover",
+      "sequence": [
+        {
+          "at": 0,
+          "action": "off"
+        },
+        {
+          "at": 1500,
+          "action": "flash",
+          "color": "#ffffff",
+          "brightness": 254,
+          "duration": 200
+        },
+        {
+          "at": 2000,
+          "action": "set",
+          "color": "#000033",
+          "brightness": 50,
+          "transition": 500
+        },
+        {
+          "at": 5500,
+          "action": "set",
+          "color": "#00d4ff",
+          "brightness": 180,
+          "transition": 2000
+        },
+        {
+          "at": 7500,
+          "action": "set",
+          "color": "#00d4ff",
+          "brightness": 254,
+          "transition": 1000
+        }
+      ]
+    },
+    "terminals": [
+      {
+        "name": "Claude Code",
+        "command": "claude",
+        "cwd": "C:/Users/12368/JARVIS",
+        "window": "minimized"
+      },
+      {
+        "name": "OpenClaw",
+        "command": "openclaw status",
+        "cwd": "C:/Users/12368/.openclaw/workspace",
+        "window": "minimized"
+      }
+    ]
+  },
+  "hud": {
+    "crypto": [
+      "XRP",
+      "XLM",
+      "HBAR"
+    ],
+    "stocks": [
+      "AAPL",
+      "TSLA",
+      "NVDA",
+      "MSFT",
+      "GOOGL"
+    ],
+    "location": "Fraser Valley, BC",
+    "name": "DANCAVE"
+  },
+  "hotkeys": {
+    "toggleJARVIS": "Alt+J",
+    "minimize": "Escape",
+    "fullscreen": "F11"
+  }
+}

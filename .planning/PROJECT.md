@@ -6,7 +6,7 @@ A high-tech, Iron Man-inspired personal AI assistant for Danny with voice contro
 
 ## Core Value
 
-**Make Jarvis feel alive** - British accent voice, witty personality, proactive suggestions, and seamless control of lights, music, and PC. The goal is the full Tony Stark experience: Jarvis greets you in the morning, sets the mood, and anticipates your needs.
+**Make JARVIS feel alive** - British accent voice, witty personality, proactive suggestions, and seamless control of lights, music, and PC. The goal is the full Tony Stark experience: JARVIS greets you in the morning, sets the mood, and anticipates your needs.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ A high-tech, Iron Man-inspired personal AI assistant for Danny with voice contro
 - [ ] Frontend connected to Orchestrator API (real AI responses)
 - [ ] Voice input with OpenAI Whisper
 - [ ] Voice output with OpenAI TTS (British accent)
-- [ ] Wake word detection ("Hey Jarvis")
+- [ ] Wake word detection ("Hey JARVIS")
 - [ ] Alexa integration configured with real credentials
 - [ ] Morning routine automation (auto-start, briefing, mood setting)
 - [ ] Proactive suggestions based on context

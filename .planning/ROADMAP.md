@@ -2,7 +2,7 @@
 
 ## Overview
 
-Transform the existing Jarvis codebase from a working prototype into a fully functional Iron Man-style AI assistant. The journey starts with connecting the frontend to the real orchestrator, then adds voice capabilities (input via Whisper, output via TTS, wake word detection), integrates real smart home and media control, and culminates with morning routines, proactive suggestions, and seamless Windows integration.
+Transform the existing JARVIS codebase from a working prototype into a fully functional Iron Man-style AI assistant. The journey starts with connecting the frontend to the real orchestrator, then adds voice capabilities (input via Whisper, output via TTS, wake word detection), integrates real smart home and media control, and culminates with morning routines, proactive suggestions, and seamless Windows integration.
 
 ## Domain Expertise
 
@@ -18,7 +18,7 @@ None
 - [ ] **Phase 2: Orchestrator Hardening** - Error handling, logging, stability
 - [ ] **Phase 3: Voice Input** - Speech-to-text with OpenAI Whisper
 - [ ] **Phase 4: Voice Output** - British accent TTS responses
-- [ ] **Phase 5: Wake Word Detection** - "Hey Jarvis" activation
+- [ ] **Phase 5: Wake Word Detection** - "Hey JARVIS" activation
 - [ ] **Phase 6: Alexa Integration** - Real smart home control
 - [ ] **Phase 7: Spotify Integration** - Real music control
 - [ ] **Phase 8: Morning Routine** - Auto-start, briefing, mood setting
@@ -28,7 +28,7 @@ None
 ## Phase Details
 
 ### Phase 1: Frontend-Orchestrator Connection
-**Goal**: Real AI responses in the UI - Jarvis actually responds via GPT-4
+**Goal**: Real AI responses in the UI - JARVIS actually responds via GPT-4
 **Depends on**: Nothing (first phase)
 **Research**: Unlikely (internal wiring, established patterns)
 **Plans**: TBD
@@ -52,7 +52,7 @@ Key work:
 - Handle edge cases (disconnections, timeouts, malformed input)
 
 ### Phase 3: Voice Input
-**Goal**: Talk to Jarvis via microphone using OpenAI Whisper
+**Goal**: Talk to JARVIS via microphone using OpenAI Whisper
 **Depends on**: Phase 2
 **Research**: Likely (OpenAI Whisper API)
 **Research topics**: Whisper API streaming, browser audio recording, format requirements
@@ -65,7 +65,7 @@ Key work:
 - Wire transcribed text into chat flow
 
 ### Phase 4: Voice Output
-**Goal**: Jarvis speaks responses with British accent
+**Goal**: JARVIS speaks responses with British accent
 **Depends on**: Phase 3
 **Research**: Likely (OpenAI TTS API)
 **Research topics**: TTS API voice options, British voice selection, audio streaming/playback
@@ -78,7 +78,7 @@ Key work:
 - Play audio responses automatically
 
 ### Phase 5: Wake Word Detection
-**Goal**: "Hey Jarvis" activates listening without button press
+**Goal**: "Hey JARVIS" activates listening without button press
 **Depends on**: Phase 4
 **Research**: Likely (new capability, library selection)
 **Research topics**: Wake word libraries (Porcupine, Snowboy), browser always-on audio, power efficiency
@@ -130,7 +130,7 @@ Key work:
 - Store routine preferences
 
 ### Phase 9: Proactive Suggestions
-**Goal**: Jarvis anticipates needs and offers help
+**Goal**: JARVIS anticipates needs and offers help
 **Depends on**: Phase 8
 **Research**: Unlikely (internal logic using GPT-4 context)
 **Plans**: TBD
@@ -142,7 +142,7 @@ Key work:
 - User preference for suggestion frequency
 
 ### Phase 10: Windows Auto-Start
-**Goal**: Jarvis starts with Windows and runs in background
+**Goal**: JARVIS starts with Windows and runs in background
 **Depends on**: Phase 5
 **Research**: Likely (Windows-specific integration)
 **Research topics**: Windows startup registry, system tray apps, Electron vs native, background service

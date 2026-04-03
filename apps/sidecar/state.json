@@ -1,0 +1,15 @@
+{
+  "consecutive_nags": 0,
+  "last_nag_time": 1774667727.1902757,
+  "last_greeting_date": "2026-03-28 21:18",
+  "person_present": false,
+  "person_last_seen": 1774758881.6640778,
+  "daily_events": [
+    "22:14 Danny left",
+    "22:14 Security: lights_on_empty: Image is very dark, possibly lights are off or camera issue - unable to assess room status properly",
+    "22:39 Security: other: Camera view is completely dark - possible camera malfunction or lighting issue",
+    "22:45 Security: lights_on_empty: Room appears very dark or cameras may need adjustment - unable to monitor effectively"
+  ],
+  "total_nags_today": 0,
+  "total_cleanups_today": 0
+}

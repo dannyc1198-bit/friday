@@ -5,7 +5,7 @@
 ## Directory Layout
 
 ```
-jarvis/
+JARVIS/
 ├── apps/                    # Application packages
 │   ├── web/                # Next.js frontend (Milestone 1)
 │   │   ├── src/
