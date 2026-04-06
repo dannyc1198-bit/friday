@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { getRandomStartupTrack } from "@/config/music-playlist";
 import { getPersonalizedGreeting, userConfig } from "@/config/user-config";
 import {
@@ -12,25 +13,188 @@ import {
   TodoItem,
 } from "@/services/startup-briefing";
 
+// Lazy-load canvas/WebGL components (no SSR)
+const CircuitAnimation = dynamic(() => import("./CircuitAnimation"), { ssr: false });
+const ArcReactor3D = dynamic(() => import("./ArcReactor3D"), { ssr: false });
+
 interface IronManStartupProps {
   onComplete: () => void;
   voicePackId?: string;
 }
 
-// Boot sequence messages
+// Startup phase enum for readability
+type StartupPhase =
+  | "CIRCUIT_LINES"   // 0-1.5s
+  | "ARC_REACTOR"     // 1.5-3.0s
+  | "IDENTITY"        // 3.0-4.0s
+  | "HUD_PANELS"      // 4.0-5.5s
+  | "STATUS_FILL"     // 5.5-7.0s
+  | "BRIEFING"        // 7.0-18.0s (existing panels)
+  | "READY";          // 18.0s+ (fade out & transition)
+
+// Boot sequence messages (shown during STATUS_FILL)
 const bootMessages = [
-  { text: "STARK INDUSTRIES", delay: 0, duration: 800 },
-  { text: "INITIALIZING SYSTEM...", delay: 800, duration: 600 },
-  { text: "LOADING CORE MODULES", delay: 1400, duration: 500 },
-  { text: "NEURAL INTERFACE: ONLINE", delay: 1900, duration: 400 },
-  { text: "VOICE RECOGNITION: ACTIVE", delay: 2300, duration: 400 },
-  { text: "SECURITY PROTOCOLS: ENGAGED", delay: 2700, duration: 400 },
-  { text: "ARC REACTOR: NOMINAL", delay: 3100, duration: 400 },
-  { text: "ALL SYSTEMS OPERATIONAL", delay: 3500, duration: 600 },
+  { text: "STARK INDUSTRIES", delay: 0, duration: 400 },
+  { text: "INITIALIZING SYSTEM...", delay: 400, duration: 300 },
+  { text: "LOADING CORE MODULES", delay: 700, duration: 200 },
+  { text: "NEURAL INTERFACE: ONLINE", delay: 900, duration: 200 },
+  { text: "VOICE RECOGNITION: ACTIVE", delay: 1100, duration: 200 },
+  { text: "SECURITY PROTOCOLS: ENGAGED", delay: 1300, duration: 200 },
+  { text: "ARC REACTOR: NOMINAL", delay: 1500, duration: 200 },
+  { text: "ALL SYSTEMS OPERATIONAL", delay: 1700, duration: 300 },
 ];
 
+// Crypto display component
+function CryptoPanel({ crypto }: { crypto: CryptoPrice[] }) {
+  return (
+  <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
+    <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
+      <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+      CRYPTO
+    </div>
+    <div className="space-y-2">
+      {crypto.map((c) => (
+        <div key={c.symbol} className="flex justify-between items-center">
+          <span className="text-blue-100 font-mono">{c.symbol}</span>
+          <div className="text-right">
+            <span className="text-blue-100 font-mono">${c.price.toFixed(4)}</span>
+            <span
+              className={`ml-2 text-xs font-mono ${
+                c.changePercent >= 0 ? "text-green-400" : "text-blue-400"
+              }`}
+            >
+              {c.changePercent >= 0 ? "+" : ""}
+              {c.changePercent.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+}
+
+// Stock display component
+function StockPanel({ stocks }: { stocks: StockPrice[] }) {
+  return (
+  <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
+    <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
+      <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+      STOCKS
+    </div>
+    <div className="space-y-2">
+      {stocks.map((s) => (
+        <div key={s.symbol} className="flex justify-between items-center">
+          <div>
+            <span className="text-blue-100 font-mono">{s.symbol}</span>
+            <span className="text-blue-500/50 text-xs ml-1">{s.name}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-blue-100 font-mono">${s.price.toFixed(2)}</span>
+            <span
+              className={`ml-2 text-xs font-mono ${
+                s.changePercent >= 0 ? "text-green-400" : "text-blue-400"
+              }`}
+            >
+              {s.changePercent >= 0 ? "+" : ""}
+              {s.changePercent.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+}
+
+// Weather display component
+function WeatherPanel({ weather }: { weather: WeatherData | null }) {
+  return (
+  <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
+    <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
+      <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+      WEATHER
+    </div>
+    {weather ? (
+      <div className="flex items-center gap-4">
+        <span className="text-4xl">{weather.icon}</span>
+        <div>
+          <div className="text-2xl text-blue-100 font-light">{weather.temp}°F</div>
+          <div className="text-blue-400/70 text-sm">{weather.condition}</div>
+          <div className="text-blue-500/50 text-xs">
+            Humidity: {weather.humidity}% | Wind: {weather.windSpeed} mph
+          </div>
+        </div>
+      </div>
+    ) : (
+      <div className="text-blue-500/50 text-sm">Loading weather data...</div>
+    )}
+  </div>
+);
+}
+
+// Email display component
+function EmailPanel({ emails }: { emails: { unreadCount: number; importantCount: number } }) {
+  return (
+  <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
+    <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
+      <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+      INBOX STATUS
+    </div>
+    <div className="flex items-center gap-6">
+      <div className="text-center">
+        <div className="text-3xl text-blue-100 font-light">{emails.unreadCount}</div>
+        <div className="text-blue-500/70 text-xs">Unread</div>
+      </div>
+      <div className="text-center">
+        <div className="text-3xl text-yellow-400 font-light">{emails.importantCount}</div>
+        <div className="text-blue-500/70 text-xs">Important</div>
+      </div>
+      {emails.unreadCount === 0 && (
+        <div className="text-green-400 text-sm ml-4">Inbox clear</div>
+      )}
+    </div>
+  </div>
+);
+}
+
+// Todo display component
+function TodoPanel({ todos }: { todos: TodoItem[] }) {
+  return (
+  <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
+    <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
+      <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+      TODAY&apos;S TASKS
+    </div>
+    {todos.length > 0 ? (
+      <div className="space-y-2 max-h-32 overflow-y-auto">
+        {todos.slice(0, 5).map((todo) => (
+          <div key={todo.id} className="flex items-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                todo.priority === "high"
+                  ? "bg-blue-400"
+                  : todo.priority === "medium"
+                  ? "bg-yellow-400"
+                  : "bg-green-400"
+              }`}
+            />
+            <span className="text-blue-100 text-sm">{todo.title}</span>
+          </div>
+        ))}
+        {todos.length > 5 && (
+          <div className="text-blue-500/50 text-xs">+{todos.length - 5} more tasks</div>
+        )}
+      </div>
+    ) : (
+      <div className="text-green-400 text-sm">No pending tasks</div>
+    )}
+  </div>
+);}
+
 export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: IronManStartupProps) {
-  const [phase, setPhase] = useState(0);
+  const [startupPhase, setStartupPhase] = useState<StartupPhase>("CIRCUIT_LINES");
+  const [phase, setPhase] = useState(0); // numeric phase kept for existing render logic
   const [currentMessage, setCurrentMessage] = useState("");
   const [JARVISLetters, setJARVISLetters] = useState<string[]>([]);
   const [showArcReactor, setShowArcReactor] = useState(false);
@@ -41,6 +205,7 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
   const [circleProgress, setCircleProgress] = useState(0);
   const [briefing, setBriefing] = useState<StartupBriefing | null>(null);
   const [briefingPhase, setBriefingPhase] = useState(0); // 0: crypto, 1: weather, 2: emails, 3: todos
+  const [showCircuit, setShowCircuit] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bootSoundRef = useRef<HTMLAudioElement | null>(null);
 
@@ -61,14 +226,15 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
     getStartupBriefing().then(setBriefing);
   }, []);
 
-  // Phase 0: Initial black screen
-  // Phase 1: Arc reactor power up
-  // Phase 2: JARVIS letters animate in
-  // Phase 3: Boot messages scroll
-  // Phase 4: HUD elements appear
-  // Phase 5: Greeting types out
-  // Phase 6: Briefing panels (crypto, weather, email, todos)
-  // Phase 7: Fade out
+  // ── Phase state machine ──────────────────────────────────────────
+  //
+  // CIRCUIT_LINES    0-1.5s     circuit animation from center
+  // ARC_REACTOR      1.5-3.0s   arc reactor progress ring
+  // IDENTITY         3.0-4.0s   J.A.R.V.I.S. text assembles
+  // HUD_PANELS       4.0-5.5s   HUD panels slide in, boot messages
+  // STATUS_FILL      5.5-7.0s   loading bars fill, greeting types
+  // BRIEFING         7.0-18.0s  briefing panels (crypto, weather, etc.)
+  // READY            18.0s+     fade out and transition to main UI
 
   useEffect(() => {
     const timers: NodeJS.Timeout[] = [];
@@ -78,24 +244,30 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
     bootSoundRef.current.volume = 0.5;
     bootSoundRef.current.play().catch(() => {});
 
-    // Phase 1: Arc reactor (500ms)
+    // ── CIRCUIT_LINES: 0-1.5s ──
+    // Circuit animation is shown immediately (showCircuit = true by default)
+
+    // ── ARC_REACTOR: 1.5s ──
     timers.push(setTimeout(() => {
+      setStartupPhase("ARC_REACTOR");
       setPhase(1);
       setShowArcReactor(true);
-    }, 500));
+    }, 1500));
 
-    // Phase 2: JARVIS letters (1500ms)
+    // ── IDENTITY: 3.0s ──
     timers.push(setTimeout(() => {
+      setStartupPhase("IDENTITY");
       setPhase(2);
       "J.A.R.V.I.S.".split("").forEach((letter, i) => {
         timers.push(setTimeout(() => {
           setJARVISLetters(prev => [...prev, letter]);
-        }, i * 150));
+        }, i * 70)); // faster letter assembly to fit 1s window
       });
-    }, 1500));
+    }, 3000));
 
-    // Phase 3: Boot messages (3500ms)
+    // ── HUD_PANELS: 4.0s ──
     timers.push(setTimeout(() => {
+      setStartupPhase("HUD_PANELS");
       setPhase(3);
       setShowHUD(true);
       setHexCodes(generateHexCodes());
@@ -105,7 +277,6 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
       audioRef.current = new Audio(track.src);
       audioRef.current.volume = 0.3;
       audioRef.current.play().catch(() => {
-        // Fallback to default
         audioRef.current = new Audio("/sounds/shoot-to-thrill.mp3");
         audioRef.current.volume = 0.3;
         audioRef.current.play().catch(() => {});
@@ -116,38 +287,43 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
           setCurrentMessage(msg.text);
         }, msg.delay));
       });
+    }, 4000));
 
+    // ── STATUS_FILL: 5.5s ──
+    timers.push(setTimeout(() => {
+      setStartupPhase("STATUS_FILL");
+      setPhase(4);
+
+      // Fill progress ring over 1.5s
       let progress = 0;
       const progressInterval = setInterval(() => {
-        progress += 2;
+        progress += 4;
         setCircleProgress(Math.min(progress, 100));
         if (progress >= 100) clearInterval(progressInterval);
-      }, 50);
-    }, 3500));
+      }, 60);
+      timers.push(progressInterval as unknown as NodeJS.Timeout);
+    }, 5500));
 
-    // Phase 4: Full HUD (7500ms)
-    timers.push(setTimeout(() => {
-      setPhase(4);
-    }, 7500));
-
-    // Phase 5: Greeting (8500ms)
+    // Greeting starts typing at 6.0s
     timers.push(setTimeout(() => {
       setPhase(5);
-    }, 8500));
+    }, 6000));
 
-    // Phase 6: Briefing (12000ms)
+    // ── BRIEFING: 7.0s ──
     timers.push(setTimeout(() => {
+      setStartupPhase("BRIEFING");
       setPhase(6);
       setShowBriefing(true);
 
       // Animate through briefing panels
-      timers.push(setTimeout(() => setBriefingPhase(1), 2000)); // Weather
-      timers.push(setTimeout(() => setBriefingPhase(2), 4000)); // Emails
-      timers.push(setTimeout(() => setBriefingPhase(3), 6000)); // Todos
-    }, 12000));
+      timers.push(setTimeout(() => setBriefingPhase(1), 2000));
+      timers.push(setTimeout(() => setBriefingPhase(2), 4000));
+      timers.push(setTimeout(() => setBriefingPhase(3), 6000));
+    }, 7000));
 
-    // Phase 7: Fade out (20000ms)
+    // ── READY: 18.0s ──
     timers.push(setTimeout(() => {
+      setStartupPhase("READY");
       setPhase(7);
       if (audioRef.current) {
         const fadeOut = setInterval(() => {
@@ -159,12 +335,12 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
           }
         }, 100);
       }
-    }, 20000));
+    }, 18000));
 
-    // Complete (21500ms)
+    // Complete (19.5s)
     timers.push(setTimeout(() => {
       onComplete();
-    }, 21500));
+    }, 19500));
 
     return () => {
       timers.forEach(clearTimeout);
@@ -207,151 +383,15 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
     return () => clearInterval(interval);
   }, [showHUD, generateHexCodes]);
 
-  // Crypto display component
-  const CryptoPanel = ({ crypto }: { crypto: CryptoPrice[] }) => (
-    <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
-      <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
-        <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-        CRYPTO
-      </div>
-      <div className="space-y-2">
-        {crypto.map((c) => (
-          <div key={c.symbol} className="flex justify-between items-center">
-            <span className="text-blue-100 font-mono">{c.symbol}</span>
-            <div className="text-right">
-              <span className="text-blue-100 font-mono">${c.price.toFixed(4)}</span>
-              <span
-                className={`ml-2 text-xs font-mono ${
-                  c.changePercent >= 0 ? "text-green-400" : "text-blue-400"
-                }`}
-              >
-                {c.changePercent >= 0 ? "+" : ""}
-                {c.changePercent.toFixed(2)}%
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  // Stock display component
-  const StockPanel = ({ stocks }: { stocks: StockPrice[] }) => (
-    <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
-      <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
-        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-        STOCKS
-      </div>
-      <div className="space-y-2">
-        {stocks.map((s) => (
-          <div key={s.symbol} className="flex justify-between items-center">
-            <div>
-              <span className="text-blue-100 font-mono">{s.symbol}</span>
-              <span className="text-blue-500/50 text-xs ml-1">{s.name}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-blue-100 font-mono">${s.price.toFixed(2)}</span>
-              <span
-                className={`ml-2 text-xs font-mono ${
-                  s.changePercent >= 0 ? "text-green-400" : "text-blue-400"
-                }`}
-              >
-                {s.changePercent >= 0 ? "+" : ""}
-                {s.changePercent.toFixed(2)}%
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  // Weather display component
-  const WeatherPanel = ({ weather }: { weather: WeatherData | null }) => (
-    <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
-      <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
-        <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-        WEATHER
-      </div>
-      {weather ? (
-        <div className="flex items-center gap-4">
-          <span className="text-4xl">{weather.icon}</span>
-          <div>
-            <div className="text-2xl text-blue-100 font-light">{weather.temp}°F</div>
-            <div className="text-blue-400/70 text-sm">{weather.condition}</div>
-            <div className="text-blue-500/50 text-xs">
-              Humidity: {weather.humidity}% | Wind: {weather.windSpeed} mph
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="text-blue-500/50 text-sm">Loading weather data...</div>
-      )}
-    </div>
-  );
-
-  // Email display component
-  const EmailPanel = ({ emails }: { emails: { unreadCount: number; importantCount: number } }) => (
-    <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
-      <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
-        <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-        INBOX STATUS
-      </div>
-      <div className="flex items-center gap-6">
-        <div className="text-center">
-          <div className="text-3xl text-blue-100 font-light">{emails.unreadCount}</div>
-          <div className="text-blue-500/70 text-xs">Unread</div>
-        </div>
-        <div className="text-center">
-          <div className="text-3xl text-yellow-400 font-light">{emails.importantCount}</div>
-          <div className="text-blue-500/70 text-xs">Important</div>
-        </div>
-        {emails.unreadCount === 0 && (
-          <div className="text-green-400 text-sm ml-4">Inbox clear</div>
-        )}
-      </div>
-    </div>
-  );
-
-  // Todo display component
-  const TodoPanel = ({ todos }: { todos: TodoItem[] }) => (
-    <div className="bg-black/60 border border-cyan-500/30 rounded-lg p-4 backdrop-blur-sm">
-      <div className="text-blue-400 text-xs font-mono mb-2 flex items-center gap-2">
-        <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-        TODAY&apos;S TASKS
-      </div>
-      {todos.length > 0 ? (
-        <div className="space-y-2 max-h-32 overflow-y-auto">
-          {todos.slice(0, 5).map((todo) => (
-            <div key={todo.id} className="flex items-center gap-2">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  todo.priority === "high"
-                    ? "bg-blue-400"
-                    : todo.priority === "medium"
-                    ? "bg-yellow-400"
-                    : "bg-green-400"
-                }`}
-              />
-              <span className="text-blue-100 text-sm">{todo.title}</span>
-            </div>
-          ))}
-          {todos.length > 5 && (
-            <div className="text-blue-500/50 text-xs">+{todos.length - 5} more tasks</div>
-          )}
-        </div>
-      ) : (
-        <div className="text-green-400 text-sm">No pending tasks</div>
-      )}
-    </div>
-  );
-
   return (
     <div
       className={`fixed inset-0 z-50 bg-black flex items-center justify-center overflow-hidden transition-opacity duration-1000 ${
         phase === 7 ? "opacity-0" : "opacity-100"
       }`}
     >
+      {/* Circuit lines animation — first phase, persists as background texture */}
+      {showCircuit && <CircuitAnimation />}
+
       {/* Scanlines overlay */}
       <div className="absolute inset-0 pointer-events-none z-50 opacity-10">
         <div
@@ -362,62 +402,32 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
         />
       </div>
 
-      {/* Arc Reactor center glow */}
+      {/* Arc Reactor — Three.js 3D (replaces SVG placeholder) */}
       <div
         className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-1000 ${
           showArcReactor ? "opacity-100 scale-100" : "opacity-0 scale-0"
         } ${showBriefing ? "scale-50 -translate-y-[200px]" : ""}`}
       >
         <div className="absolute -inset-32 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
+        <ArcReactor3D size={400} className="-translate-x-1/2 -translate-y-1/2 absolute top-1/2 left-1/2" />
 
-        <svg width="400" height="400" className="absolute -top-[200px] -left-[200px]">
-          <circle
-            cx="200"
-            cy="200"
-            r="180"
-            fill="none"
-            stroke="rgba(6, 182, 212, 0.3)"
-            strokeWidth="2"
-            className={`transition-all duration-1000 ${phase >= 2 ? "opacity-100" : "opacity-0"}`}
-          />
-          <circle
-            cx="200"
-            cy="200"
-            r="160"
-            fill="none"
-            stroke="rgb(6, 182, 212)"
-            strokeWidth="3"
-            strokeDasharray={`${circleProgress * 10.05} 1005`}
-            strokeLinecap="round"
-            transform="rotate(-90 200 200)"
-            className="transition-all duration-100"
-          />
-          <circle
-            cx="200"
-            cy="200"
-            r="140"
-            fill="none"
-            stroke="rgba(6, 182, 212, 0.5)"
-            strokeWidth="1"
-            className={`transition-all duration-1000 ${phase >= 2 ? "opacity-100" : "opacity-0"}`}
-          />
-          {[...Array(36)].map((_, i) => (
-            <line
-              key={i}
-              x1="200"
-              y1="30"
-              x2="200"
-              y2="40"
-              stroke="rgba(6, 182, 212, 0.5)"
-              strokeWidth="1"
-              transform={`rotate(${i * 10} 200 200)`}
-              className={`transition-all duration-500 ${phase >= 3 ? "opacity-100" : "opacity-0"}`}
-              style={{ transitionDelay: `${i * 20}ms` }}
+        {/* Progress ring overlay during STATUS_FILL phase */}
+        {circleProgress < 100 && phase >= 4 && (
+          <svg width="400" height="400" className="absolute -top-[200px] -left-[200px] pointer-events-none">
+            <circle
+              cx="200"
+              cy="200"
+              r="195"
+              fill="none"
+              stroke="rgb(6, 182, 212)"
+              strokeWidth="2"
+              strokeDasharray={`${circleProgress * 12.25} 1225`}
+              strokeLinecap="round"
+              transform="rotate(-90 200 200)"
+              className="transition-all duration-100"
             />
-          ))}
-        </svg>
-
-        <div className="w-8 h-8 bg-blue-400 rounded-full animate-pulse shadow-[0_0_60px_30px_rgba(6,182,212,0.5)]" />
+          </svg>
+        )}
       </div>
 
       {/* J.A.R.V.I.S. title */}

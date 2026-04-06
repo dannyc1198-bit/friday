@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import (
     SIDECAR_PORT, CHECK_INTERVAL, MESS_THRESHOLD,
     STATE_FILE, FRAMES_DIR, ORCHESTRATOR_URL,
+    ANTHROPIC_API_KEY,
 )
 from plugins.camera_manager import CameraManager
 from plugins.voice_engine import VoiceEngine
@@ -48,6 +49,7 @@ from plugins.security_monitor import SecurityMonitor
 from plugins.greeting_system import GreetingSystem
 from plugins.notification_manager import NotificationManager
 from plugins.push_to_talk import PushToTalk
+from plugins.meta_glasses import MetaGlassesVision
 
 # ─── Logging ───────────────────────────────────────────────────
 LOG_FILE = Path(__file__).parent / "data" / "sidecar.log"
@@ -89,6 +91,7 @@ def save_state(state: dict):
 
 # ─── Global Instances ──────────────────────────────────────────
 
+camera_enabled = True
 camera = CameraManager()
 notifications = NotificationManager()
 nagger = KitchenNagger()
@@ -96,6 +99,7 @@ security = SecurityMonitor(notifications)
 greeting = GreetingSystem()
 voice = VoiceEngine(camera)
 ptt = PushToTalk(voice, camera)
+glasses = MetaGlassesVision(ANTHROPIC_API_KEY, ORCHESTRATOR_URL, voice_engine=voice)
 
 state = load_state()
 last_analysis: dict = {}
@@ -137,6 +141,10 @@ def scan_loop(args):
 
     while True:
         try:
+            if not camera_enabled:
+                time.sleep(args.interval)
+                continue
+
             log.info("--- Scanning ---")
             frame = camera.get_frame()
 
@@ -237,6 +245,7 @@ def get_frame():
 @app.get("/api/status")
 def get_status():
     return {
+        "camera_enabled": camera_enabled,
         "voice_mode": voice.mode,
         "ptt_active": ptt._running,
         "person_present": state.get("person_present", False),
@@ -263,6 +272,19 @@ async def speak_endpoint(request_data: dict):
     return JSONResponse({"error": "No text provided"}, status_code=400)
 
 
+@app.post("/api/camera/toggle")
+async def camera_toggle(request_data: dict = {}):
+    global camera_enabled
+    camera_enabled = request_data.get("enabled", not camera_enabled)
+    if not camera_enabled:
+        camera.stop()
+        log.info("Camera disabled by user")
+    else:
+        camera.start("webcam", 0)
+        log.info("Camera enabled by user")
+    return {"ok": True, "camera_enabled": camera_enabled}
+
+
 @app.post("/api/notify")
 async def notify_endpoint(request_data: dict):
     title = request_data.get("title", "JARVIS")
@@ -272,6 +294,67 @@ async def notify_endpoint(request_data: dict):
         notifications.alert(title, message, level)
         return {"ok": True}
     return JSONResponse({"error": "No message provided"}, status_code=400)
+
+
+# ─── Meta Glasses Vision endpoints ────────────────────────────
+
+@app.get("/api/glasses/status")
+def glasses_status():
+    """Status of the Meta Glasses Vision watcher."""
+    return glasses.get_status()
+
+
+@app.get("/api/glasses/last")
+def glasses_last():
+    """Return the latest description from the glasses."""
+    description = glasses.get_last_description()
+    status = glasses.get_status()
+    if not description:
+        return JSONResponse({"ok": False, "error": "No glasses capture yet"}, status_code=404)
+    return {
+        "ok": True,
+        "description": description,
+        "captured_at": status["last_capture_time"],
+        "image_path": status["last_capture"],
+    }
+
+
+@app.post("/api/glasses/ask")
+async def glasses_ask(request_data: dict):
+    """Ask JARVIS a question about the last glasses photo.
+
+    Body: {"question": "What brand is this?"}
+    Or:   {"question": "How many calories is this meal?"}
+    """
+    question = request_data.get("question", "")
+    if not question:
+        return JSONResponse({"error": "question is required"}, status_code=400)
+
+    def _run():
+        answer = glasses.ask_about_last_image(question)
+        if voice:
+            voice.speak(answer)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    # Return synchronous answer too (runs vision inline for API callers)
+    answer = glasses.ask_about_last_image(question)
+    return {"ok": True, "question": question, "answer": answer}
+
+
+@app.post("/api/glasses/describe-file")
+async def glasses_describe_file(request_data: dict):
+    """Describe a specific image file.
+
+    Body: {"path": "C:/Users/12368/Pictures/Meta/photo.jpg", "question": "optional"}
+    """
+    image_path = request_data.get("path", "")
+    question = request_data.get("question", "What do you see in this image?")
+    if not image_path:
+        return JSONResponse({"error": "path is required"}, status_code=400)
+
+    answer = glasses.ask_about_image_file(image_path, question)
+    return {"ok": True, "path": image_path, "answer": answer}
 
 
 # ─── Main ──────────────────────────────────────────────────────
@@ -288,6 +371,8 @@ def main():
     parser.add_argument("--save-frames", action="store_true", help="Save captured frames to disk")
     parser.add_argument("--no-server", action="store_true", help="Skip FastAPI server")
     parser.add_argument("--no-ptt", action="store_true", help="Disable push-to-talk (Ctrl+Shift)")
+    parser.add_argument("--glasses-folder", type=str, help="Meta Glasses sync folder (default: ~/Pictures/Meta)")
+    parser.add_argument("--no-glasses", action="store_true", help="Disable Meta Glasses Vision watcher")
     args = parser.parse_args()
 
     log.info("=" * 60)
@@ -323,6 +408,11 @@ def main():
     # Start voice engine (wake word)
     if not args.no_voice and not args.once:
         voice.start()
+
+    # Start Meta Glasses Vision watcher
+    if not args.no_glasses and not args.once:
+        glasses.start(sync_folder=args.glasses_folder)
+        log.info(f"Meta Glasses Vision: watching {glasses.get_status()['sync_folder']}")
 
     # Start push-to-talk (Ctrl+Shift)
     if not args.no_ptt and not args.once:

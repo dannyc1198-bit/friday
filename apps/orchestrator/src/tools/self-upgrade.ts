@@ -2,6 +2,7 @@ import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
 import { memoryService } from "../services/memory/index.js";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 
 // Self-Upgrade System for JARVIS
@@ -474,11 +475,11 @@ const systemDiagnosticsTool: Tool = {
     systemDiagnostics = {
       uptime: process.uptime(),
       memoryUsage: Math.round(memUsage.heapUsed / 1024 / 1024),
-      cpuLoad: Math.random() * 10 + 5, // Simulated
+      cpuLoad: (() => { const cpus = os.cpus(); return cpus.reduce((sum, cpu) => sum + (1 - cpu.times.idle / Object.values(cpu.times).reduce((a, b) => a + b, 0)), 0) / cpus.length * 100; })(),
       toolsRegistered: toolRegistry.getToolCount(),
-      requestsHandled: systemDiagnostics.requestsHandled + Math.floor(Math.random() * 10),
-      avgResponseTime: Math.random() * 500 + 200,
-      errorRate: Math.random() * 2,
+      requestsHandled: systemDiagnostics.requestsHandled,
+      avgResponseTime: systemDiagnostics.requestsHandled > 0 ? systemDiagnostics.avgResponseTime : 0,
+      errorRate: 0,
       lastUpdated: new Date(),
     };
 

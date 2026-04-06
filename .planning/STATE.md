@@ -9,12 +9,61 @@ See: .planning/PROJECT.md (updated 2026-01-16)
 
 ## Current Position
 
-Phase: 4 of 10 (Browser Control + Screen Awareness) — CODE COMPLETE ✅
-Plan: Phase 4 code done. 19 new tools (17 browser + 2 screen reader). Autonomous mode + stop command live. Phase 5 (Permissions) next.
-Status: 101 tools registered across 12 categories, browser control + vision active
-Last activity: 2026-02-28 — Phase 4 build complete
+Phase: 9 of 10 (Packaging) — COMPLETE (wizard skipped — Danny already configured)
+Plan: All 9 phases done. Crypto HUD skipped per Danny's request. Setup wizard skipped (not needed — already configured). install.bat written.
+Status: All core systems live — 120+ tools, voice, browser, vault, proactive monitor, morning briefing, market alerts, learning engine, Gemini router, health tracking, code agent, content creation, business intel
+Last activity: 2026-04-06 — Phase 6-9 verified/closed, Phase 7-9 gaps filled, system prompt updated
 
-Progress: ██████████████████████████████░░░░ 45%
+Next: Final Integration — end-to-end scenario testing (manual + code verification)
+
+Progress: ████████████████████████████████████████████████░ 90%
+
+---
+
+## Session 2026-04-03 — Major Audit + Phase 5 + Phase 6 Start
+
+### Full Codebase Audit (20 fixes)
+Ran 3 parallel review agents across orchestrator + web + config. Found and fixed 20 issues:
+
+**Critical (4):** Build-breaking null check (file-memory-client), require() in ESM (unified-memory), path traversal in Obsidian tools, SSE stream never cancelled (useChat)
+
+**High (6):** SSE CORS origin mismatch, TCP chunk buffering for SSE, JSON.parse unhandled in tool loop, fake diagnostics replaced with real metrics, progressInterval leak, sync I/O on hot chat path
+
+**Medium (10):** Stale closure in toggleMute, sub-components remounted every render, autoScroll new array ref, Yahoo Finance CORS, addTodo window guard, audio URL leak, redundant useEffect, timing-safe auth, Tool type union, temp files cleanup
+
+### Code Review (Codex — 18 additional fixes)
+Ran 3 review agents (Phase 5 security, bug fix verification, silent failure hunter):
+
+**Security:** scrypt N increased to 65536, GCM IV fixed to 12 bytes, buffer zeroed on lock, unlock rate limiting (5 attempts → 10min lockout), vault_list PIN gate added, isUrlSafe javascript: bypass fixed, PIN file fail-closed
+
+**Error handling:** Empty catch blocks replaced with logging (memory-loader ×5), AbortError preserves partial message, fallback responses removed (honest error instead), stopTask logs failures
+
+**Path traversal:** assertInsideVault added to obsidian_daily, re-called after name-based fallback in obsidian_edit + obsidian_delete
+
+### Phase 5 — Permissions + Credential Vault ✅ COMPLETE
+- Step 5.1: Permission Manager — already existed (session permissions + PIN + bcrypt + lockout)
+- Step 5.2: vault.ts — AES-256-GCM encrypted credential storage (scrypt N=65536, auto-lock 30min)
+- Step 5.3: vault-tools.ts — 7 tools (unlock, lock, status, add, get, list, delete) + browser_login tool
+- Step 5.4: Deep dive mode — already in system prompt
+
+**New files:** vault.ts, vault-tools.ts
+**New tools:** 8 (7 vault + 1 browser_login)
+**Build:** Both apps pass clean (tsc + next build)
+
+### Phase 6 — Startup Sequence (IN PROGRESS)
+Background agents started building:
+- Electron main.js fix (port 3002 → 3000) + upgrade (hotkeys, retry, service management)
+- CircuitAnimation.tsx (canvas circuit board animation)
+- Startup state machine enhancement
+- start-jarvis.bat + install-startup.ps1
+**Status: Agent work may need verification and build check next session**
+
+### Gemini Hybrid Provider (IN PROGRESS)
+Background agent started building:
+- gemini.ts — Google Gemini 2.0 Flash provider (free tier)
+- llm-router.ts — Routes simple requests to Gemini, complex to Claude
+- Config update for GEMINI_API_KEY
+**Status: Agent work may need verification and build check next session**
 
 ---
 

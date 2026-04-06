@@ -4,7 +4,7 @@
 // Public endpoints (no auth): GET /api/health
 // Protected endpoints (auth required): everything else
 
-import { randomBytes } from "crypto";
+import { randomBytes, timingSafeEqual, createHash } from "crypto";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { FastifyRequest, FastifyReply } from "fastify";
@@ -80,6 +80,12 @@ export function getApiKey(): string {
   return apiKey;
 }
 
+function safeCompare(a: string, b: string): boolean {
+  const ha = createHash("sha256").update(a).digest();
+  const hb = createHash("sha256").update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
+
 // ─── Middleware ──────────────────────────────────────────────────
 
 export async function authMiddleware(
@@ -116,7 +122,7 @@ export async function authMiddleware(
   const token = authHeader.slice(7).trim();
   const validKey = getApiKey();
 
-  if (token !== validKey) {
+  if (!safeCompare(token, validKey)) {
     reply.code(403).send({
       error: "Forbidden",
       message: "Invalid API key.",

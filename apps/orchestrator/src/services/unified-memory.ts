@@ -11,7 +11,7 @@
 // The learning engine feeds into this. Pattern recognition and outcome
 // tracking all write through this layer.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
 import { join, normalize } from "path";
 import { memoryService } from "./memory/index.js";
 
@@ -212,7 +212,6 @@ class UnifiedMemoryService {
     // Import from OpenClaw memory directory (individual files)
     try {
       if (existsSync(OPENCLAW_MEMORY)) {
-        const { readdirSync } = await_readdirSync();
         const files = readdirSync(OPENCLAW_MEMORY).filter((f: string) => f.endsWith(".json"));
         for (const file of files) {
           try {
@@ -396,12 +395,6 @@ class UnifiedMemoryService {
       lastLearningCycle: this.store.stats.lastLearningCycle,
     };
   }
-}
-
-// Workaround for sync readdirSync import (avoid top-level await)
-function await_readdirSync() {
-  const fs = require("fs");
-  return { readdirSync: fs.readdirSync };
 }
 
 // Singleton export

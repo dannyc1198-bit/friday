@@ -232,6 +232,26 @@ class VoiceEngine:
                         self.mode = MODE_SLEEPING
                         continue
 
+                    # Camera toggle commands
+                    text_lower = text.lower()
+                    if any(phrase in text_lower for phrase in ["camera off", "turn off camera", "disable camera", "stop watching", "stop looking"]):
+                        try:
+                            with httpx.Client(timeout=5) as http:
+                                http.post("http://localhost:3002/api/camera/toggle", json={"enabled": False})
+                            self.speak("Camera off. I'm blind but still listening, boss.")
+                        except Exception:
+                            self.speak("Couldn't reach the camera switch.")
+                        continue
+
+                    if any(phrase in text_lower for phrase in ["camera on", "turn on camera", "enable camera", "start watching", "eyes on"]):
+                        try:
+                            with httpx.Client(timeout=5) as http:
+                                http.post("http://localhost:3002/api/camera/toggle", json={"enabled": True})
+                            self.speak("Camera back on. I can see you again.")
+                        except Exception:
+                            self.speak("Couldn't reach the camera switch.")
+                        continue
+
                     # Get AI response
                     reply = self._chat_with_ai(text)
                     log.info(f"JARVIS: {reply}")

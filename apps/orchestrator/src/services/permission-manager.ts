@@ -144,13 +144,17 @@ class PermissionManager {
   // ── Private ──────────────────────────────────────────────────
 
   private loadPinHash(): void {
-    try {
-      if (existsSync(PIN_FILE)) {
-        this.pinHash = readFileSync(PIN_FILE, "utf-8").trim();
-        console.log("[PermissionManager] PIN hash loaded");
-      }
-    } catch {
+    if (!existsSync(PIN_FILE)) {
       console.log("[PermissionManager] No PIN configured yet");
+      return;
+    }
+    try {
+      this.pinHash = readFileSync(PIN_FILE, "utf-8").trim();
+      console.log("[PermissionManager] PIN hash loaded");
+    } catch (err) {
+      console.error("[PermissionManager] CRITICAL: PIN file exists but cannot be read:", err);
+      // Fail closed — leave pinHash null so isPinSet() returns false
+      // but isVerified() also returns false, blocking vault access
     }
   }
 }

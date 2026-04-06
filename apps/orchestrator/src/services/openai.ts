@@ -267,7 +267,15 @@ export async function* streamChatCompletion(
             assistantBlocks.push({ type: "text", text: textAccumulator });
             textAccumulator = "";
           } else if (currentBlockType === "tool_use" && currentToolUse) {
-            const parsedInput = JSON.parse(currentToolUse.inputJson || "{}");
+            let parsedInput: Record<string, unknown> = {};
+            try {
+              parsedInput = JSON.parse(currentToolUse.inputJson || "{}");
+            } catch {
+              console.error("[JARVIS] Malformed tool input JSON, skipping tool call");
+              currentToolUse = null;
+              currentBlockType = null;
+              continue;
+            }
             assistantBlocks.push({
               type: "tool_use",
               id: currentToolUse.id,
@@ -469,7 +477,15 @@ export async function* streamRawCompletion(
             assistantBlocks.push({ type: "text", text: textAccumulator });
             textAccumulator = "";
           } else if (currentBlockType === "tool_use" && currentToolUse) {
-            const parsedInput = JSON.parse(currentToolUse.inputJson || "{}");
+            let parsedInput: Record<string, unknown> = {};
+            try {
+              parsedInput = JSON.parse(currentToolUse.inputJson || "{}");
+            } catch {
+              console.error("[JARVIS] Malformed tool input JSON, skipping tool call");
+              currentToolUse = null;
+              currentBlockType = null;
+              continue;
+            }
             assistantBlocks.push({
               type: "tool_use",
               id: currentToolUse.id,

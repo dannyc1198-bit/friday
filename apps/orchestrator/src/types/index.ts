@@ -51,7 +51,7 @@ export interface Tool {
   name: string;
   description: string;
   category: string;
-  parameters: ToolParameter[];
+  parameters: ToolParameter[] | { type: "object"; properties: Record<string, unknown>; required?: string[] };
   execute: (params: Record<string, unknown>) => Promise<ToolResult>;
 }
 

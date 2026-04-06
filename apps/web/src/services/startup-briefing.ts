@@ -287,6 +287,8 @@ export function saveTodos(todos: TodoItem[]): void {
 
 // Add a new todo
 export function addTodo(title: string, priority: "high" | "medium" | "low" = "medium"): TodoItem {
+  if (typeof window === "undefined") return { id: "", title, priority };
+
   const todo: TodoItem = {
     id: Date.now().toString(),
     title,

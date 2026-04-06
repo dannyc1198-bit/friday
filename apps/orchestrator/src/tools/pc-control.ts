@@ -59,6 +59,17 @@ const APP_ALLOWLIST: Record<string, string> = {
   spotify: "spotify",
   discord: "discord",
   slack: "slack",
+  telegram: "telegram",
+  "telegram desktop": "telegram",
+
+  // AI & Dev tools (additional)
+  claude: "claude",
+  "claude code": "claude",
+  "claude desktop": "claude",
+
+  // Note-taking
+  obsidian: "Obsidian",
+  "obsidian md": "Obsidian",
 
   // System
   explorer: "explorer",

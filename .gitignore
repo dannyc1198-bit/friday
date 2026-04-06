@@ -19,6 +19,8 @@ dist/
 # Runtime data & credentials - NEVER COMMIT
 # Contains: hue-credentials.json, spotify-tokens.json, memory.json, tasks.json
 data/
+vault.enc
+pin.hash
 
 # Debug
 npm-debug.log*
@@ -43,3 +45,4 @@ Thumbs.db
 # Temp
 *.tmp
 *.bak
+tmpclaude-*

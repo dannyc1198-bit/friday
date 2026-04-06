@@ -13,6 +13,7 @@ import {
   cleanupOldConversations,
 } from "./services/conversation.js";
 import { streamChatCompletion } from "./services/openai.js";
+import { streamChatWithRouting } from "./services/llm-router.js";
 import { classifyIntent, requiresToolExecution } from "./services/intent.js";
 import { memoryService } from "./services/memory/index.js";
 import { textToSpeech, isTTSAvailable, stripForTTS } from "./services/tts.js";
@@ -25,6 +26,9 @@ import { unifiedMemory } from "./services/unified-memory.js";
 import { classifyAgent, dispatchToAgent, getActiveTasks, getAgentRosterPrompt } from "./services/agent-dispatch.js";
 import { learningEngine } from "./services/learning-engine.js";
 import { buildFullMemoryContext, saveConversationSummary, recordBehavioralPattern } from "./services/memory-loader.js";
+import { proactiveMonitor } from "./services/proactive-monitor.js";
+import { getMorningBriefing } from "./services/morning-briefing.js";
+import { marketMonitor } from "./services/market-monitor.js";
 
 // Constants
 const MAX_MESSAGE_LENGTH = 4000;
@@ -95,6 +99,23 @@ console.log(`  ✓ Learning Engine: ${learningStats.totalInteractions} interacti
 // Log agent roster
 console.log("  ✓ Agent Dispatch: 5 specialist agents registered (NEXUS, BUILDER, CREATOR, PULSE, CLAWDY)");
 
+// Start proactive background monitor
+proactiveMonitor.start();
+console.log("  ✓ Proactive Monitor: running every 5 minutes (quiet hours 11pm–5am)");
+
+// Start market price monitor — feeds HUD + fires alerts on big moves
+marketMonitor.start();
+marketMonitor.onAlert((message, symbol) => {
+  // Queue into proactive monitor so frontend picks it up via /api/proactive/alerts
+  proactiveMonitor.queueAlert({
+    type: "crypto",
+    priority: "high",
+    title: `${symbol} price alert`,
+    message,
+  });
+});
+console.log("  ✓ Market Monitor: polling CoinGecko every 5 minutes (XRP, XLM, HBAR, BTC, ETH)");
+
 // Health check endpoint
 app.get("/api/health", async () => {
   return {
@@ -158,11 +179,14 @@ app.post<{
   app.log.info({ intent }, "Classified intent");
 
   // Set up SSE headers
+  const allowedOrigins = [config.corsOrigin, "http://localhost:3000"];
+  const requestOrigin = request.headers.origin || "";
+  const sseOrigin = allowedOrigins.includes(requestOrigin) ? requestOrigin : config.corsOrigin;
   reply.raw.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
-    "Access-Control-Allow-Origin": config.corsOrigin,
+    "Access-Control-Allow-Origin": sseOrigin,
   });
 
   // Get conversation messages (system prompt handled internally by LLM service)
@@ -192,7 +216,7 @@ app.post<{
     // Stream from Claude (tool execution handled by agentic loop in streamChatCompletion)
     const masterMemoryContext = buildFullMemoryContext();
     const brainContext = "\n\n" + masterMemoryContext + "\n" + learningContext + "\n" + memoryContext + "\n" + agentContext;
-    for await (const chunk of streamChatCompletion(messages, abortController.signal, brainContext)) {
+    for await (const chunk of streamChatWithRouting(messages, abortController.signal, brainContext)) {
       if (chunk.type === "text" && chunk.content) {
         fullContent += chunk.content;
         reply.raw.write(`data: ${JSON.stringify({ type: "text", content: chunk.content })}\n\n`);
@@ -265,14 +289,14 @@ app.post<{
       }
       // Save daily conversation summary
       const summaryText = `User: ${message.slice(0, 100)} → JARVIS: ${fullContent.slice(0, 100)}`;
-      saveConversationSummary(summaryText, keyFacts);
+      saveConversationSummary(summaryText, keyFacts).catch(console.error);
 
       // Track behavioral patterns
       const hour = new Date().getHours();
-      if (hour < 7) recordBehavioralPattern("Danny is active early morning (before 7 AM)");
-      else if (hour >= 20) recordBehavioralPattern("Danny is active late evening (after 8 PM)");
-      if (message.length < 20) recordBehavioralPattern("Danny prefers short messages");
-      if (toolCalls.length > 3) recordBehavioralPattern("This task required multi-tool execution");
+      if (hour < 7) recordBehavioralPattern("Danny is active early morning (before 7 AM)").catch(console.error);
+      else if (hour >= 20) recordBehavioralPattern("Danny is active late evening (after 8 PM)").catch(console.error);
+      if (message.length < 20) recordBehavioralPattern("Danny prefers short messages").catch(console.error);
+      if (toolCalls.length > 3) recordBehavioralPattern("This task required multi-tool execution").catch(console.error);
     } catch (e) {
       app.log.warn("Failed to save conversation memory");
     }
@@ -472,6 +496,71 @@ app.get("/api/system/status", async () => {
   };
 });
 
+// ─── Proactive Monitor Endpoints ────────────────────────────────
+
+// Get pending (unread) alerts
+app.get("/api/proactive/alerts", async () => {
+  return { alerts: proactiveMonitor.getAlerts() };
+});
+
+// Mark a single alert as read
+app.delete<{ Params: { id: string } }>("/api/proactive/alerts/:id", async (request, reply) => {
+  const ok = proactiveMonitor.markRead(request.params.id);
+  if (!ok) { reply.code(404); return { error: "Alert not found" }; }
+  return { ok: true };
+});
+
+// Mark all alerts as read
+app.delete("/api/proactive/alerts", async () => {
+  proactiveMonitor.clearAll();
+  return { ok: true };
+});
+
+// ─── Morning Briefing Endpoint ───────────────────────────────────
+
+app.get("/api/briefing/morning", async () => {
+  const briefing = await getMorningBriefing();
+  return briefing;
+});
+
+// ─── Market Monitor Endpoints ────────────────────────────────────
+
+// Get latest cached prices for all watched assets (HUD polling)
+app.get("/api/market/prices", async () => {
+  return { prices: marketMonitor.getPrices() };
+});
+
+// Force-refresh prices right now
+app.post("/api/market/refresh", async () => {
+  const prices = await marketMonitor.refreshNow();
+  return { prices };
+});
+
+// List active custom price alerts
+app.get("/api/market/alerts", async () => {
+  return { alerts: marketMonitor.getCustomAlerts() };
+});
+
+// Add a custom price alert (e.g. "alert me when XRP hits $3")
+app.post<{
+  Body: { symbol: string; type: "price_above" | "price_below" | "change_pct"; threshold: number; note?: string }
+}>("/api/market/alerts", async (request, reply) => {
+  const { symbol, type, threshold, note } = request.body;
+  if (!symbol || !type || threshold == null) {
+    reply.code(400);
+    return { error: "symbol, type, and threshold are required" };
+  }
+  const alert = marketMonitor.addCustomAlert({ symbol, type, threshold, note });
+  return { alert };
+});
+
+// Remove a custom price alert
+app.delete<{ Params: { id: string } }>("/api/market/alerts/:id", async (request, reply) => {
+  const ok = marketMonitor.removeCustomAlert(request.params.id);
+  if (!ok) { reply.code(404); return { error: "Alert not found" }; }
+  return { ok: true };
+});
+
 // TTS endpoint — converts text to speech via ElevenLabs
 // Rate limited to 30 req/min per Phase 1 security spec
 app.post<{
@@ -633,5 +722,9 @@ const start = async () => {
     process.exit(1);
   }
 };
+
+// Clean shutdown — stop background services
+process.on("SIGINT", () => { proactiveMonitor.stop(); marketMonitor.stop(); process.exit(0); });
+process.on("SIGTERM", () => { proactiveMonitor.stop(); marketMonitor.stop(); process.exit(0); });
 
 start();

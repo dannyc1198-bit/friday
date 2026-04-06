@@ -11,17 +11,33 @@ import { CameraFeed } from "@/components/CameraFeed";
 import { KitchenStatus } from "@/components/KitchenStatus";
 import { AgentDashboard } from "@/components/AgentDashboard";
 import { SystemOverview } from "@/components/SystemOverview";
+import { JarvisOrb } from "@/components/JarvisOrb";
 import { useChat } from "@/hooks/useChat";
 import { useVoice } from "@/hooks/useVoice";
+import { useWakeDetection } from "@/hooks/useWakeDetection";
 import { useHealth } from "@/hooks/useHealth";
 import { useSidecar } from "@/hooks/useSidecar";
 import { useAgents } from "@/hooks/useAgents";
 import { mockConversations } from "@/data/mockConversations";
 import { Conversation } from "@/types";
-import { generateId } from "@/lib/utils";
+import { generateId, cn } from "@/lib/utils";
+
+// ─── Startup YouTube track ─────────────────────────────────
+const STARTUP_YOUTUBE_URL = "https://www.youtube.com/results?search_query=the+clash+should+i+stay+or+should+i+go+official+music+video";
+
+// ─── Launch startup apps via Next.js API route ─────────────
+async function launchStartupApps() {
+  try {
+    await fetch("/api/startup", { method: "POST" });
+  } catch {
+    // Non-critical — don't block boot if apps fail to open
+  }
+}
 
 export default function Home() {
-  const [showStartup, setShowStartup] = useState(true);
+  // Dormant = waiting for double clap. Startup = boot animation. Neither = full UI.
+  const [isDormant, setIsDormant] = useState(true);
+  const [showStartup, setShowStartup] = useState(false);
   const [showControlPanel, setShowControlPanel] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [conversations, setConversations] =
@@ -35,6 +51,8 @@ export default function Home() {
   const { status } = useHealth();
   const sidecar = useSidecar();
   const { agents, tasks, loading: agentLoading, dispatchTask } = useAgents();
+
+  const isAwake = !isDormant && !showStartup;
 
   const activeConversation = conversations.find(
     (c) => c.id === activeConversationId
@@ -96,8 +114,142 @@ export default function Home() {
     messages,
     isLoading,
     onTranscript: handleSendMessage,
-    enabled: !showStartup,
+    enabled: isAwake,
   });
+
+  // ─── Double Clap → Wake JARVIS ─────────────────────────────
+  const handleDoubleClap = useCallback(() => {
+    if (!isDormant) return; // Only respond when dormant
+
+    // 1. Wake up — start the boot sequence
+    setIsDormant(false);
+    setShowStartup(true);
+
+    // 2. Open YouTube with "Should I Stay or Should I Go"
+    window.open(STARTUP_YOUTUBE_URL, "_blank");
+
+    // 3. Launch startup apps (Telegram, Claude Code)
+    launchStartupApps();
+
+    // 4. JARVIS says hello (TTS)
+    fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "Hello sir. Wavelength Solutions online and ready to take action as you request, boss." }),
+    })
+      .then((res) => {
+        if (res.ok && (res.headers.get("content-type") || "").includes("audio")) return res.blob();
+        return null;
+      })
+      .then((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const a = new Audio(url);
+          a.onended = () => URL.revokeObjectURL(url);
+          a.onerror = () => URL.revokeObjectURL(url);
+          a.play();
+        } else if ("speechSynthesis" in window) {
+          const u = new SpeechSynthesisUtterance("Hello sir. Wavelength Solutions online and ready to take action as you request, boss.");
+          const v = speechSynthesis.getVoices();
+          const gb = v.find((x) => x.lang === "en-GB") || v.find((x) => x.lang.startsWith("en"));
+          if (gb) u.voice = gb;
+          speechSynthesis.speak(u);
+        }
+      })
+      .catch(() => {
+        if ("speechSynthesis" in window) {
+          speechSynthesis.speak(new SpeechSynthesisUtterance("Hello sir. Wavelength Solutions online and ready to take action as you request, boss."));
+        }
+      });
+  }, [isDormant]);
+
+  // Wake detection: say "morning jarvis" THEN double clap
+  const { wakeState } = useWakeDetection({ onWake: handleDoubleClap, enabled: isDormant });
+
+  // ─── Morning Briefing — fires once after startup sequence completes ──
+  const handleStartupComplete = useCallback(() => {
+    setShowStartup(false);
+
+    // Fetch briefing script from orchestrator and speak it via TTS
+    fetch("/api/briefing/morning")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { script?: string } | null) => {
+        const script = data?.script;
+        if (!script) return;
+
+        fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: script }),
+        })
+          .then((r) => r.ok ? r.blob() : null)
+          .then((blob) => {
+            if (blob) {
+              const url = URL.createObjectURL(blob);
+              const a = new Audio(url);
+              a.onended = () => URL.revokeObjectURL(url);
+              a.onerror = () => URL.revokeObjectURL(url);
+              a.play().catch(() => {});
+            } else if ("speechSynthesis" in window) {
+              const u = new SpeechSynthesisUtterance(script);
+              const voices = speechSynthesis.getVoices();
+              const gb = voices.find((v) => v.lang === "en-GB") || voices.find((v) => v.lang.startsWith("en"));
+              if (gb) u.voice = gb;
+              speechSynthesis.speak(u);
+            }
+          })
+          .catch(() => {});
+      })
+      .catch(() => {});
+  }, []);
+
+  // ─── Proactive Alerts — poll every 30s while awake ───────────────
+  useEffect(() => {
+    if (!isAwake) return;
+
+    const speakAlert = (text: string, alertId: string) => {
+      // Mark read first to prevent double-speak
+      fetch(`/api/proactive/alerts/${alertId}`, { method: "DELETE" }).catch(() => {});
+
+      fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      })
+        .then((r) => r.ok ? r.blob() : null)
+        .then((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            const a = new Audio(url);
+            a.onended = () => URL.revokeObjectURL(url);
+            a.onerror = () => URL.revokeObjectURL(url);
+            a.play().catch(() => {});
+          } else if ("speechSynthesis" in window) {
+            const u = new SpeechSynthesisUtterance(text);
+            speechSynthesis.speak(u);
+          }
+        })
+        .catch(() => {});
+    };
+
+    const poll = () => {
+      fetch("/api/proactive/alerts")
+        .then((r) => r.ok ? r.json() : null)
+        .then((data: { alerts?: Array<{ id: string; message: string; priority: string }> } | null) => {
+          const alerts = data?.alerts ?? [];
+          // Speak only the highest-priority unread alert per poll cycle
+          const highPriority = alerts.find((a) => a.priority === "high");
+          const toSpeak = highPriority ?? alerts[0];
+          if (toSpeak) {
+            speakAlert(toSpeak.message, toSpeak.id);
+          }
+        })
+        .catch(() => {});
+    };
+
+    const interval = setInterval(poll, 30 * 1000);
+    return () => clearInterval(interval);
+  }, [isAwake]);
 
   useEffect(() => {
     if (activeConversationId && messages.length > 0) {
@@ -132,8 +284,74 @@ export default function Home() {
 
   return (
     <>
+      {/* ─── DORMANT SCREEN — waiting for double clap ─── */}
+      {isDormant && (
+        <div className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center overflow-hidden">
+          {/* Ambient background glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-500/[0.03] rounded-full blur-[120px]" />
+
+          {/* Scanlines overlay */}
+          <div className="absolute inset-0 pointer-events-none opacity-[0.04]"
+            style={{ background: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(6,182,212,0.15) 2px, rgba(6,182,212,0.15) 4px)" }}
+          />
+
+          {/* Corner brackets */}
+          <div className="absolute top-6 left-6 w-16 h-16 border-l border-t border-cyan-500/20" />
+          <div className="absolute top-6 right-6 w-16 h-16 border-r border-t border-cyan-500/20" />
+          <div className="absolute bottom-6 left-6 w-16 h-16 border-l border-b border-cyan-500/20" />
+          <div className="absolute bottom-6 right-6 w-16 h-16 border-r border-b border-cyan-500/20" />
+
+          {/* Sleeping orb */}
+          <div className="relative flex items-center justify-center">
+            {/* Outer glow ring */}
+            <div className="absolute w-44 h-44 rounded-full border border-cyan-500/10 jarvis-orb-breathe-ring" />
+            <div className="absolute w-56 h-56 rounded-full border border-cyan-500/[0.05]" />
+
+            {/* Glow behind orb */}
+            <div className="absolute w-32 h-32 bg-cyan-400/10 rounded-full blur-2xl jarvis-orb-breathe" />
+
+            {/* Core orb */}
+            <div className="w-28 h-28 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-600/15 shadow-[0_0_40px_rgba(34,211,238,0.15),inset_0_0_30px_rgba(34,211,238,0.1)] jarvis-orb-breathe relative">
+              {/* Inner highlight */}
+              <div className="absolute inset-3 rounded-full bg-gradient-to-br from-white/10 to-transparent" />
+              {/* Center eye */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-cyan-400/40 shadow-[0_0_12px_rgba(34,211,238,0.4)] jarvis-orb-center-pulse" />
+            </div>
+          </div>
+
+          {/* Status text */}
+          <div className="mt-10 flex items-center gap-2.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/50 jarvis-orb-center-pulse" />
+            <span className="font-mono text-sm tracking-[0.35em] uppercase text-cyan-400/40">
+              STANDBY
+            </span>
+          </div>
+
+          {/* Wake instruction — changes based on state */}
+          <p className={`mt-6 text-sm font-light tracking-widest font-mono transition-colors duration-300 ${
+            wakeState === "armed"
+              ? "text-cyan-400/80 animate-pulse"
+              : "text-cyan-600/30"
+          }`}>
+            {wakeState === "armed"
+              ? "// ARMED — DOUBLE CLAP NOW"
+              : '// SAY "MORNING JARVIS" THEN CLAP TWICE'}
+          </p>
+
+          {/* Bottom status bar */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 font-mono text-[10px] text-cyan-700/30 tracking-wider">
+            <span>JARVIS v2.0</span>
+            <span className="text-cyan-500/20">|</span>
+            <span>{wakeState === "armed" ? "ARMED" : "SYSTEMS IDLE"}</span>
+            <span className="text-cyan-500/20">|</span>
+            <span>MIC ACTIVE</span>
+          </div>
+        </div>
+      )}
+
+      {/* ─── BOOT SEQUENCE ─── */}
       {showStartup && (
-        <IronManStartup onComplete={() => setShowStartup(false)} />
+        <IronManStartup onComplete={handleStartupComplete} />
       )}
 
       <ToolControlPanel
@@ -141,7 +359,7 @@ export default function Home() {
         onClose={() => setShowControlPanel(false)}
       />
 
-      <div className={`flex h-screen bg-background transition-opacity duration-500 ${showStartup ? "opacity-0" : "opacity-100"}`}>
+      <div className={`flex h-screen bg-background transition-opacity duration-500 ${!isAwake ? "opacity-0" : "opacity-100"}`}>
         {/* Executing banner */}
         {isLoading && (
           <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-3 py-2 bg-orange-500/90 text-black font-mono text-sm font-bold animate-pulse">
@@ -193,6 +411,25 @@ export default function Home() {
           </header>
 
           <ChatPanel messages={messages} />
+
+          {/* JARVIS Voice Orb — hero when empty, compact when chatting */}
+          <div className={cn(
+            "flex justify-center",
+            messages.length === 0
+              ? "flex-1 items-center -mt-20"
+              : "py-3 border-t border-gray-800/50"
+          )}>
+            <JarvisOrb
+              isListening={voice.isListening}
+              isTranscribing={voice.isTranscribing}
+              isSpeaking={voice.isSpeaking}
+              isMuted={voice.isMuted}
+              isLoading={isLoading}
+              variant={messages.length === 0 ? "hero" : "compact"}
+              onClick={voice.isListening ? voice.stopListening : voice.startListening}
+            />
+          </div>
+
           <InputBar onSend={handleSendMessage} disabled={isLoading} voice={voice} />
         </div>
 

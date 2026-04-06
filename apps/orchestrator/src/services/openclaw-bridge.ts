@@ -1,21 +1,19 @@
-// OpenClaw Bridge — Proxies tool calls to OpenClaw gateway when available
-// Falls back gracefully when OpenClaw is offline
+// OpenClaw Bridge — Proxies tool calls to ClawBridge (Danny's OpenClaw replacement)
+// ClawBridge runs at localhost:18789 with the same API shape as OpenClaw.
+// Start it with: cd ~/clawbridge && python main.py
 
 import { readFileSync } from "fs";
 import { join } from "path";
 
-// Config from .env with fallbacks
 const OPENCLAW_BASE = process.env.OPENCLAW_BASE_URL || "http://localhost:18789";
 const OPENCLAW_TIMEOUT_MS = 30_000;
 
-// Read token from OpenClaw config file (single source of truth)
+// Read token from ~/.openclaw/openclaw.json (ClawBridge writes it there automatically)
 function getOpenClawToken(): string {
-  // First check .env
   if (process.env.OPENCLAW_GATEWAY_TOKEN) {
     return process.env.OPENCLAW_GATEWAY_TOKEN;
   }
 
-  // Fall back to reading from OpenClaw config
   try {
     const configPath = join(
       process.env.USERPROFILE || process.env.HOME || "",
@@ -38,10 +36,11 @@ function getToken(): string {
   return cachedToken;
 }
 
-// Health check — is OpenClaw reachable?
+// ─── Health check ─────────────────────────────────────────────────────────────
+
 let lastHealthCheck = 0;
 let isHealthy = false;
-const HEALTH_CHECK_INTERVAL_MS = 60_000; // Re-check every 60s
+const HEALTH_CHECK_INTERVAL_MS = 60_000;
 
 export async function isOpenClawAvailable(): Promise<boolean> {
   const now = Date.now();
@@ -75,7 +74,8 @@ export async function isOpenClawAvailable(): Promise<boolean> {
   return isHealthy;
 }
 
-// Generic tool call proxy
+// ─── Generic tool call proxy ──────────────────────────────────────────────────
+
 export async function callOpenClaw(
   tool: string,
   params: Record<string, unknown>
@@ -84,7 +84,7 @@ export async function callOpenClaw(
 
   if (!token) {
     throw new Error(
-      "OpenClaw gateway token not configured. Set OPENCLAW_GATEWAY_TOKEN in .env or ensure ~/.openclaw/openclaw.json exists."
+      "ClawBridge token not found. Start ClawBridge: cd ~/clawbridge && python main.py"
     );
   }
 
@@ -105,7 +105,7 @@ export async function callOpenClaw(
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new Error(
-        `OpenClaw returned ${response.status}: ${text.slice(0, 200)}`
+        `ClawBridge returned ${response.status}: ${text.slice(0, 200)}`
       );
     }
 
@@ -113,7 +113,7 @@ export async function callOpenClaw(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(
-        `OpenClaw request timed out after ${OPENCLAW_TIMEOUT_MS / 1000}s`
+        `ClawBridge request timed out after ${OPENCLAW_TIMEOUT_MS / 1000}s`
       );
     }
     throw error;
@@ -122,7 +122,8 @@ export async function callOpenClaw(
   }
 }
 
-// Reset health cache (e.g., after config change)
+// ─── Reset health cache ───────────────────────────────────────────────────────
+
 export function resetOpenClawHealth(): void {
   lastHealthCheck = 0;
   cachedToken = null;

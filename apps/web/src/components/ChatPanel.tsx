@@ -10,10 +10,10 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ messages }: ChatPanelProps) {
-  const scrollRef = useAutoScroll<HTMLDivElement>([messages]);
+  const scrollRef = useAutoScroll<HTMLDivElement>(messages);
 
   if (messages.length === 0) {
-    return <EmptyState />;
+    return null;
   }
 
   return (

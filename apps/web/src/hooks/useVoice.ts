@@ -88,35 +88,6 @@ export function useVoice({
     if (stored === "true") setIsMuted(true);
   }, []);
 
-  const toggleMute = useCallback(() => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      localStorage.setItem(MUTE_STORAGE_KEY, String(next));
-      // If unmuting, stop any current playback
-      if (next) stopSpeaking();
-      return next;
-    });
-  }, []);
-
-  // ─── M key mute toggle ─────────────────────────────────
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input
-      const target = e.target as HTMLElement;
-      const isTyping = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
-
-      if (e.key === "m" && !e.repeat && !isTyping && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        toggleMute();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [enabled, toggleMute]);
-
   // ─── TTS availability check ─────────────────────────────
 
   useEffect(() => {
@@ -249,6 +220,34 @@ export function useVoice({
     synthUtteranceRef.current = null;
     setIsSpeaking(false);
   }, []);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      localStorage.setItem(MUTE_STORAGE_KEY, String(next));
+      return next;
+    });
+    stopSpeaking();
+  }, [stopSpeaking]);
+
+  // ─── M key mute toggle ─────────────────────────────────
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      const target = e.target as HTMLElement;
+      const isTyping = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
+
+      if (e.key === "m" && !e.repeat && !isTyping && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        toggleMute();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [enabled, toggleMute]);
 
   // ─── Auto-speak on assistant response completion ────────
 

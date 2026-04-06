@@ -72,11 +72,11 @@ class FileMemoryClient {
         host: "file-system",
         port: 0,
         collection: this.memoryFile,
-        documentCount: this.store.memories.length,
+        documentCount: this.store!.memories.length,
         lastHealthCheck: new Date(),
       };
 
-      console.log(`[FileMemory] Loaded ${this.store.memories.length} memories from disk`);
+      console.log(`[FileMemory] Loaded ${this.store!.memories.length} memories from disk`);
       return true;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";

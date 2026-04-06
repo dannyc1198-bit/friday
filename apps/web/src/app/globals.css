@@ -134,3 +134,209 @@ textarea {
 .animate-transcribe-shimmer {
   animation: transcribe-shimmer 1s ease-in-out infinite;
 }
+
+/* ─── JARVIS Orb Animations ─────────────────────────────────── */
+
+/* Idle: gentle breathing scale + glow */
+@keyframes jarvis-breathe {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.05);
+    filter: brightness(1.15);
+  }
+}
+
+.jarvis-orb-breathe {
+  animation: jarvis-breathe 4s ease-in-out infinite;
+}
+
+/* Idle ring breathing */
+@keyframes jarvis-breathe-ring {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.6;
+  }
+}
+
+.jarvis-orb-breathe-ring {
+  animation: jarvis-breathe-ring 4s ease-in-out infinite;
+}
+
+/* Listening: fast pulse */
+@keyframes jarvis-pulse-fast {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1.1);
+  }
+  50% {
+    transform: scale(1.12);
+    filter: brightness(1.3);
+  }
+}
+
+.jarvis-orb-pulse-fast {
+  animation: jarvis-pulse-fast 1.2s ease-in-out infinite;
+}
+
+/* Thinking: subtle pulse + hue shift */
+@keyframes jarvis-think {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1) hue-rotate(0deg);
+  }
+  33% {
+    transform: scale(1.04);
+    filter: brightness(1.2) hue-rotate(10deg);
+  }
+  66% {
+    transform: scale(0.98);
+    filter: brightness(1.1) hue-rotate(-10deg);
+  }
+}
+
+.jarvis-orb-think {
+  animation: jarvis-think 2s ease-in-out infinite;
+}
+
+/* Speaking: rhythmic pulse (simulates voice cadence) */
+@keyframes jarvis-speak {
+  0%, 100% {
+    transform: scale(1);
+    filter: brightness(1.1);
+  }
+  15% {
+    transform: scale(1.08);
+    filter: brightness(1.3);
+  }
+  30% {
+    transform: scale(1.02);
+    filter: brightness(1.15);
+  }
+  50% {
+    transform: scale(1.1);
+    filter: brightness(1.35);
+  }
+  70% {
+    transform: scale(1.03);
+    filter: brightness(1.2);
+  }
+  85% {
+    transform: scale(1.07);
+    filter: brightness(1.25);
+  }
+}
+
+.jarvis-orb-speak {
+  animation: jarvis-speak 1.5s ease-in-out infinite;
+}
+
+/* Sonar ring — expanding outward */
+@keyframes jarvis-sonar {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+.jarvis-orb-sonar {
+  animation: jarvis-sonar 2s ease-out infinite;
+}
+
+/* Thinking ring spin */
+@keyframes jarvis-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.jarvis-orb-spin {
+  animation: jarvis-spin 3s linear infinite;
+  border-style: dashed;
+}
+
+/* Center dot pulse */
+@keyframes jarvis-center-pulse {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.jarvis-orb-center-pulse {
+  animation: jarvis-center-pulse 2s ease-in-out infinite;
+}
+
+/* Orbital particles for thinking */
+@keyframes jarvis-orbit-1 {
+  0%   { transform: rotate(0deg) translateX(50px) rotate(0deg); }
+  100% { transform: rotate(360deg) translateX(50px) rotate(-360deg); }
+}
+
+@keyframes jarvis-orbit-2 {
+  0%   { transform: rotate(120deg) translateX(42px) rotate(-120deg); }
+  100% { transform: rotate(480deg) translateX(42px) rotate(-480deg); }
+}
+
+@keyframes jarvis-orbit-3 {
+  0%   { transform: rotate(240deg) translateX(56px) rotate(-240deg); }
+  100% { transform: rotate(600deg) translateX(56px) rotate(-600deg); }
+}
+
+.jarvis-orb-orbit-1 {
+  animation: jarvis-orbit-1 2.5s linear infinite;
+}
+
+.jarvis-orb-orbit-2 {
+  animation: jarvis-orbit-2 3.2s linear infinite;
+}
+
+.jarvis-orb-orbit-3 {
+  animation: jarvis-orbit-3 4s linear infinite;
+}
+
+/* Speaking wave rings */
+@keyframes jarvis-wave-1 {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+@keyframes jarvis-wave-2 {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+.jarvis-orb-wave-1 {
+  animation: jarvis-wave-1 1.8s ease-out infinite;
+}
+
+.jarvis-orb-wave-2 {
+  animation: jarvis-wave-2 1.8s ease-out infinite 0.4s;
+}

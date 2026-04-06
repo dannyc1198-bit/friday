@@ -14,6 +14,16 @@ import { registerBrowserTools } from "./browser-control.js";
 import { registerScreenReaderTools } from "./screen-reader.js";
 import { registerAgentTools } from "./agent-tools.js";
 import { registerSidecarTools } from "./sidecar-tools.js";
+import { registerObsidianTools } from "./obsidian.js";
+import { registerIdentityTools } from "./identity-tools.js";
+import { registerSwarmTools } from "./swarm-tools.js";
+import { registerVaultTools } from "./vault-tools.js";
+import { registerHealthTrackingTools } from "./health-tracking.js";
+import { registerContentTools } from "./content-tools.js";
+import { registerBusinessIntelTools } from "./business-intel.js";
+import { registerCodeAgentTools } from "./code-agent.js";
+import { registerDanClawTools } from "./danclaw-tools.js";
+import { registerMetaGlassesTools } from "./meta-glasses-tools.js";
 import { toolRegistry } from "./registry.js";
 
 // Initialize all tools
@@ -59,6 +69,35 @@ export function initializeTools(): void {
   registerSidecarTools();
   console.log("  ✓ Sidecar tools registered (camera, kitchen, voice, alerts)");
 
+  registerObsidianTools();
+
+  registerIdentityTools();
+  console.log("  ✓ Identity tools registered (soul, learning, evolution, autonomy)");
+
+  registerSwarmTools();
+  console.log("  ✓ Swarm tools registered (multi-agent orchestration, parallel execution)");
+
+  registerVaultTools();
+  console.log("  ✓ Vault tools registered (credential vault management)");
+
+  registerHealthTrackingTools();
+  console.log("  ✓ Health Tracking tools registered (weight, workouts, meals)");
+
+  registerContentTools();
+  console.log("  ✓ Content Creation tools registered (LinkedIn, YouTube, topic suggestions)");
+
+  registerBusinessIntelTools();
+  console.log("  ✓ Business Intelligence tools registered (MRR, leads, Netlify forms)");
+
+  registerCodeAgentTools();
+  console.log("  ✓ Code Agent tools registered (build + deploy)");
+
+  registerDanClawTools();
+  console.log("  ✓ DanClaw tools registered (dispatch, agents, history, status)");
+
+  registerMetaGlassesTools();
+  console.log("  ✓ Meta Glasses Vision tools registered (describe, ask, status, file)");
+
   const allTools = toolRegistry.getAllTools();
   console.log(`\n📦 Total tools available: ${allTools.length}`);
 
@@ -91,3 +130,7 @@ export { registerTaskTools } from "./task-manager.js";
 export { registerOpenClawTools } from "./openclaw-tools.js";
 export { registerBrowserTools } from "./browser-control.js";
 export { registerScreenReaderTools } from "./screen-reader.js";
+export { registerObsidianTools } from "./obsidian.js";
+export { registerIdentityTools } from "./identity-tools.js";
+export { registerSwarmTools } from "./swarm-tools.js";
+export { registerVaultTools } from "./vault-tools.js";

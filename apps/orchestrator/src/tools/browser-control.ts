@@ -7,6 +7,8 @@ import { toolRegistry } from "./registry.js";
 import type { Tool, ToolResult } from "../types/index.js";
 import { writeFileSync, readdirSync, unlinkSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
+import { vault } from "../services/vault.js";
+import { permissionManager } from "../services/permission-manager.js";
 
 // ── State ──────────────────────────────────────────────────────────
 let browser: Browser | null = null;
@@ -29,12 +31,8 @@ const BLOCKED_URL_PATTERNS = [
 ];
 
 function isUrlSafe(url: string): boolean {
-  // Allow http and https only
-  if (!/^https?:\/\//i.test(url)) {
-    // Prepend https if no protocol
-    if (!/^[a-z]+:\/\//i.test(url)) return true; // Will prepend https
-    return false; // Non-http protocol
-  }
+  // Only allow http and https — reject everything else
+  if (!/^https?:\/\//i.test(url)) return false;
   for (const pattern of BLOCKED_URL_PATTERNS) {
     if (pattern.test(url)) return false;
   }
@@ -535,6 +533,136 @@ const browserCloseTool: Tool = {
   },
 };
 
+const browserLoginTool: Tool = {
+  name: "browser_login",
+  description:
+    "Securely log into a website using credentials from the encrypted vault. Requires vault unlocked and PIN verified.",
+  category: CATEGORY,
+  parameters: [
+    { name: "site", type: "string", description: "Site name matching a vault entry (e.g., 'linkedin', 'github')", required: true },
+    { name: "login_url", type: "string", description: "Override URL for the login page (default: https://<site>.com/login)", required: false },
+    {
+      name: "username_selector",
+      type: "string",
+      description:
+        'CSS selector for the username/email field (default: #username, #email, [name="email"], [name="username"], [type="email"])',
+      required: false,
+    },
+    {
+      name: "password_selector",
+      type: "string",
+      description:
+        'CSS selector for the password field (default: #password, [name="password"], [type="password"])',
+      required: false,
+    },
+    {
+      name: "submit_selector",
+      type: "string",
+      description:
+        'CSS selector for the submit button (default: [type="submit"], button[type="submit"])',
+      required: false,
+    },
+  ],
+  execute: async (params) => {
+    const site = params.site as string;
+    const loginUrl =
+      (params.login_url as string) || `https://${site}.com/login`;
+    const usernameSelector =
+      (params.username_selector as string) ||
+      '#username, #email, [name="email"], [name="username"], [type="email"]';
+    const passwordSelector =
+      (params.password_selector as string) ||
+      '#password, [name="password"], [type="password"]';
+    const submitSelector =
+      (params.submit_selector as string) ||
+      '[type="submit"], button[type="submit"]';
+
+    // ── Security gates ────────────────────────────────────────
+    if (vault.isLocked()) {
+      return {
+        toolCallId: "",
+        success: false,
+        error:
+          "Vault is locked. Please unlock it first with your master password.",
+      };
+    }
+
+    if (!permissionManager.isVerified()) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: "PIN verification required for credential access.",
+      };
+    }
+
+    const creds = vault.getCredential(site);
+    if (!creds) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: `No credentials stored for "${site}". Add them with vault_add first.`,
+      };
+    }
+
+    try {
+      // ── Navigate to login page ──────────────────────────────
+      const normalizedUrl = normalizeUrl(loginUrl);
+      if (!isUrlSafe(normalizedUrl)) {
+        return {
+          toolCallId: "",
+          success: false,
+          error: "Login URL blocked by security policy.",
+        };
+      }
+
+      const page = await getPage();
+      await page.goto(normalizedUrl, {
+        timeout: 30000,
+        waitUntil: "domcontentloaded",
+      });
+      await injectJARVISOverlay(page);
+
+      // Random delay helper (300-700ms) to mimic human typing cadence
+      const humanDelay = () =>
+        new Promise<void>((resolve) =>
+          setTimeout(resolve, 300 + Math.random() * 400)
+        );
+
+      // ── Fill username (bypass password-field block — authorized flow) ──
+      await humanDelay();
+      await page.fill(usernameSelector, creds.username, { timeout: 10000 });
+
+      // ── Fill password (uses page.fill directly — authorized flow) ──
+      await humanDelay();
+      await page.fill(passwordSelector, creds.password, { timeout: 10000 });
+
+      // ── Submit ──────────────────────────────────────────────
+      await page.click(submitSelector, { timeout: 10000 });
+
+      // Wait for navigation / page load
+      await page.waitForTimeout(2000);
+
+      const title = await page.title();
+      return {
+        toolCallId: "",
+        success: true,
+        data: {
+          site,
+          url: page.url(),
+          title,
+          message: `Logged into ${site} successfully.`,
+        },
+      };
+    } catch (error) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: `Login failed for "${site}": ${error instanceof Error ? error.message : "Unknown error"}`,
+      };
+    }
+  },
+};
+
 // ── Registration ───────────────────────────────────────────────────
 export function registerBrowserTools(): void {
   toolRegistry.register(browserOpenTool);
@@ -554,6 +682,7 @@ export function registerBrowserTools(): void {
   toolRegistry.register(browserGetPageContentTool);
   toolRegistry.register(browserListTabsTool);
   toolRegistry.register(browserCloseTool);
+  toolRegistry.register(browserLoginTool);
 }
 
 // Export for screen reader access

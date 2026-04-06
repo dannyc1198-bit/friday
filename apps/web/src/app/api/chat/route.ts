@@ -1,102 +1,7 @@
 import { NextRequest } from "next/server";
-import { TYPING_SPEED, USER_NAME } from "@/lib/constants";
 
 // Orchestrator API URL (use environment variable in production)
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:3001";
-
-// Fallback JARVIS-style responses when orchestrator is unavailable
-const JARVIS_RESPONSES: Record<string, string[]> = {
-  greeting: [
-    `At your service, ${USER_NAME}. What would you like to accomplish today?`,
-    `Always a pleasure, ${USER_NAME}. How may I assist you?`,
-    `Good to see you, ${USER_NAME}. I'm fully operational and at your command.`,
-  ],
-  music: [
-    "Excellent choice. Shall I queue up some AC/DC? I find 'Back in Black' pairs well with productivity.",
-    "Music request noted. I'll have that playing momentarily. Might I suggest 'Thunderstruck' to get things rolling?",
-    "Accessing your music library now. I must say, your taste in classic rock is impeccable.",
-  ],
-  lights: [
-    "Adjusting the ambient lighting now. I've set them to your preferred blue - very Iron Man, if I may say so.",
-    "Smart home integration active. Lights adjusted. The ambiance should now be suitably dramatic.",
-    "Lighting controls engaged. I've taken the liberty of setting a productive atmosphere.",
-  ],
-  bluetooth: [
-    "Scanning for Bluetooth devices in range. I'll have a list for you momentarily.",
-    "Bluetooth module active. I'm detecting several devices. Shall I connect to your usual suspects?",
-    "Running device discovery now. Your previously paired devices are showing up nicely.",
-  ],
-  tasks: [
-    `Let me check your schedule, ${USER_NAME}. You have several items that require attention today.`,
-    "Accessing your task list now. I've prioritized them by urgency and your typical work patterns.",
-    "Your agenda is quite full today. Shall I break it down by category or time sensitivity?",
-  ],
-  pc_control: [
-    "I have full access to your system controls. What would you like me to adjust?",
-    "System controls are at your disposal. I can manage applications, files, or system settings.",
-    "PC control module active. I'm ready to execute your commands.",
-  ],
-  general: [
-    "I've processed your request. Here's what I've found.",
-    `Certainly, ${USER_NAME}. Allow me to elaborate on that.`,
-    "Consider it done. Though I must admit, that was almost too easy.",
-    "An intriguing query. Let me provide you with a thorough analysis.",
-    `Of course, ${USER_NAME}. I'm always happy to assist with such matters.`,
-    "Processing your request now. My neural networks are quite excited about this one.",
-  ],
-};
-
-function detectIntent(message: string): keyof typeof JARVIS_RESPONSES {
-  const lower = message.toLowerCase();
-
-  if (lower.includes("hello") || lower.includes("hi") || lower.includes("hey") ||
-      lower.includes("morning") || lower.includes("afternoon") || lower.includes("evening")) {
-    return "greeting";
-  }
-  if (lower.includes("music") || lower.includes("play") || lower.includes("song") ||
-      lower.includes("acdc") || lower.includes("ac/dc") || lower.includes("spotify")) {
-    return "music";
-  }
-  if (lower.includes("light") || lower.includes("lamp") || lower.includes("bright") ||
-      lower.includes("dim") || lower.includes("color") || lower.includes("alexa")) {
-    return "lights";
-  }
-  if (lower.includes("bluetooth") || lower.includes("connect") || lower.includes("device") ||
-      lower.includes("pair") || lower.includes("speaker") || lower.includes("headphone")) {
-    return "bluetooth";
-  }
-  if (lower.includes("task") || lower.includes("todo") || lower.includes("schedule") ||
-      lower.includes("agenda") || lower.includes("accomplish") || lower.includes("remind")) {
-    return "tasks";
-  }
-  if (lower.includes("open") || lower.includes("launch") || lower.includes("close") ||
-      lower.includes("computer") || lower.includes("app") || lower.includes("program")) {
-    return "pc_control";
-  }
-
-  return "general";
-}
-
-function getJARVISResponse(message: string): string {
-  const intent = detectIntent(message);
-  const responses = JARVIS_RESPONSES[intent];
-  return responses[Math.floor(Math.random() * responses.length)];
-}
-
-async function streamFallbackResponse(message: string): Promise<ReadableStream> {
-  const responseText = getJARVISResponse(message);
-  const encoder = new TextEncoder();
-
-  return new ReadableStream({
-    async start(controller) {
-      for (const char of responseText) {
-        controller.enqueue(encoder.encode(char));
-        await new Promise((resolve) => setTimeout(resolve, TYPING_SPEED));
-      }
-      controller.close();
-    },
-  });
-}
 
 export async function POST(request: NextRequest) {
   const { message, conversationId } = await request.json();
@@ -131,12 +36,14 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
+          let buffer = "";
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            const text = decoder.decode(value);
-            const lines = text.split("\n");
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? ""; // keep incomplete last line for next chunk
 
             for (const line of lines) {
               if (line.startsWith("data: ")) {
@@ -149,8 +56,8 @@ export async function POST(request: NextRequest) {
                   } else if (data.type === "error") {
                     controller.enqueue(encoder.encode(`\n\n⚠ Error: ${data.content}\n`));
                   }
-                } catch {
-                  // Ignore parse errors for incomplete JSON
+                } catch (parseErr) {
+                  console.error("[chat/route] Malformed SSE data line:", line);
                 }
               }
             }
@@ -169,14 +76,24 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    // Fallback to local responses if orchestrator is unavailable
-    console.warn("Orchestrator unavailable, using fallback responses:", error);
+    // Tell the user the truth — don't mask a broken backend with fake responses
+    console.error("[chat/route] Orchestrator connection failed:", error);
 
-    const stream = await streamFallbackResponse(message);
+    const errorMessage = "I'm having trouble connecting to my core systems, sir. " +
+      "The orchestrator may be down or unreachable. " +
+      "Please check that it is running on port 3001.";
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(errorMessage));
+        controller.close();
+      },
+    });
+
     return new Response(stream, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
-        "Transfer-Encoding": "chunked",
       },
     });
   }

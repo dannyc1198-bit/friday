@@ -2,6 +2,7 @@
 // Sources: MASTER_MEMORY.md, project state, conversation summaries, behavioral patterns
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -97,7 +98,9 @@ function loadProjectState(): string {
       projectStateLastLoaded = now;
       return cachedProjectState;
     }
-  } catch {}
+  } catch (err) {
+    console.error("[MemoryLoader] Failed to load project state:", err);
+  }
 
   cachedProjectState = "";
   projectStateLastLoaded = now;
@@ -120,11 +123,13 @@ function loadConversationSummaries(): ConversationSummary[] {
     if (existsSync(SUMMARIES_FILE)) {
       return JSON.parse(readFileSync(SUMMARIES_FILE, "utf-8"));
     }
-  } catch {}
+  } catch (err) {
+    console.error("[MemoryLoader] Failed to load conversation summaries:", err);
+  }
   return [];
 }
 
-export function saveConversationSummary(summary: string, keyFacts: string[]): void {
+export async function saveConversationSummary(summary: string, keyFacts: string[]): Promise<void> {
   const summaries = loadConversationSummaries();
   const today = new Date().toISOString().split("T")[0];
 
@@ -147,8 +152,12 @@ export function saveConversationSummary(summary: string, keyFacts: string[]): vo
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const trimmed = summaries.filter((s) => s.timestamp > cutoff);
 
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(SUMMARIES_FILE, JSON.stringify(trimmed, null, 2));
+  try {
+    if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
+    await writeFile(SUMMARIES_FILE, JSON.stringify(trimmed, null, 2));
+  } catch (err) {
+    console.error("[MemoryLoader] Failed to save conversation summary:", err);
+  }
 }
 
 function formatConversationSummaries(): string {
@@ -180,11 +189,13 @@ function loadBehavioralPatterns(): BehavioralPattern[] {
     if (existsSync(PATTERNS_FILE)) {
       return JSON.parse(readFileSync(PATTERNS_FILE, "utf-8"));
     }
-  } catch {}
+  } catch (err) {
+    console.error("[MemoryLoader] Failed to load behavioral patterns:", err);
+  }
   return [];
 }
 
-export function recordBehavioralPattern(pattern: string): void {
+export async function recordBehavioralPattern(pattern: string): Promise<void> {
   const patterns = loadBehavioralPatterns();
   const existing = patterns.find((p) => p.pattern === pattern);
 
@@ -201,8 +212,12 @@ export function recordBehavioralPattern(pattern: string): void {
     });
   }
 
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(PATTERNS_FILE, JSON.stringify(patterns, null, 2));
+  try {
+    if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
+    await writeFile(PATTERNS_FILE, JSON.stringify(patterns, null, 2));
+  } catch (err) {
+    console.error("[MemoryLoader] Failed to save behavioral pattern:", err);
+  }
 }
 
 function formatBehavioralPatterns(): string {
