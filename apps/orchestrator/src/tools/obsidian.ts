@@ -1,4 +1,4 @@
-// Obsidian Vault Integration for JARVIS
+// Obsidian Vault Integration for FRIDAY
 // Full read-write access to Danny's Second Brain (Wavelength vault)
 // Tools: search, read, list, recent, create, edit, daily, delete, tags
 
@@ -55,7 +55,7 @@ const obsidianSearchTool: Tool = {
     {
       name: "query",
       type: "string",
-      description: "Search keywords (e.g., 'Wavelength revenue', 'Kelowna', 'JARVIS tools')",
+      description: "Search keywords (e.g., 'Wavelength revenue', 'Kelowna', 'FRIDAY tools')",
       required: true,
     },
     {
@@ -148,7 +148,7 @@ const obsidianReadTool: Tool = {
     {
       name: "note",
       type: "string",
-      description: "Note name (e.g., 'JARVIS', 'Revenue Plan') or relative path (e.g., 'Business/Wavelength Solutions.md')",
+      description: "Note name (e.g., 'FRIDAY', 'Revenue Plan') or relative path (e.g., 'Business/Wavelength Solutions.md')",
       required: true,
     },
   ],
@@ -354,7 +354,7 @@ const TEMPLATES: Record<string, (title: string, date: string) => string> = {
 - Content created:
 
 ### Systems
-- [[JARVIS]] status:
+- [[FRIDAY]] status:
 - [[DanClaw]] status:
 - Issues/errors:
 
@@ -448,7 +448,7 @@ const obsidianCreateTool: Tool = {
     {
       name: "title",
       type: "string",
-      description: "Note title (becomes filename). E.g., 'ACME Corp', 'JARVIS Phase 5'",
+      description: "Note title (becomes filename). E.g., 'ACME Corp', 'FRIDAY Phase 10'",
       required: true,
     },
     {
@@ -551,7 +551,7 @@ const obsidianEditTool: Tool = {
     {
       name: "note",
       type: "string",
-      description: "Note name or path (e.g., 'JARVIS', 'Daily/2026-04-03')",
+      description: "Note name or path (e.g., 'FRIDAY', 'Daily/2026-04-03')",
       required: true,
     },
     {
