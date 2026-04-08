@@ -26,7 +26,7 @@ const UNIFIED_STORE = join(FRIDAY_DATA, "unified-memory.json");
 
 export interface UnifiedMemoryEntry {
   id: string;
-  source: "jarvis" | "openclaw" | "learning" | "agent";
+  source: "friday" | "openclaw" | "learning" | "agent";
   agent?: string;            // Which agent created this (FRIDAY, NEXUS, BUILDER, etc.)
   category: "fact" | "preference" | "outcome" | "pattern" | "insight" | "interaction";
   content: string;
@@ -240,18 +240,18 @@ class UnifiedMemoryService {
 
     // Export critical FRIDAY memories to OpenClaw workspace
     try {
-      const jarvisMemories = this.store.entries
-        .filter(e => e.source === "jarvis" && (e.importance === "high" || e.importance === "critical"))
+      const fridayMemories = this.store.entries
+        .filter(e => e.source === "friday" && (e.importance === "high" || e.importance === "critical"))
         .slice(0, 50);
 
-      if (jarvisMemories.length > 0 && existsSync(OPENCLAW_WORKSPACE)) {
-        const exportPath = join(OPENCLAW_WORKSPACE, "jarvis-shared-memory.json");
+      if (fridayMemories.length > 0 && existsSync(OPENCLAW_WORKSPACE)) {
+        const exportPath = join(OPENCLAW_WORKSPACE, "friday-shared-memory.json");
         writeFileSync(exportPath, JSON.stringify({
-          source: "jarvis",
+          source: "friday",
           syncedAt: new Date().toISOString(),
-          entries: jarvisMemories,
+          entries: fridayMemories,
         }, null, 2), "utf-8");
-        exported = jarvisMemories.length;
+        exported = fridayMemories.length;
       }
     } catch (error) {
       console.warn("[UnifiedMemory] Failed to export to OpenClaw:", error);
