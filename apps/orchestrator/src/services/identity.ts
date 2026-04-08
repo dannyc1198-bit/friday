@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════
-// JARVIS — IDENTITY LOADER
-// Reads the living .md files that define who JARVIS is.
-// These files are JARVIS's soul, memory, and growth record.
+// FRIDAY — IDENTITY LOADER
+// Reads the living .md files that define who FRIDAY is.
+// These files are FRIDAY's soul, memory, and growth record.
 // They persist across sessions and evolve over time.
 // ═══════════════════════════════════════════
 
@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const IDENTITY_DIR = join(__dirname, "..", "..", "..", "identity");
 
-// All identity files JARVIS reads on startup
+// All identity files FRIDAY reads on startup
 const IDENTITY_FILES = {
   soul: "SOUL.md",
   heartbeat: "HEARTBEAT.md",
@@ -70,8 +70,8 @@ export function appendToIdentityFile(file: IdentityFile, content: string): boole
 
 /**
  * Build the identity context that gets injected into the system prompt.
- * This is the core of JARVIS's self-awareness — he knows who he is,
- * what he's learned, and what he can do autonomously.
+ * This is the core of FRIDAY's self-awareness — she knows who she is,
+ * what she's learned, and what she can do autonomously.
  */
 export function buildIdentityContext(): string {
   const soul = readIdentityFile("soul");
@@ -106,7 +106,7 @@ export function buildIdentityContext(): string {
     return ""; // No identity files found
   }
 
-  return "\n\n--- JARVIS IDENTITY SYSTEM ---\n" +
+  return "\n\n--- FRIDAY IDENTITY SYSTEM ---\n" +
     "These files define who I am. I read them every session. I update LEARNING.md and EVOLUTION.md as I grow.\n\n" +
     sections.join("\n\n") +
     "\n--- END IDENTITY ---\n";

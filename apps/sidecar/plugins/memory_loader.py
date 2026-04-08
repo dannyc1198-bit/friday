@@ -14,7 +14,7 @@ log = logging.getLogger("sidecar.memory")
 
 MASTER_MEMORY_PATHS = [
     Path.home() / "Desktop" / "jarvis" / "MASTER_MEMORY.md",
-    Path.home() / "Desktop" / "JARVIS" / "MASTER_MEMORY.md",
+    Path.home() / "Desktop" / "FRIDAY" / "MASTER_MEMORY.md",
     Path.home() / "jarvis" / "MASTER_MEMORY.md",
 ]
 
@@ -125,14 +125,14 @@ def load_conversation_summaries() -> list[dict]:
     return []
 
 
-def save_conversation_summary(user_msg: str, jarvis_reply: str):
+def save_conversation_summary(user_msg: str, friday_reply: str):
     """Save a conversation exchange for cross-session memory."""
     summaries = load_conversation_summaries()
     today = datetime.now().strftime("%Y-%m-%d")
 
     entry = {
         "date": today,
-        "summary": f"Danny: {user_msg[:80]} → JARVIS: {jarvis_reply[:80]}",
+        "summary": f"Danny: {user_msg[:80]} → FRIDAY: {friday_reply[:80]}",
         "timestamp": time.time(),
     }
 

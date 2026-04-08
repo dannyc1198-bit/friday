@@ -37,6 +37,7 @@ const tools: Tool[] = [
       // The actual drafting happens via Claude (this tool surfaces the request with context)
       // JARVIS will use this tool output as context for its response
       return {
+        toolCallId: "",
         success: true,
         data: JSON.stringify({
           instruction: "Draft a LinkedIn post for Danny",
@@ -66,7 +67,7 @@ const tools: Tool[] = [
     ],
     execute: async (params): Promise<ToolResult> => {
       if (!params.confirmed) {
-        return { success: false, error: "Cannot post — Danny must approve the draft first. Show it to him and get confirmation." };
+        return { toolCallId: "", success: false, error: "Cannot post — Danny must approve the draft first. Show it to him and get confirmation." };
       }
 
       const postText = params.post_text as string;
@@ -74,6 +75,7 @@ const tools: Tool[] = [
       // Return instructions for browser automation
       // The browser_open / browser_type tools will be called by JARVIS in sequence
       return {
+        toolCallId: "",
         success: true,
         data: JSON.stringify({
           instruction: "Post to LinkedIn via browser",
@@ -107,6 +109,7 @@ const tools: Tool[] = [
       const keywords = params.keywords as string | undefined;
 
       return {
+        toolCallId: "",
         success: true,
         data: JSON.stringify({
           instruction: "Write a YouTube description",
@@ -140,6 +143,7 @@ const tools: Tool[] = [
       const niche = (params.niche as string | undefined) || "AI for trades businesses in Fraser Valley";
 
       return {
+        toolCallId: "",
         success: true,
         data: JSON.stringify({
           instruction: "Suggest 3 content topics",

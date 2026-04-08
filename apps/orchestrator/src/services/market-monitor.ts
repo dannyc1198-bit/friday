@@ -1,11 +1,11 @@
 // Market Monitor — Live crypto & stock prices with configurable alerts
 //
 // Runs every 5 minutes. Fetches prices via CoinGecko (free, no key).
-// Feeds the JARVIS HUD and fires proactive alerts on significant moves.
+// Feeds the FRIDAY HUD and fires proactive alerts on significant moves.
 //
-// Alert rules (see JARVIS-config.json for thresholds):
+// Alert rules (see FRIDAY-config.json for thresholds):
 //   - Default: alert when any watched asset moves ±5% in 24h
-//   - Custom alerts set via voice: "JARVIS, alert me when XRP hits $3"
+//   - Custom alerts set via voice: "FRIDAY, alert me when XRP hits $3"
 //   - Alerts respect quiet hours (11 PM – 5 AM) and 3/hour cap
 //   - Price data is always fresh for HUD — alerts are separately gated
 
@@ -26,7 +26,7 @@ export interface PriceAlert {
   symbol: string;
   type: "change_pct" | "price_above" | "price_below";
   threshold: number;
-  note?: string;         // e.g. "JARVIS, alert me when XRP hits $3"
+  note?: string;         // e.g. "FRIDAY, alert me when XRP hits $3"
   triggered: boolean;
   createdAt: string;
 }

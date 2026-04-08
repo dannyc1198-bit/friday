@@ -100,5 +100,5 @@ To promote a domain:
 ---
 
 _Content and research are free. Outreach is drafted. Client comms are confirmed. Money is locked._
-_Danny can change any domain level at any time: "JARVIS, you can handle [domain] on your own."_
+_Danny can change any domain level at any time: "FRIDAY, you can handle [domain] on your own."_
 _Updated: April 3, 2026 — Graduated autonomy model (Option C)_

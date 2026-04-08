@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 type OrbState = "idle" | "listening" | "thinking" | "speaking" | "muted";
 
-interface JarvisOrbProps {
+interface FridayOrbProps {
   isListening: boolean;
   isTranscribing: boolean;
   isSpeaking: boolean;
@@ -20,7 +20,7 @@ interface JarvisOrbProps {
 
 // ─── State Derivation ───────────────────────────────────────
 
-function deriveOrbState(props: JarvisOrbProps): OrbState {
+function deriveOrbState(props: FridayOrbProps): OrbState {
   if (props.isMuted) return "muted";
   if (props.isListening || props.isTranscribing) return "listening";
   if (props.isSpeaking) return "speaking";
@@ -29,7 +29,7 @@ function deriveOrbState(props: JarvisOrbProps): OrbState {
 }
 
 const STATE_LABELS: Record<OrbState, string> = {
-  idle: "JARVIS ONLINE",
+  idle: "FRIDAY ONLINE",
   listening: "LISTENING",
   thinking: "PROCESSING",
   speaking: "SPEAKING",
@@ -71,7 +71,7 @@ const STATE_COLORS: Record<OrbState, { core: string; glow: string; ring: string;
 
 // ─── Component ──────────────────────────────────────────────
 
-export function JarvisOrb({
+export function FridayOrb({
   isListening,
   isTranscribing,
   isSpeaking,
@@ -79,7 +79,7 @@ export function JarvisOrb({
   isLoading,
   variant = "compact",
   onClick,
-}: JarvisOrbProps) {
+}: FridayOrbProps) {
   const state = deriveOrbState({
     isListening,
     isTranscribing,

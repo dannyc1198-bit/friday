@@ -121,7 +121,7 @@ app.get("/api/health", async () => {
   return {
     ok: true,
     timestamp: new Date().toISOString(),
-    service: "JARVIS-orchestrator",
+    service: "FRIDAY-orchestrator",
     version: "1.0.0",
   };
 });
@@ -204,7 +204,7 @@ app.post<{
     app.log.info({ agent: targetAgent.name }, "Specialist agent match detected");
   }
 
-  // Set up abort controller for this conversation (enables "JARVIS stop")
+  // Set up abort controller for this conversation (enables "FRIDAY stop")
   const abortController = new AbortController();
   activeAbortControllers.set(conversation.id, abortController);
 
@@ -288,7 +288,7 @@ app.post<{
         keyFacts.push(`Agent classified: ${targetAgent.name}`);
       }
       // Save daily conversation summary
-      const summaryText = `User: ${message.slice(0, 100)} → JARVIS: ${fullContent.slice(0, 100)}`;
+      const summaryText = `User: ${message.slice(0, 100)} → FRIDAY: ${fullContent.slice(0, 100)}`;
       saveConversationSummary(summaryText, keyFacts).catch(console.error);
 
       // Track behavioral patterns
@@ -324,7 +324,7 @@ app.post<{
   }
 });
 
-// Stop active task — "JARVIS, stop"
+// Stop active task — "FRIDAY, stop"
 app.post<{
   Body: {
     conversationId?: string;
@@ -433,8 +433,8 @@ app.post<{
   const { content, category, tags, importance, agent } = request.body;
 
   const id = unifiedMemory.store_entry({
-    source: agent ? "agent" : "jarvis",
-    agent: agent || "JARVIS",
+    source: agent ? "agent" : "friday",
+    agent: agent || "FRIDAY",
     category: (category as any) || "fact",
     content,
     tags: tags || [],
@@ -475,7 +475,7 @@ app.get("/api/system/status", async () => {
   const activeTasks = getActiveTasks();
 
   return {
-    system: "JARVIS Unified Brain",
+    system: "FRIDAY Unified Brain",
     version: "2.0.0",
     status: "online",
     timestamp: new Date().toISOString(),
@@ -646,7 +646,7 @@ app.post<{
   if (type === "security" || type === "greeting") {
     try {
       unifiedMemory.store_entry({
-        source: "jarvis",
+        source: "friday",
         agent: "sidecar",
         category: type === "security" ? "interaction" : "fact",
         content: `[Sidecar ${type}] ${JSON.stringify(data)}`,
@@ -674,7 +674,7 @@ setInterval(
 const start = async () => {
   try {
     // Bind to localhost only — prevents network exposure without auth
-    const bindHost = process.env.JARVIS_BIND_HOST || "127.0.0.1";
+    const bindHost = process.env.FRIDAY_BIND_HOST || "127.0.0.1";
     const address = await app.listen({
       port: config.port,
       host: bindHost,
@@ -683,21 +683,21 @@ const start = async () => {
     console.log(`
 ╔════════════════════════════════════════════════════════════════╗
 ║                                                                ║
-║       ██╗ █████╗ ██████╗ ██╗   ██╗██╗███████╗                  ║
-║       ██║██╔══██╗██╔══██╗██║   ██║██║██╔════╝                  ║
-║       ██║███████║██████╔╝██║   ██║██║███████╗                  ║
-║  ██   ██║██╔══██║██╔══██╗╚██╗ ██╔╝██║╚════██║                  ║
-║  ╚█████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║███████║                  ║
-║   ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝╚══════╝                  ║
+║    ███████╗██████╗ ██╗██████╗  █████╗ ██╗   ██╗                ║
+║    ██╔════╝██╔══██╗██║██╔══██╗██╔══██╗╚██╗ ██╔╝                ║
+║    █████╗  ██████╔╝██║██║  ██║███████║ ╚████╔╝                 ║
+║    ██╔══╝  ██╔══██╗██║██║  ██║██╔══██║  ╚██╔╝                  ║
+║    ██║     ██║  ██║██║██████╔╝██║  ██║   ██║                   ║
+║    ╚═╝     ╚═╝  ╚═╝╚═╝╚═════╝ ╚═╝  ╚═╝   ╚═╝                   ║
 ║                                                                ║
-║        Just A Rather Very Intelligent System                   ║
-║        UNIFIED BRAIN v2.0 — OpenClaw Orchestrated              ║
+║     Female Replacement Intelligent Digital Assistant Youth      ║
+║     UNIFIED BRAIN v2.0 — OpenClaw Orchestrated                 ║
 ║                                                                ║
 ╠════════════════════════════════════════════════════════════════╣
 ║                                                                ║
 ║   Orchestrator:  ${address.padEnd(43)}║
 ║   User:          ${config.userName.padEnd(43)}║
-║   Auth:          Bearer token (JARVIS_API_KEY)                 ║
+║   Auth:          Bearer token (FRIDAY_API_KEY)                 ║
 ║   Binding:       ${bindHost.padEnd(43)}║
 ║                                                                ║
 ║   Core Endpoints:                                              ║

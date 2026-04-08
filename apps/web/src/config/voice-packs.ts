@@ -1,4 +1,4 @@
-// JARVIS Voice Pack Configuration
+// FRIDAY Voice Pack Configuration
 // Each pack includes voice style, greeting, and sound effects
 
 export interface VoicePack {
@@ -282,7 +282,7 @@ export function getVoicePack(id: string): VoicePack | undefined {
 
 // Get default voice pack
 export function getDefaultVoicePack(): VoicePack {
-  return voicePacks[0]; // JARVIS Classic
+  return voicePacks.find(p => p.id === "friday") || voicePacks[0]; // FRIDAY is default
 }
 
 // Color themes for each voice pack

@@ -1,6 +1,6 @@
 // Phase 4 — Browser Control via Playwright
 // Connects to existing Chrome via CDP (port 18800) or launches fresh Chromium
-// Shows cyan border overlay + "JARVIS ACTIVE" badge when controlling browser
+// Shows cyan border overlay + "FRIDAY ACTIVE" badge when controlling browser
 
 import { chromium, type Browser, type Page } from "playwright";
 import { toolRegistry } from "./registry.js";
@@ -73,21 +73,21 @@ async function getPage(): Promise<Page> {
     activePage = await context.newPage();
   }
 
-  await injectJARVISOverlay(activePage);
+  await injectFRIDAYOverlay(activePage);
   return activePage;
 }
 
 // ── Visual Overlay (safe DOM — no innerHTML) ───────────────────────
-async function injectJARVISOverlay(page: Page): Promise<void> {
+async function injectFRIDAYOverlay(page: Page): Promise<void> {
   try {
     await page.evaluate(() => {
       // Remove existing overlay if present
-      const existing = document.getElementById("JARVIS-overlay");
+      const existing = document.getElementById("FRIDAY-overlay");
       if (existing) existing.remove();
 
       // Create overlay container
       const overlay = document.createElement("div");
-      overlay.id = "JARVIS-overlay";
+      overlay.id = "FRIDAY-overlay";
       overlay.style.cssText =
         "position:fixed;top:0;left:0;right:0;bottom:0;" +
         "border:3px solid #00e5ff;pointer-events:none;z-index:2147483647;";
@@ -99,7 +99,7 @@ async function injectJARVISOverlay(page: Page): Promise<void> {
         "color:#000;padding:4px 12px;border-radius:4px;" +
         "font-family:monospace;font-size:12px;font-weight:bold;" +
         "pointer-events:none;opacity:0.9;";
-      badge.textContent = "JARVIS ACTIVE";
+      badge.textContent = "FRIDAY ACTIVE";
 
       overlay.appendChild(badge);
       document.body.appendChild(overlay);
@@ -109,10 +109,10 @@ async function injectJARVISOverlay(page: Page): Promise<void> {
   }
 }
 
-async function removeJARVISOverlay(page: Page): Promise<void> {
+async function removeFRIDAYOverlay(page: Page): Promise<void> {
   try {
     await page.evaluate(() => {
-      const overlay = document.getElementById("JARVIS-overlay");
+      const overlay = document.getElementById("FRIDAY-overlay");
       if (overlay) overlay.remove();
     });
   } catch {
@@ -176,7 +176,7 @@ const browserOpenTool: Tool = {
     try {
       const page = await getPage();
       await page.goto(url, { timeout: 30000, waitUntil: "domcontentloaded" });
-      await injectJARVISOverlay(page);
+      await injectFRIDAYOverlay(page);
       return { toolCallId: "", success: true, data: { url, title: await page.title() } };
     } catch (error) {
       return { toolCallId: "", success: false, error: `Failed to open URL: ${error instanceof Error ? error.message : "Unknown error"}` };
@@ -199,7 +199,7 @@ const browserNavigateTool: Tool = {
     try {
       const page = await getPage();
       await page.goto(url, { timeout: 30000, waitUntil: "domcontentloaded" });
-      await injectJARVISOverlay(page);
+      await injectFRIDAYOverlay(page);
       return { toolCallId: "", success: true, data: { url, title: await page.title() } };
     } catch (error) {
       return { toolCallId: "", success: false, error: `Navigation failed: ${error instanceof Error ? error.message : "Unknown error"}` };
@@ -248,7 +248,7 @@ const browserRefreshTool: Tool = {
     try {
       const page = await getPage();
       await page.reload({ timeout: 15000 });
-      await injectJARVISOverlay(page);
+      await injectFRIDAYOverlay(page);
       return { toolCallId: "", success: true, data: { url: page.url(), title: await page.title() } };
     } catch (error) {
       return { toolCallId: "", success: false, error: `Refresh failed: ${error instanceof Error ? error.message : "Unknown error"}` };
@@ -511,13 +511,13 @@ const browserListTabsTool: Tool = {
 
 const browserCloseTool: Tool = {
   name: "browser_close",
-  description: "Close the browser connection and remove JARVIS overlay. Does not close Chrome itself when connected via CDP.",
+  description: "Close the browser connection and remove FRIDAY overlay. Does not close Chrome itself when connected via CDP.",
   category: CATEGORY,
   parameters: [],
   execute: async () => {
     try {
       if (activePage && !activePage.isClosed()) {
-        await removeJARVISOverlay(activePage);
+        await removeFRIDAYOverlay(activePage);
       }
       activePage = null;
       if (browser) {
@@ -620,7 +620,7 @@ const browserLoginTool: Tool = {
         timeout: 30000,
         waitUntil: "domcontentloaded",
       });
-      await injectJARVISOverlay(page);
+      await injectFRIDAYOverlay(page);
 
       // Random delay helper (300-700ms) to mimic human typing cadence
       const humanDelay = () =>

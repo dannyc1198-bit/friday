@@ -1,4 +1,4 @@
-// Proactive Monitor — JARVIS watches for things Danny should know
+// Proactive Monitor — FRIDAY watches for things Danny should know
 //
 // Runs in the background every 5 minutes. Checks health, tasks, email, calendar.
 // Queues alerts that the frontend polls and speaks via TTS.

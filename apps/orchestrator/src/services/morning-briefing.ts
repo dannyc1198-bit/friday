@@ -1,4 +1,4 @@
-// Morning Briefing — JARVIS speaks a daily summary after startup completes
+// Morning Briefing — FRIDAY speaks a daily summary after startup completes
 //
 // Pulls from: weather (Open-Meteo, free), tasks (local JSON),
 //             crypto (CoinGecko, free), email count (OpenClaw if available)
@@ -63,7 +63,7 @@ function formatChange(pct: number): string {
 
 async function fetchWeather(): Promise<WeatherResult | null> {
   try {
-    // Kelowna, BC coordinates — update via JARVIS config if needed
+    // Kelowna, BC coordinates — update via FRIDAY config if needed
     const lat = process.env.WEATHER_LAT || "49.8880";
     const lon = process.env.WEATHER_LON || "-119.4960";
 

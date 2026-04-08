@@ -1,11 +1,11 @@
-// Unified Memory Bridge — Single memory layer for the entire JARVIS system
+// Unified Memory Bridge — Single memory layer for the entire FRIDAY system
 //
 // Reads/writes both Jarvis local memory AND OpenClaw workspace memory.
-// Every agent in the system (JARVIS, NEXUS, BUILDER, CREATOR, PULSE)
+// Every agent in the system (FRIDAY, NEXUS, BUILDER, CREATOR, PULSE)
 // shares one memory — what one learns, all know.
 //
 // Architecture:
-//   JARVIS local memory  ←→  UnifiedMemory  ←→  OpenClaw workspace memory
+//   FRIDAY local memory  ←→  UnifiedMemory  ←→  OpenClaw workspace memory
 //   (data/memory.json)                          (~/.openclaw/workspace/MEMORY.md)
 //
 // The learning engine feeds into this. Pattern recognition and outcome
@@ -17,17 +17,17 @@ import { memoryService } from "./memory/index.js";
 
 // ─── Paths ──────────────────────────────────────────────────────
 const USER_HOME = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368";
-const JARVIS_DATA = join(USER_HOME, "jarvis", "apps", "orchestrator", "data");
+const FRIDAY_DATA = join(USER_HOME, "jarvis", "apps", "orchestrator", "data");
 const OPENCLAW_WORKSPACE = join(USER_HOME, ".openclaw", "workspace");
 const OPENCLAW_MEMORY = join(USER_HOME, ".openclaw", "memory");
-const UNIFIED_STORE = join(JARVIS_DATA, "unified-memory.json");
+const UNIFIED_STORE = join(FRIDAY_DATA, "unified-memory.json");
 
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface UnifiedMemoryEntry {
   id: string;
   source: "jarvis" | "openclaw" | "learning" | "agent";
-  agent?: string;            // Which agent created this (JARVIS, NEXUS, BUILDER, etc.)
+  agent?: string;            // Which agent created this (FRIDAY, NEXUS, BUILDER, etc.)
   category: "fact" | "preference" | "outcome" | "pattern" | "insight" | "interaction";
   content: string;
   tags: string[];
@@ -238,7 +238,7 @@ class UnifiedMemoryService {
       console.warn("[UnifiedMemory] Failed to import OpenClaw memory dir:", error);
     }
 
-    // Export critical JARVIS memories to OpenClaw workspace
+    // Export critical FRIDAY memories to OpenClaw workspace
     try {
       const jarvisMemories = this.store.entries
         .filter(e => e.source === "jarvis" && (e.importance === "high" || e.importance === "critical"))
@@ -369,8 +369,8 @@ class UnifiedMemoryService {
 
   private save(): void {
     try {
-      if (!existsSync(JARVIS_DATA)) {
-        mkdirSync(JARVIS_DATA, { recursive: true });
+      if (!existsSync(FRIDAY_DATA)) {
+        mkdirSync(FRIDAY_DATA, { recursive: true });
       }
       writeFileSync(UNIFIED_STORE, JSON.stringify(this.store, null, 2), "utf-8");
       this.dirty = false;

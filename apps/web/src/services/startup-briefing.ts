@@ -266,7 +266,7 @@ export async function fetchEmailSummary(): Promise<EmailSummary> {
 // Mock todo list - connects to localStorage
 export async function fetchTodos(): Promise<TodoItem[]> {
   if (typeof window !== "undefined") {
-    const stored = localStorage.getItem("JARVIS-todos");
+    const stored = localStorage.getItem("FRIDAY-todos");
     if (stored) {
       try {
         return JSON.parse(stored);
@@ -281,7 +281,7 @@ export async function fetchTodos(): Promise<TodoItem[]> {
 // Save todo to local storage
 export function saveTodos(todos: TodoItem[]): void {
   if (typeof window !== "undefined") {
-    localStorage.setItem("JARVIS-todos", JSON.stringify(todos));
+    localStorage.setItem("FRIDAY-todos", JSON.stringify(todos));
   }
 }
 
@@ -295,7 +295,7 @@ export function addTodo(title: string, priority: "high" | "medium" | "low" = "me
     priority,
   };
 
-  const todos = JSON.parse(localStorage.getItem("JARVIS-todos") || "[]");
+  const todos = JSON.parse(localStorage.getItem("FRIDAY-todos") || "[]");
   todos.push(todo);
   saveTodos(todos);
 

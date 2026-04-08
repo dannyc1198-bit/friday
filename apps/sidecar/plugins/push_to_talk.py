@@ -1,6 +1,6 @@
 """
-Push-to-Talk — System-wide Ctrl+Shift hotkey for talking to JARVIS.
-Hold Ctrl+Shift to record, release to transcribe + send to JARVIS + speak response.
+Push-to-Talk — System-wide Ctrl+Shift hotkey for talking to FRIDAY.
+Hold Ctrl+Shift to record, release to transcribe + send to FRIDAY + speak response.
 Works globally — no browser tab needed.
 """
 import io
@@ -32,7 +32,7 @@ CHANNELS = 1
 # Falls back to Google Speech Recognition if unavailable
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
-SYSTEM_PROMPT = """You are JARVIS — Danny's AI assistant. Iron Man style.
+SYSTEM_PROMPT = """You are FRIDAY — Danny's AI assistant. Iron Man style.
 - British wit, concise, loyal. Call him "boss" or "sir" occasionally.
 - Keep responses SHORT (2-4 sentences) — you are speaking aloud.
 - Danny has ADHD — one thing at a time, be direct.
@@ -59,7 +59,7 @@ class PushToTalk:
         self._running = True
         self._thread = threading.Thread(target=self._hotkey_loop, daemon=True)
         self._thread.start()
-        log.info("Push-to-Talk active — hold Ctrl+Shift to talk to JARVIS")
+        log.info("Push-to-Talk active — hold Ctrl+Shift to talk to FRIDAY")
 
     def stop(self):
         self._running = False
@@ -119,7 +119,7 @@ class PushToTalk:
             self._recording = False
 
     def _stop_and_process(self):
-        """Stop recording, transcribe, send to JARVIS, speak response."""
+        """Stop recording, transcribe, send to FRIDAY, speak response."""
         with self._lock:
             if not self._recording:
                 return
@@ -162,7 +162,7 @@ class PushToTalk:
         ).start()
 
     def _process_audio(self, audio_data: np.ndarray):
-        """Transcribe audio, send to JARVIS, speak response."""
+        """Transcribe audio, send to FRIDAY, speak response."""
         # Step 1: Transcribe
         text = self._transcribe(audio_data)
         if not text or len(text.strip()) < 2:
@@ -171,9 +171,9 @@ class PushToTalk:
 
         log.info(f"Danny said: {text}")
 
-        # Step 2: Get JARVIS response (with camera frame + memory)
+        # Step 2: Get FRIDAY response (with camera frame + memory)
         reply = self._chat(text)
-        log.info(f"JARVIS: {reply}")
+        log.info(f"FRIDAY: {reply}")
 
         # Step 3: Speak the response
         self.voice.speak(reply)

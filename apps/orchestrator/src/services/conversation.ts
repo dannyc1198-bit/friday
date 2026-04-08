@@ -6,7 +6,7 @@ import type {
   ToolCall,
   ToolResult,
 } from "../types/index.js";
-import { config, JARVIS_SYSTEM_PROMPT } from "../config/index.js";
+import { config, FRIDAY_SYSTEM_PROMPT } from "../config/index.js";
 import { memoryService } from "./memory/index.js";
 
 // In-memory conversation store (replace with DB in production)
@@ -19,7 +19,7 @@ export function createConversation(): Conversation {
     messages: [],
     context: {
       userName: config.userName,
-      systemPrompt: JARVIS_SYSTEM_PROMPT,
+      systemPrompt: FRIDAY_SYSTEM_PROMPT,
       activeTools: ["pc_control", "smart_home", "media", "bluetooth"],
     },
     createdAt: new Date(),

@@ -11,7 +11,7 @@ import { CameraFeed } from "@/components/CameraFeed";
 import { KitchenStatus } from "@/components/KitchenStatus";
 import { AgentDashboard } from "@/components/AgentDashboard";
 import { SystemOverview } from "@/components/SystemOverview";
-import { JarvisOrb } from "@/components/JarvisOrb";
+import { FridayOrb } from "@/components/JarvisOrb";
 import { useChat } from "@/hooks/useChat";
 import { useVoice } from "@/hooks/useVoice";
 import { useWakeDetection } from "@/hooks/useWakeDetection";
@@ -86,7 +86,7 @@ export default function Home() {
   const handleSendMessage = useCallback(
     (content: string) => {
       const lower = content.toLowerCase().trim();
-      if (lower === "stop" || lower === "jarvis stop" || lower === "jarvis, stop") {
+      if (lower === "stop" || lower === "friday stop" || lower === "friday, stop") {
         stopTask();
         return;
       }
@@ -117,7 +117,7 @@ export default function Home() {
     enabled: isAwake,
   });
 
-  // ─── Double Clap → Wake JARVIS ─────────────────────────────
+  // ─── Double Clap → Wake FRIDAY ─────────────────────────────
   const handleDoubleClap = useCallback(() => {
     if (!isDormant) return; // Only respond when dormant
 
@@ -131,7 +131,7 @@ export default function Home() {
     // 3. Launch startup apps (Telegram, Claude Code)
     launchStartupApps();
 
-    // 4. JARVIS says hello (TTS)
+    // 4. FRIDAY says hello (TTS)
     fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -163,8 +163,20 @@ export default function Home() {
       });
   }, [isDormant]);
 
-  // Wake detection: say "morning jarvis" THEN double clap
+  // Wake detection: say "morning friday" THEN double clap
   const { wakeState } = useWakeDetection({ onWake: handleDoubleClap, enabled: isDormant });
+
+  // Auto-wake via URL param: ?wake=true (allows remote triggering)
+  useEffect(() => {
+    if (isDormant && typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("wake") === "true") {
+        // Small delay to let the UI render first
+        const t = setTimeout(() => handleDoubleClap(), 500);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [isDormant, handleDoubleClap]);
 
   // ─── Morning Briefing — fires once after startup sequence completes ──
   const handleStartupComplete = useCallback(() => {
@@ -276,11 +288,16 @@ export default function Home() {
       if (e.key === "Escape" && showControlPanel) {
         setShowControlPanel(false);
       }
+      // Enter key wakes FRIDAY from dormant
+      if (e.key === "Enter" && isDormant) {
+        e.preventDefault();
+        handleDoubleClap();
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showControlPanel]);
+  }, [showControlPanel, isDormant, handleDoubleClap]);
 
   return (
     <>
@@ -335,12 +352,23 @@ export default function Home() {
           }`}>
             {wakeState === "armed"
               ? "// ARMED — DOUBLE CLAP NOW"
-              : '// SAY "MORNING JARVIS" THEN CLAP TWICE'}
+              : '// SAY "MORNING FRIDAY" THEN CLAP TWICE'}
+          </p>
+
+          {/* Manual wake button */}
+          <button
+            onClick={handleDoubleClap}
+            className="mt-8 px-8 py-3 rounded-full border border-cyan-500/30 bg-cyan-500/5 text-cyan-400/60 font-mono text-xs tracking-[0.3em] uppercase hover:bg-cyan-500/15 hover:text-cyan-400/90 hover:border-cyan-500/50 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)] transition-all duration-500 active:scale-95"
+          >
+            WAKE FRIDAY
+          </button>
+          <p className="mt-3 font-mono text-[10px] text-cyan-700/25 tracking-wider">
+            or press ENTER
           </p>
 
           {/* Bottom status bar */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 font-mono text-[10px] text-cyan-700/30 tracking-wider">
-            <span>JARVIS v2.0</span>
+            <span>FRIDAY v2.0</span>
             <span className="text-cyan-500/20">|</span>
             <span>{wakeState === "armed" ? "ARMED" : "SYSTEMS IDLE"}</span>
             <span className="text-cyan-500/20">|</span>
@@ -412,14 +440,14 @@ export default function Home() {
 
           <ChatPanel messages={messages} />
 
-          {/* JARVIS Voice Orb — hero when empty, compact when chatting */}
+          {/* FRIDAY Voice Orb — hero when empty, compact when chatting */}
           <div className={cn(
             "flex justify-center",
             messages.length === 0
               ? "flex-1 items-center -mt-20"
               : "py-3 border-t border-gray-800/50"
           )}>
-            <JarvisOrb
+            <FridayOrb
               isListening={voice.isListening}
               isTranscribing={voice.isTranscribing}
               isSpeaking={voice.isSpeaking}

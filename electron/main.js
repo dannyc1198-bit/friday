@@ -7,13 +7,13 @@ let mainWindow;
 let orchestratorProcess;
 let webProcess;
 
-const WEB_URL = 'http://localhost:3000';
+const WEB_URL = process.env.FRIDAY_WEB_PORT ? `http://localhost:${process.env.FRIDAY_WEB_PORT}` : 'http://localhost:3000';
 const ORCHESTRATOR_URL = 'http://localhost:3001';
 
 // ── Service management ──────────────────────────────────────────────
 
 function startService(name, cwd, command, args) {
-  console.log(`[JARVIS] Starting ${name}...`);
+  console.log(`[FRIDAY] Starting ${name}...`);
   const proc = spawn(command, args, {
     cwd,
     shell: true,
@@ -59,7 +59,7 @@ function killChildren() {
           proc.kill('SIGTERM');
         }
       } catch (e) {
-        console.error('[JARVIS] Error killing child:', e.message);
+        console.error('[FRIDAY] Error killing child:', e.message);
       }
     }
   });
@@ -114,16 +114,16 @@ async function createWindow() {
   // Wait for orchestrator then web app
   try {
     await waitForService(ORCHESTRATOR_URL, 30, 1000);
-    console.log('[JARVIS] Orchestrator ready');
+    console.log('[FRIDAY] Orchestrator ready');
   } catch (e) {
-    console.error('[JARVIS] Orchestrator failed to start:', e.message);
+    console.error('[FRIDAY] Orchestrator failed to start:', e.message);
   }
 
   try {
     await waitForService(WEB_URL, 30, 1000);
-    console.log('[JARVIS] Web app ready');
+    console.log('[FRIDAY] Web app ready');
   } catch (e) {
-    console.error('[JARVIS] Web app failed to start:', e.message);
+    console.error('[FRIDAY] Web app failed to start:', e.message);
   }
 
   // Load the web app
@@ -132,8 +132,8 @@ async function createWindow() {
   // After boot sequence completes, drop alwaysOnTop
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.executeJavaScript(`
-      window.__JARVISBootComplete = function() {
-        console.log('JARVIS BOOT COMPLETE');
+      window.__FRIDAYBootComplete = function() {
+        console.log('FRIDAY BOOT COMPLETE');
       };
     `);
   });

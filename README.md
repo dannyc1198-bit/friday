@@ -1,8 +1,8 @@
-# JARVIS — Personal AI Operating System
+# FRIDAY — Personal AI Operating System
 
-> *"Just A Rather Very Intelligent System"*
+> *"Female Replacement Intelligent Digital Assistant Youth"*
 
-An Iron Man-inspired personal AI assistant built on **Anthropic Claude** — voice-controlled, tool-equipped, and extensible. JARVIS orchestrates 101 tools across 12 categories from a single conversation interface.
+An Iron Man-inspired personal AI assistant built on **Anthropic Claude** — voice-controlled, tool-equipped, and extensible. FRIDAY orchestrates 101 tools across 12 categories from a single conversation interface.
 
 ![Status](https://img.shields.io/badge/Phase%204-Complete-blue)
 ![Tools](https://img.shields.io/badge/Tools-101-blueviolet)
@@ -13,11 +13,11 @@ An Iron Man-inspired personal AI assistant built on **Anthropic Claude** — voi
 
 ## What It Does
 
-JARVIS is a fully local, self-hosted AI assistant with a persistent memory, tool execution engine, and a streaming chat interface. You talk to it like Tony Stark talks to Jarvis. It actually does things.
+FRIDAY is a fully local, self-hosted AI assistant with a persistent memory, tool execution engine, and a streaming chat interface. You talk to it like Tony Stark talks to Jarvis. It actually does things.
 
 **Currently operational:**
 - 🎙️ Voice I/O — ElevenLabs TTS + Wispr Flow STT
-- 💡 Smart Home — Philips Hue (lights, scenes, JARVIS Mode: all blue)
+- 💡 Smart Home — Philips Hue (lights, scenes, FRIDAY Mode: all blue)
 - 🎵 Music — Spotify playback control
 - 💻 PC Control — App launcher, window manager, system commands
 - 🌐 Web — Search (Tavily), fetch, Gmail, Notion, VAPI calls
@@ -143,19 +143,19 @@ SPOTIFY_CLIENT_SECRET=your_client_secret
 ## Key Features
 
 ### Streaming AI Responses
-JARVIS streams responses character-by-character via SSE — no waiting for the full reply.
+FRIDAY streams responses character-by-character via SSE — no waiting for the full reply.
 
 ### Agentic Tool Loop
-When given a complex task, JARVIS runs up to 10 rounds of tool calls automatically, chaining results together to complete the job.
+When given a complex task, FRIDAY runs up to 10 rounds of tool calls automatically, chaining results together to complete the job.
 
 ### Ralph Wiggum Thinking Loop
-An iterative reasoning engine that self-corrects over multiple passes. For hard problems, JARVIS can think for up to 20 iterations with token budget tracking.
+An iterative reasoning engine that self-corrects over multiple passes. For hard problems, FRIDAY can think for up to 20 iterations with token budget tracking.
 
-### JARVIS Mode
+### FRIDAY Mode
 Press `Ctrl+K` to open the Control Center. Hit "Set All Blue" — every Hue light in the room turns arc-reactor blue.
 
 ### Persistent Memory
-JARVIS remembers things across sessions. Tell it something once; it knows it forever.
+FRIDAY remembers things across sessions. Tell it something once; it knows it forever.
 
 ---
 

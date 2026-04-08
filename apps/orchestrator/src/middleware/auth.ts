@@ -1,4 +1,4 @@
-// Authentication Middleware — Bearer token gating for all JARVIS API endpoints
+// Authentication Middleware — Bearer token gating for all FRIDAY API endpoints
 // Auto-generates a secure API key on first run and stores it in .env
 //
 // Public endpoints (no auth): GET /api/health
@@ -28,17 +28,17 @@ let apiKey: string | null = null;
 
 function loadOrGenerateApiKey(): string {
   // Check environment first
-  if (process.env.JARVIS_API_KEY) {
-    return process.env.JARVIS_API_KEY;
+  if (process.env.FRIDAY_API_KEY) {
+    return process.env.FRIDAY_API_KEY;
   }
 
   // Try to read from .env file
   try {
     if (existsSync(ENV_PATH)) {
       const envContent = readFileSync(ENV_PATH, "utf-8");
-      const match = envContent.match(/^JARVIS_API_KEY=(.+)$/m);
+      const match = envContent.match(/^FRIDAY_API_KEY=(.+)$/m);
       if (match && match[1].trim()) {
-        process.env.JARVIS_API_KEY = match[1].trim();
+        process.env.FRIDAY_API_KEY = match[1].trim();
         return match[1].trim();
       }
     }
@@ -47,7 +47,7 @@ function loadOrGenerateApiKey(): string {
   }
 
   // Generate a new secure API key
-  const newKey = `jarvis_${randomBytes(32).toString("hex")}`;
+  const newKey = `friday_${randomBytes(32).toString("hex")}`;
 
   // Append to .env file
   try {
@@ -60,7 +60,7 @@ function loadOrGenerateApiKey(): string {
       envContent += "\n";
     }
 
-    envContent += `\n# JARVIS API Authentication Key (auto-generated)\nJARVIS_API_KEY=${newKey}\n`;
+    envContent += `\n# FRIDAY API Authentication Key (auto-generated)\nFRIDAY_API_KEY=${newKey}\n`;
     writeFileSync(ENV_PATH, envContent, "utf-8");
     console.log("[Auth] Generated new API key and saved to .env");
     console.log(`[Auth] Your API key: ${newKey}`);
@@ -69,7 +69,7 @@ function loadOrGenerateApiKey(): string {
     console.warn("[Auth] Could not save API key to .env — using in-memory only");
   }
 
-  process.env.JARVIS_API_KEY = newKey;
+  process.env.FRIDAY_API_KEY = newKey;
   return newKey;
 }
 
@@ -114,7 +114,7 @@ export async function authMiddleware(
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     reply.code(401).send({
       error: "Unauthorized",
-      message: "Missing or invalid Authorization header. Use: Bearer <JARVIS_API_KEY>",
+      message: "Missing or invalid Authorization header. Use: Bearer <FRIDAY_API_KEY>",
     });
     return;
   }

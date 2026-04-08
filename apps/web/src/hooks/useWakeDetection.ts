@@ -1,6 +1,6 @@
 "use client";
 
-// useWakeDetection — Two-factor wake: say "morning jarvis" THEN double clap
+// useWakeDetection — Two-factor wake: say "morning friday" THEN double clap
 //
 // State machine:
 //   IDLE            → listening for wake phrase via Web Speech API
@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
-const WAKE_PHRASES = ["morning jarvis", "morning, jarvis", "good morning jarvis"];
+const WAKE_PHRASES = ["morning friday", "morning, friday", "good morning friday"];
 const CLAP_THRESHOLD   = 80;
 const MIN_GAP_MS       = 100;
 const MAX_GAP_MS       = 800;

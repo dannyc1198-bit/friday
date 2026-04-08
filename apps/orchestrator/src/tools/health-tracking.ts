@@ -60,7 +60,7 @@ const tools: Tool[] = [
     execute: async (params): Promise<ToolResult> => {
       const lbs = params.lbs as number;
       const date = (params.date as string | undefined) || today();
-      if (lbs < 50 || lbs > 500) return { success: false, error: "Weight out of valid range (50–500 lbs)" };
+      if (lbs < 50 || lbs > 500) return { toolCallId: "", success: false, error: "Weight out of valid range (50–500 lbs)" };
 
       const store = loadStore();
       store.weight.push({ date, lbs });
@@ -80,6 +80,7 @@ const tools: Tool[] = [
       const goal = 170;
       const toGo = (goal - lbs).toFixed(1);
       return {
+        toolCallId: "",
         success: true,
         data: `Logged ${lbs} lbs on ${date}.${trendMsg} ${Number(toGo) > 0 ? `${toGo} lbs to go until ${goal} lb goal.` : "Goal reached, sir."}`,
       };
@@ -117,6 +118,7 @@ const tools: Tool[] = [
       }
 
       return {
+        toolCallId: "",
         success: true,
         data: `Workout logged: ${summary}${duration ? ` (${duration} min)` : ""}.${streak > 1 ? ` ${streak}-day streak, sir.` : ""}`,
       };
@@ -147,6 +149,7 @@ const tools: Tool[] = [
       const totalCals  = todayMeals.reduce((sum, m) => sum + (m.calories || 0), 0);
 
       return {
+        toolCallId: "",
         success: true,
         data: `Meal logged: ${description}.${calories ? ` ${calories} kcal.` : ""}${totalCals > 0 ? ` Today's total: ~${totalCals} kcal.` : ""}`,
       };
@@ -199,7 +202,7 @@ const tools: Tool[] = [
         parts.push(`Avg calories: ~${Math.round(totalCals / days)} kcal/day`);
       }
 
-      return { success: true, data: parts.join(". ") + "." };
+      return { toolCallId: "", success: true, data: parts.join(". ") + "." };
     },
   },
 
@@ -232,7 +235,7 @@ const tools: Tool[] = [
       else if (days >= 3) lines.push("Solid week. Push for one more session next week.");
       else lines.push("Below target. The gym does not build itself, sir.");
 
-      return { success: true, data: lines.join(" ") };
+      return { toolCallId: "", success: true, data: lines.join(" ") };
     },
   },
 ];

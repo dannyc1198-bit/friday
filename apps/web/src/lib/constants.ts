@@ -1,4 +1,4 @@
-export const APP_NAME = "JARVIS";
+export const APP_NAME = "FRIDAY";
 export const APP_VERSION = "0.1.0";
 
 export const HEALTH_CHECK_INTERVAL = 5000; // 5 seconds
@@ -13,10 +13,10 @@ export const GREETING_MESSAGES = [
 
 export const USER_NAME = "Danny";
 
-// JARVIS personality traits
-export const JARVIS_TRAITS = {
-  name: "JARVIS",
-  fullName: "Just A Rather Very Intelligent System",
+// FRIDAY personality traits
+export const FRIDAY_TRAITS = {
+  name: "FRIDAY",
+  fullName: "Female Replacement Intelligent Digital Assistant Youth",
   creator: "You",
   personality: "witty, helpful, slightly sarcastic but always respectful",
   voiceStyle: "British butler with technical expertise",

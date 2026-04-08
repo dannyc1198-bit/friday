@@ -18,7 +18,7 @@ export function VoicePackProvider({ children }: { children: ReactNode }) {
 
   // Load saved preference
   useEffect(() => {
-    const saved = localStorage.getItem("JARVIS-voice-pack");
+    const saved = localStorage.getItem("FRIDAY-voice-pack");
     if (saved) {
       const pack = getVoicePack(saved);
       if (pack) setCurrentPack(pack);
@@ -49,7 +49,7 @@ export function VoicePackProvider({ children }: { children: ReactNode }) {
     const pack = getVoicePack(id);
     if (pack) {
       setCurrentPack(pack);
-      localStorage.setItem("JARVIS-voice-pack", id);
+      localStorage.setItem("FRIDAY-voice-pack", id);
     }
   };
 

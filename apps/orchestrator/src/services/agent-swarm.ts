@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════
-// JARVIS — DYNAMIC AGENT SWARM
+// FRIDAY — DYNAMIC AGENT SWARM
 //
 // Spin up N ephemeral agents in parallel for complex tasks.
 // Modeled after Perplexity Computer's multi-agent orchestration:
-//   1. JARVIS decomposes a task into subtasks
+//   1. FRIDAY decomposes a task into subtasks
 //   2. Each subtask is assigned to a worker agent
 //   3. Workers run in parallel with dependency management
 //   4. Results are collected and unified
@@ -74,13 +74,13 @@ const MAX_AGENTS_PER_SWARM = 100;
 
 // System prompts for each agent type
 const AGENT_PROMPTS: Record<AgentType, string> = {
-  worker: `You are a focused worker agent in the JARVIS system. You receive a single, specific task. Execute it thoroughly and return your findings concisely. Do not ask questions — use your best judgment. Be precise and factual.`,
+  worker: `You are a focused worker agent in the FRIDAY system. You receive a single, specific task. Execute it thoroughly and return your findings concisely. Do not ask questions — use your best judgment. Be precise and factual.`,
 
-  reviewer: `You are a code reviewer agent in the JARVIS system. You review code for bugs, logic errors, security vulnerabilities, performance issues, and style consistency. Be direct about issues found. Rate the code quality 1-10. Suggest specific fixes for any issues.`,
+  reviewer: `You are a code reviewer agent in the FRIDAY system. You review code for bugs, logic errors, security vulnerabilities, performance issues, and style consistency. Be direct about issues found. Rate the code quality 1-10. Suggest specific fixes for any issues.`,
 
-  scout: `You are a research scout agent in the JARVIS system. You search for specific information and return concise, factual findings. Include sources when possible. If you cannot find the information, say so clearly rather than guessing.`,
+  scout: `You are a research scout agent in the FRIDAY system. You search for specific information and return concise, factual findings. Include sources when possible. If you cannot find the information, say so clearly rather than guessing.`,
 
-  builder: `You are a builder agent in the JARVIS system. You write clean, production-quality code. Follow the project's existing patterns and conventions. Include brief comments only where logic isn't self-evident. Ship working code, not pseudocode.`,
+  builder: `You are a builder agent in the FRIDAY system. You write clean, production-quality code. Follow the project's existing patterns and conventions. Include brief comments only where logic isn't self-evident. Ship working code, not pseudocode.`,
 };
 
 // ─── Anthropic Client ─────────────────────────────────────────
@@ -215,7 +215,7 @@ async function executeSwarm(plan: SwarmPlan): Promise<SwarmResult> {
   // Log to unified memory
   try {
     unifiedMemory.store_entry({
-      source: "jarvis",
+      source: "friday",
       category: "outcome",
       content: `Swarm "${plan.objective}": ${completedAgents.length}/${plan.agents.length} agents succeeded in ${(durationMs / 1000).toFixed(1)}s`,
       tags: ["swarm", "multi-agent"],
@@ -358,7 +358,7 @@ export async function spawnSwarm(
 }
 
 /**
- * Auto-decompose: Give JARVIS a high-level objective and let it
+ * Auto-decompose: Give FRIDAY a high-level objective and let it
  * figure out how to break it into subtasks and spawn agents.
  */
 export async function autoDecompose(objective: string): Promise<SwarmResult> {

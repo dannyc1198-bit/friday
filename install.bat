@@ -1,8 +1,8 @@
 @echo off
-title JARVIS Installer
+title FRIDAY Installer
 echo.
 echo  ================================================
-echo   J.A.R.V.I.S. — Installation
+echo   F.R.I.D.A.Y. — Installation
 echo  ================================================
 echo.
 
@@ -48,7 +48,7 @@ echo.
 echo   Controls:
 echo     Backtick  - hold to talk
 echo     M         - mute / unmute
-echo     Alt+J     - show / hide JARVIS
+echo     Alt+J     - show / hide FRIDAY
 echo     ESC       - minimize
 echo  ================================================
 echo.

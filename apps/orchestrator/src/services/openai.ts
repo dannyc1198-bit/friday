@@ -1,9 +1,9 @@
-// JARVIS LLM Service — Anthropic Claude
+// FRIDAY LLM Service — Anthropic Claude
 // Migrated from OpenAI GPT-4o → Anthropic Claude Sonnet 4
 // Filename kept as openai.ts to minimize import churn (3 files import from here)
 
 import Anthropic from "@anthropic-ai/sdk";
-import { config, JARVIS_SYSTEM_PROMPT } from "../config/index.js";
+import { config, FRIDAY_SYSTEM_PROMPT } from "../config/index.js";
 import type {
   Message,
   StreamChunk,
@@ -176,7 +176,7 @@ export async function chatCompletion(messages: Message[]): Promise<{
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    system: JARVIS_SYSTEM_PROMPT,
+    system: FRIDAY_SYSTEM_PROMPT,
     messages: toAnthropicMessages(messages),
     ...(tools && tools.length > 0 ? { tools } : {}),
   });
@@ -215,7 +215,7 @@ export async function* streamChatCompletion(
 ): AsyncGenerator<StreamChunk> {
   const tools = config.enableTools ? getAnthropicTools() : undefined;
   const anthropicMessages = toAnthropicMessages(messages);
-  const fullSystemPrompt = JARVIS_SYSTEM_PROMPT + (systemPromptExtras || "");
+  const fullSystemPrompt = FRIDAY_SYSTEM_PROMPT + (systemPromptExtras || "");
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // Check cancellation before each round

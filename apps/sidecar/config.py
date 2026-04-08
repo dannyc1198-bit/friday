@@ -1,5 +1,5 @@
 """
-Unified JARVIS Sidecar — Configuration
+Unified FRIDAY Sidecar — Configuration
 Loads API keys from the orchestrator .env and defines shared constants.
 """
 import os
@@ -41,7 +41,7 @@ PERSON_GONE_TIMEOUT = 600     # 10 min = person left
 SECURITY_ALERT_COOLDOWN = 1800  # 30 min per alert type (fixes spam)
 
 # ─── Voice ────────────────────────────────────────────────────
-WAKE_WORD = "jarvis"
+WAKE_WORD = "friday"
 CONVERSATION_TIMEOUT = 60     # seconds of silence before returning to sleep
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 CLAUDE_HAIKU = "claude-haiku-4-5-20241022"

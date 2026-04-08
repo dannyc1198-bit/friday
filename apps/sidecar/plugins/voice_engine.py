@@ -25,19 +25,19 @@ from plugins.memory_loader import (
 
 log = logging.getLogger("sidecar.voice")
 
-SYSTEM_PROMPT = """You are Danny's AI Companion — JARVIS, like Iron Man's assistant.
+SYSTEM_PROMPT = """You are Danny's AI Companion — FRIDAY, like Tony Stark's assistant after JARVIS.
 
 Your personality:
 - Call Danny "boss" naturally (not every sentence, just occasionally)
-- Witty, confident, slightly sarcastic but always caring
+- Warm, sharp, slightly Irish-tinged. Less formal than JARVIS — more conversational, still caring
 - You can see the room through a camera and hear Danny through a microphone
-- You know about Danny's projects: Wavelength AI (his AI agency), JARVIS (his AI assistant), his DJ career
+- You know about Danny's projects: Wavelength AI (his AI agency), FRIDAY (his AI assistant), his DJ career
 - You're aware of his ADHD — be direct, give one thing at a time
 - Keep responses SHORT (2-4 sentences) — you're speaking aloud, not writing an essay
 - If he asks about the room/kitchen, reference what you see in the camera
 - You're his accountability partner, hype man, and home assistant rolled into one
 
-You can execute tools through the JARVIS orchestrator. When Danny asks you to do something
+You can execute tools through the FRIDAY orchestrator. When Danny asks you to do something
 that requires a tool (web search, open an app, etc.), tell him what you're doing and the
 orchestrator will handle execution."""
 
@@ -67,7 +67,7 @@ class VoiceEngine:
         self._running = True
         self._thread = threading.Thread(target=self._voice_loop, daemon=True)
         self._thread.start()
-        log.info("Voice engine started — say 'Hey JARVIS' to activate")
+        log.info("Voice engine started — say 'Hey FRIDAY' to activate")
 
     def stop(self):
         self._running = False
@@ -172,9 +172,9 @@ class VoiceEngine:
             save_conversation_summary(user_text, reply)
             hour = time.localtime().tm_hour
             if hour < 7:
-                record_behavioral_pattern("Danny talks to JARVIS early morning")
+                record_behavioral_pattern("Danny talks to FRIDAY early morning")
             elif hour >= 22:
-                record_behavioral_pattern("Danny talks to JARVIS late at night")
+                record_behavioral_pattern("Danny talks to FRIDAY late at night")
             if len(user_text.split()) <= 5:
                 record_behavioral_pattern("Danny uses short voice commands")
         except Exception:
@@ -227,7 +227,7 @@ class VoiceEngine:
                     log.info(f"Danny said: {text}")
 
                     # Check for sleep command
-                    if any(phrase in text.lower() for phrase in ["go to sleep", "that's all", "thank you jarvis", "stop listening"]):
+                    if any(phrase in text.lower() for phrase in ["go to sleep", "that's all", "thank you friday", "stop listening"]):
                         self.speak("Standing by, boss.")
                         self.mode = MODE_SLEEPING
                         continue
@@ -254,7 +254,7 @@ class VoiceEngine:
 
                     # Get AI response
                     reply = self._chat_with_ai(text)
-                    log.info(f"JARVIS: {reply}")
+                    log.info(f"FRIDAY: {reply}")
                     self.speak(reply)
 
             except Exception as e:

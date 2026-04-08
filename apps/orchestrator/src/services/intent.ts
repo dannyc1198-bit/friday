@@ -43,14 +43,14 @@ const INTENT_PATTERNS: Record<IntentCategory, { keywords: string[]; patterns: Re
     keywords: [
       "lights", "light", "lamp", "brightness", "dim",
       "turn on", "turn off", "color", "scene",
-      "JARVIS mode", "living room", "bedroom", "kitchen",
+      "FRIDAY mode", "living room", "bedroom", "kitchen",
     ],
     patterns: [
       /turn\s+(on|off)\s+(the\s+)?lights?/i,
       /set\s+(the\s+)?lights?\s+to\s+(\w+)/i,
       /(dim|brighten)\s+(the\s+)?lights?/i,
       /change\s+(the\s+)?light\s+color\s+to\s+(\w+)/i,
-      /JARVIS\s+mode/i,
+      /FRIDAY\s+mode/i,
     ],
   },
   media: {
@@ -112,7 +112,7 @@ const INTENT_TOOLS: Record<IntentCategory, string[]> = {
     "get_lights",
     "set_light",
     "set_all_lights",
-    "JARVIS_mode",
+    "FRIDAY_mode",
     "set_scene",
   ],
   media: [

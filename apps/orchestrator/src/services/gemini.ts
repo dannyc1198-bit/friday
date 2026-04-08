@@ -1,4 +1,4 @@
-// JARVIS LLM Service — Google Gemini (Free Tier)
+// FRIDAY LLM Service — Google Gemini (Free Tier)
 // Used for simple/routine tasks to reduce API costs
 // Complex tasks still route to Claude via openai.ts
 
@@ -9,7 +9,7 @@ import {
   type Content,
   SchemaType,
 } from "@google/generative-ai";
-import { config, JARVIS_SYSTEM_PROMPT } from "../config/index.js";
+import { config, FRIDAY_SYSTEM_PROMPT } from "../config/index.js";
 import type { Message, StreamChunk, ToolParameter } from "../types/index.js";
 import { toolRegistry } from "../tools/registry.js";
 
@@ -171,7 +171,7 @@ export async function* streamGeminiCompletion(
   systemPromptExtras?: string
 ): AsyncGenerator<StreamChunk> {
   const tools = config.enableTools ? getGeminiFunctionDeclarations() : undefined;
-  const fullSystemPrompt = JARVIS_SYSTEM_PROMPT + (systemPromptExtras || "");
+  const fullSystemPrompt = FRIDAY_SYSTEM_PROMPT + (systemPromptExtras || "");
   const geminiContents = toGeminiContents(messages);
 
   // Build model with system instruction and tools
@@ -306,7 +306,7 @@ export async function* streamGeminiCompletion(
     } catch (error) {
       // On any Gemini error, yield error and let caller handle fallback
       const errorMsg = error instanceof Error ? error.message : "Gemini API error";
-      console.error(`[JARVIS/Gemini] Error in round ${round}:`, errorMsg);
+      console.error(`[FRIDAY/Gemini] Error in round ${round}:`, errorMsg);
       throw error; // Propagate so llm-router can fallback to Claude
     }
   }

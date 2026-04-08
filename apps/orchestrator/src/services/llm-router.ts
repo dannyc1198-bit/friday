@@ -1,4 +1,4 @@
-// JARVIS LLM Router — Hybrid Provider
+// FRIDAY LLM Router — Hybrid Provider
 // Routes simple requests to Gemini (free) and complex ones to Claude (paid)
 // Backward compatible: if GEMINI_API_KEY is not set, always uses Claude
 

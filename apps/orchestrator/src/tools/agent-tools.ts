@@ -1,6 +1,6 @@
-// Agent Dispatch Tools — Lets JARVIS delegate tasks to specialist agents
+// Agent Dispatch Tools — Lets FRIDAY delegate tasks to specialist agents
 // These tools are callable by the LLM during conversation, enabling
-// JARVIS to route work to NEXUS, BUILDER, CREATOR, PULSE, or CLAWDY.
+// FRIDAY to route work to NEXUS, BUILDER, CREATOR, PULSE, or CLAWDY.
 
 import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
@@ -131,7 +131,7 @@ const listAgentTasksTool: Tool = {
 const searchMemoryTool: Tool = {
   name: "search_unified_memory",
   description:
-    "Searches the unified memory across all systems (JARVIS, OpenClaw agents, learning engine). Use to recall past interactions, learned patterns, or stored facts.",
+    "Searches the unified memory across all systems (FRIDAY, OpenClaw agents, learning engine). Use to recall past interactions, learned patterns, or stored facts.",
   category: "memory",
   parameters: [
     {
@@ -213,8 +213,8 @@ const storeMemoryTool: Tool = {
     const tags = params.tags ? (params.tags as string).split(",").map(t => t.trim()) : [];
 
     const id = unifiedMemory.store_entry({
-      source: "jarvis",
-      agent: "JARVIS",
+      source: "friday",
+      agent: "FRIDAY",
       category: category as any,
       content,
       tags,

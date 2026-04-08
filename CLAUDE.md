@@ -1,4 +1,4 @@
-# JARVIS — Project Rules
+# FRIDAY — Project Rules
 
 ## Overview
 
@@ -12,7 +12,7 @@ AI personal assistant with voice, tool execution, smart home control, and proact
 - **Phase 2:** COMPLETE ✅ — "Real Tools" (all 5 tool modules already real, cleanup done)
 - **Phase 3:** CODE COMPLETE ✅ — "OpenClaw Integration" (2026-02-27)
 - **Phase 4:** CODE COMPLETE ✅ — "Browser Control + Screen Awareness" (2026-02-28)
-- **Unified Build:** COMPLETE ✅ — Merged 3 JARVIS projects into one (2026-03-28)
+- **Unified Build:** COMPLETE ✅ — Merged 3 FRIDAY projects into one (2026-03-28)
 - LLM: Anthropic Claude (`claude-sonnet-4-20250514`) — streaming verified
 - ~91 tools registered across 13 categories (cut Spotify 10, Maps 5, added Sidecar 5, Agent 7)
 
@@ -125,13 +125,13 @@ Full spec with test checklists: `JARVIS-BUILD.md`
 
 ## Self-Learning Architecture
 
-JARVIS learns and adapts over time. All self-modifications require owner approval before deploying.
+FRIDAY learns and adapts over time. All self-modifications require owner approval before deploying.
 
 - **Interaction Memory:** Track tool usage patterns, frequent requests, failure modes
 - **Preference Adaptation:** Auto-tune parameters (volume, brightness, response style) based on learned patterns
-- **Self-Improvement Proposals:** JARVIS can draft new tool files, prompt adjustments, or config changes — but presents them for approval, never auto-deploys
+- **Self-Improvement Proposals:** FRIDAY can draft new tool files, prompt adjustments, or config changes — but presents them for approval, never auto-deploys
 - **Upgrade Suggestions:** Existing `self-upgrade.ts` module proposes capability expansions
-- **Approval Gate (mandatory):** No self-generated change goes live without explicit sign-off. JARVIS proposes → owner approves → change deploys.
+- **Approval Gate (mandatory):** No self-generated change goes live without explicit sign-off. FRIDAY proposes → owner approves → change deploys.
 
 Evolution roadmap: `.planning/JARVIS.md`
 

@@ -1,14 +1,14 @@
-# JARVIS Windows Startup Installer
-# Registers a Task Scheduler task that launches JARVIS automatically at logon.
+# FRIDAY Windows Startup Installer
+# Registers a Task Scheduler task that launches FRIDAY automatically at logon.
 # Run this once as Administrator.
 #
 # After install:
-#   - JARVIS launches automatically when you log in
+#   - FRIDAY launches automatically when you log in
 #   - Alt+J to toggle visibility
 #   - ESC to minimize (never closes)
-#   - To uninstall: Unregister-ScheduledTask -TaskName "JARVIS" -Confirm:$false
+#   - To uninstall: Unregister-ScheduledTask -TaskName "FRIDAY" -Confirm:$false
 
-$TaskName  = "JARVIS"
+$TaskName  = "FRIDAY"
 $BatPath   = "C:\Users\12368\jarvis\start-jarvis.bat"
 $User      = $env:USERNAME
 
@@ -33,11 +33,11 @@ Register-ScheduledTask `
     -Force
 
 Write-Host ""
-Write-Host "JARVIS startup task registered successfully." -ForegroundColor Cyan
+Write-Host "FRIDAY startup task registered successfully." -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Task name : $TaskName"
 Write-Host "  Runs      : at logon for $User"
 Write-Host "  Privilege : Highest (required for fullscreen over taskbar)"
 Write-Host ""
-Write-Host "JARVIS will launch automatically on next login." -ForegroundColor Green
+Write-Host "FRIDAY will launch automatically on next login." -ForegroundColor Green
 Write-Host "Alt+J to toggle | ESC to minimize | close Electron window to quit." -ForegroundColor DarkGray

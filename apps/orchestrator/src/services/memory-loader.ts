@@ -26,8 +26,8 @@ function loadMasterMemory(): string {
 
   // Try multiple known locations
   const paths = [
+    join(HOME, "Desktop", "FRIDAY", "MASTER_MEMORY.md"),
     join(HOME, "Desktop", "jarvis", "MASTER_MEMORY.md"),
-    join(HOME, "Desktop", "JARVIS", "MASTER_MEMORY.md"),
     join(HOME, "jarvis", "MASTER_MEMORY.md"),
   ];
 

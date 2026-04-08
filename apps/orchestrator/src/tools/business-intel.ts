@@ -72,14 +72,14 @@ const tools: Tool[] = [
   // ── Set MRR ───────────────────────────────────────────────────
   {
     name: "business_set_mrr",
-    description: "Update Wavelength's MRR (monthly recurring revenue). Say 'JARVIS, update MRR to $X'.",
+    description: "Update Wavelength's MRR (monthly recurring revenue). Say 'FRIDAY, update MRR to $X'.",
     category: "Business Intelligence",
     parameters: [
       { name: "amount", type: "number", description: "New MRR in dollars", required: true },
     ],
     execute: async (params): Promise<ToolResult> => {
       const amount = params.amount as number;
-      if (amount < 0) return { success: false, error: "MRR cannot be negative" };
+      if (amount < 0) return { toolCallId: "", success: false, error: "MRR cannot be negative" };
 
       const store = loadStore();
       const prev = store.mrr;
@@ -94,6 +94,7 @@ const tools: Tool[] = [
       const changeMsg = diff !== 0 ? ` (${diff >= 0 ? "+" : ""}$${diff} from previous)` : "";
 
       return {
+        toolCallId: "",
         success: true,
         data: `MRR updated to $${amount}${changeMsg}. That is ~$${dailyEquiv}/day. ${
           toGoal > 0
@@ -131,6 +132,7 @@ const tools: Tool[] = [
 
       const activePipeline = store.leads.filter((l) => !["closed", "lost"].includes(l.status));
       return {
+        toolCallId: "",
         success: true,
         data: `Lead added: ${lead.name} (${lead.source}). Pipeline now has ${activePipeline.length} active lead${activePipeline.length !== 1 ? "s" : ""}.`,
       };
@@ -152,12 +154,12 @@ const tools: Tool[] = [
       const newStatus = params.status as LeadEntry["status"];
       const validStatuses: LeadEntry["status"][] = ["new", "contacted", "proposal", "closed", "lost"];
       if (!validStatuses.includes(newStatus)) {
-        return { success: false, error: `Invalid status. Use: ${validStatuses.join(", ")}` };
+        return { toolCallId: "", success: false, error: `Invalid status. Use: ${validStatuses.join(", ")}` };
       }
 
       const store = loadStore();
-      const lead = store.leads.findLast((l) => l.name.toLowerCase().includes(searchName));
-      if (!lead) return { success: false, error: `Lead "${params.name}" not found` };
+      const lead = [...store.leads].reverse().find((l: LeadEntry) => l.name.toLowerCase().includes(searchName));
+      if (!lead) return { toolCallId: "", success: false, error: `Lead "${params.name}" not found` };
 
       const prev = lead.status;
       lead.status = newStatus;
@@ -166,6 +168,7 @@ const tools: Tool[] = [
 
       const emoji = newStatus === "closed" ? " Let's go." : newStatus === "lost" ? " On to the next." : "";
       return {
+        toolCallId: "",
         success: true,
         data: `${lead.name}: ${prev} → ${newStatus}.${emoji}`,
       };
@@ -191,6 +194,7 @@ const tools: Tool[] = [
       const pipelineValue = activePipeline.reduce((sum, l) => sum + (l.value || 0), 0);
 
       return {
+        toolCallId: "",
         success: true,
         data: JSON.stringify({
           mrr: store.mrr,
@@ -215,7 +219,7 @@ const tools: Tool[] = [
     parameters: [],
     execute: async (): Promise<ToolResult> => {
       if (!config.netlify.authToken) {
-        return { success: false, error: "NETLIFY_AUTH_TOKEN not configured" };
+        return { toolCallId: "", success: false, error: "NETLIFY_AUTH_TOKEN not configured" };
       }
 
       try {
@@ -224,13 +228,13 @@ const tools: Tool[] = [
           headers: { Authorization: `Bearer ${config.netlify.authToken}` },
           signal: AbortSignal.timeout(8000),
         });
-        if (!sitesRes.ok) return { success: false, error: "Netlify API error" };
+        if (!sitesRes.ok) return { toolCallId: "", success: false, error: "Netlify API error" };
         const sites = await sitesRes.json() as Array<{ id: string; name: string }>;
 
         const wavelengthSite = sites.find((s) =>
           s.name.toLowerCase().includes("wavelength") || s.name.toLowerCase().includes("wave")
         );
-        if (!wavelengthSite) return { success: true, data: "No Wavelength site found on Netlify." };
+        if (!wavelengthSite) return { toolCallId: "", success: true, data: "No Wavelength site found on Netlify." };
 
         // Get form submissions
         const formsRes = await fetch(
@@ -240,7 +244,7 @@ const tools: Tool[] = [
             signal: AbortSignal.timeout(8000),
           }
         );
-        if (!formsRes.ok) return { success: false, error: "Could not fetch form submissions" };
+        if (!formsRes.ok) return { toolCallId: "", success: false, error: "Could not fetch form submissions" };
 
         const submissions = await formsRes.json() as Array<{
           created_at: string;
@@ -248,7 +252,7 @@ const tools: Tool[] = [
         }>;
 
         if (submissions.length === 0) {
-          return { success: true, data: "No form submissions found on the Wavelength site." };
+          return { toolCallId: "", success: true, data: "No form submissions found on the Wavelength site." };
         }
 
         // Show last 5
@@ -260,11 +264,12 @@ const tools: Tool[] = [
         });
 
         return {
+          toolCallId: "",
           success: true,
           data: `${submissions.length} total submission${submissions.length !== 1 ? "s" : ""} from Wavelength site. Recent: ${recent.join("; ")}`,
         };
       } catch (e) {
-        return { success: false, error: `Netlify check failed: ${(e as Error).message}` };
+        return { toolCallId: "", success: false, error: `Netlify check failed: ${(e as Error).message}` };
       }
     },
   },

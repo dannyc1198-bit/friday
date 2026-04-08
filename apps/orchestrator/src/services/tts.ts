@@ -1,7 +1,7 @@
 /**
  * Text-to-Speech Service — ElevenLabs Integration
  *
- * Voice: Daniel (onwK4e9ZLuTAKqWW03F9) — British, calm
+ * Voice: Rachel (21m00Tcm4TlvDq8ikWAM) — Female, calm, professional (FRIDAY)
  * Model: eleven_v3
  * Fallback: returns null → frontend uses browser speechSynthesis
  */
@@ -9,7 +9,7 @@
 import { config } from "../config/index.js";
 
 // ElevenLabs configuration
-const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "onwK4e9ZLuTAKqWW03F9";
+const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
 const MODEL_ID = "eleven_v3";
 const API_BASE = "https://api.elevenlabs.io/v1";
 const TTS_TIMEOUT = 15_000; // 15 seconds max per build spec

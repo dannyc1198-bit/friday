@@ -25,7 +25,7 @@ interface InputBarProps {
 
 // ─── Sub-components ─────────────────────────────────────────
 
-/** Animated waveform bars shown when JARVIS is speaking */
+/** Animated waveform bars shown when FRIDAY is speaking */
 function SpeakingWaveform() {
   return (
     <div className="flex items-center gap-0.5 h-5">

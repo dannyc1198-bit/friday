@@ -1,11 +1,11 @@
 """
-JARVIS Unified Sidecar — Eyes + Ears + Kitchen Nagger
+FRIDAY Unified Sidecar — Eyes + Ears + Kitchen Nagger
 =====================================================
-Single Python process replacing Desktop JARVIS + Kitchen Nagger.
+Single Python process replacing Desktop FRIDAY + Kitchen Nagger.
 
 Runs:
   - Camera capture (persistent, thread-safe)
-  - Wake word "Hey JARVIS" + voice conversation
+  - Wake word "Hey FRIDAY" + voice conversation
   - Kitchen nagger with escalating tone
   - Security monitoring with cooldown
   - Person greeting ("Hello boss")
@@ -225,13 +225,13 @@ async def lifespan(app: FastAPI):
     camera.stop()
     voice.stop()
 
-app = FastAPI(title="JARVIS Sidecar", lifespan=lifespan)
+app = FastAPI(title="FRIDAY Sidecar", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "service": "JARVIS-sidecar", "timestamp": datetime.now().isoformat()}
+    return {"ok": True, "service": "FRIDAY-sidecar", "timestamp": datetime.now().isoformat()}
 
 
 @app.get("/api/frame")
@@ -287,7 +287,7 @@ async def camera_toggle(request_data: dict = {}):
 
 @app.post("/api/notify")
 async def notify_endpoint(request_data: dict):
-    title = request_data.get("title", "JARVIS")
+    title = request_data.get("title", "FRIDAY")
     message = request_data.get("message", "")
     level = request_data.get("level", "info")
     if message:
@@ -321,7 +321,7 @@ def glasses_last():
 
 @app.post("/api/glasses/ask")
 async def glasses_ask(request_data: dict):
-    """Ask JARVIS a question about the last glasses photo.
+    """Ask FRIDAY a question about the last glasses photo.
 
     Body: {"question": "What brand is this?"}
     Or:   {"question": "How many calories is this meal?"}
@@ -360,7 +360,7 @@ async def glasses_describe_file(request_data: dict):
 # ─── Main ──────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="JARVIS Unified Sidecar")
+    parser = argparse.ArgumentParser(description="FRIDAY Unified Sidecar")
     parser.add_argument("--camera", type=int, default=0, help="Webcam index")
     parser.add_argument("--rtsp", type=str, help="RTSP stream URL")
     parser.add_argument("--snapshot-url", type=str, help="HTTP snapshot URL")
@@ -376,7 +376,7 @@ def main():
     args = parser.parse_args()
 
     log.info("=" * 60)
-    log.info("JARVIS UNIFIED SIDECAR — Online")
+    log.info("FRIDAY UNIFIED SIDECAR — Online")
     log.info("=" * 60)
 
     # Start camera
@@ -401,7 +401,7 @@ def main():
     # Startup greeting
     if not args.no_voice:
         try:
-            voice.speak("JARVIS sidecar online. All systems operational.")
+            voice.speak("FRIDAY sidecar online. All systems operational.")
         except Exception as e:
             log.warning(f"Startup voice failed: {e}")
 
@@ -417,7 +417,7 @@ def main():
     # Start push-to-talk (Ctrl+Shift)
     if not args.no_ptt and not args.once:
         ptt.start()
-        log.info("Push-to-Talk: Hold Ctrl+Shift to talk to JARVIS")
+        log.info("Push-to-Talk: Hold Ctrl+Shift to talk to FRIDAY")
 
     # Start scan loop in background thread
     scan_thread = threading.Thread(target=scan_loop, args=(args,), daemon=True)

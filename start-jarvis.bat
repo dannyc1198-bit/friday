@@ -1,5 +1,5 @@
 @echo off
-title JARVIS - Starting...
+title FRIDAY - Starting...
 
 :: Start orchestrator in background (minimized)
 start "" /MIN cmd /c "cd /d C:\Users\12368\jarvis\apps\orchestrator && npm run dev"

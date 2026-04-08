@@ -29,7 +29,7 @@ export function CameraFeed({ frameUrl, connected, analysis }: CameraFeedProps) {
         {connected && frameUrl && !imgError ? (
           <img
             src={frameUrl}
-            alt="JARVIS Camera"
+            alt="FRIDAY Camera"
             className="w-full h-full object-cover"
             onError={() => setImgError(true)}
             onLoad={() => setImgError(false)}

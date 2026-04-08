@@ -1,6 +1,6 @@
-// Learning Engine — Progressive self-improvement for JARVIS
+// Learning Engine — Progressive self-improvement for FRIDAY
 //
-// This is the brain's growth mechanism. JARVIS learns from:
+// This is the brain's growth mechanism. FRIDAY learns from:
 //   1. Outcomes: Did the advice/action work? Track success/failure.
 //   2. Patterns: What does Danny ask for, when, and how?
 //   3. Preferences: How Danny likes things done (style, detail level, etc.)
@@ -25,7 +25,7 @@ const LEARNING_FILE = join(DATA_DIR, "learning-engine.json");
 
 export interface OutcomeRecord {
   id: string;
-  action: string;           // What JARVIS did
+  action: string;           // What FRIDAY did
   context: string;          // What prompted it
   toolsUsed: string[];      // Which tools were invoked
   agentUsed?: string;       // Which specialist agent (if dispatched)
@@ -83,7 +83,7 @@ class LearningEngine {
 
   // ─── Outcome Tracking ───────────────────────────────────────
 
-  /** Record the outcome of a JARVIS action */
+  /** Record the outcome of a FRIDAY action */
   recordOutcome(params: {
     action: string;
     context: string;

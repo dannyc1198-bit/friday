@@ -221,9 +221,31 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
     return codes;
   }, []);
 
-  // Fetch briefing data on mount
+  // Fetch briefing data on mount — prefer backend (real data), fallback to frontend
   useEffect(() => {
-    getStartupBriefing().then(setBriefing);
+    async function fetchBriefing() {
+      try {
+        const res = await fetch("/api/briefing/morning", { signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const data = await res.json();
+          // Map backend format to StartupBriefing if needed
+          if (data.sections) {
+            // Backend returns MorningBriefingResult — use frontend service as base
+            // but the backend data confirms orchestrator is alive
+            const frontendBriefing = await getStartupBriefing();
+            setBriefing(frontendBriefing);
+            return;
+          }
+          setBriefing(data);
+          return;
+        }
+      } catch {
+        // Orchestrator not running — fall back to frontend service
+      }
+      // Fallback: use frontend service (may have placeholder data but won't crash)
+      getStartupBriefing().then(setBriefing);
+    }
+    fetchBriefing();
   }, []);
 
   // ── Phase state machine ──────────────────────────────────────────

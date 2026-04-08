@@ -1,7 +1,7 @@
 // Agent Dispatch Router — Routes tasks to specialist OpenClaw agents
 //
-// JARVIS is the commander. OpenClaw agents are the specialists.
-// When JARVIS detects a task that needs a specialist, it dispatches
+// FRIDAY is the commander. OpenClaw agents are the specialists.
+// When FRIDAY detects a task that needs a specialist, it dispatches
 // to the right agent and monitors progress.
 //
 // Agent roster:
@@ -12,7 +12,7 @@
 //   CLAWDY  → General assistant, phone handling, customer service
 //
 // Dispatch flow:
-//   User message → JARVIS intent classification → Agent routing
+//   User message → FRIDAY intent classification → Agent routing
 //   → OpenClaw API call → Status monitoring → Result relay to user
 
 import { callOpenClaw, isOpenClawAvailable } from "./openclaw-bridge.js";
@@ -49,7 +49,7 @@ const AGENTS: AgentProfile[] = [
       "customer", "cold email", "warm lead", "close", "chadwick",
       "plumber", "plumbing", "trades", "contractor",
     ],
-    autonomyLevel: "supervised",  // Can draft, but JARVIS confirms before sending
+    autonomyLevel: "supervised",  // Can draft, but FRIDAY confirms before sending
     maxConcurrentTasks: 3,
   },
   {
@@ -213,7 +213,7 @@ export async function dispatchToAgent(
       context: {
         ...context,
         autonomyLevel: agent.autonomyLevel,
-        dispatchedBy: "JARVIS",
+        dispatchedBy: "FRIDAY",
       },
     });
 
