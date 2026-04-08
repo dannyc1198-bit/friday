@@ -247,6 +247,7 @@ const obsidianListTool: Tool = {
   execute: async (params): Promise<ToolResult> => {
     const folder = ((params.folder as string) || "").trim().replace(/^\/+/, "");
     const target = folder ? path.join(VAULT_PATH, folder) : VAULT_PATH;
+    assertInsideVault(target);
 
     try {
       const entries = await fs.readdir(target, { withFileTypes: true });
