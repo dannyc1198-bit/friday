@@ -74,6 +74,79 @@ textarea {
   resize: none;
 }
 
+/* ─── HUD Window Styles ──────────────────────────────────── */
+
+.hud-window {
+  position: relative;
+  background: linear-gradient(135deg, rgba(6, 30, 40, 0.85) 0%, rgba(8, 15, 25, 0.95) 100%);
+  border: 1px solid rgba(0, 229, 255, 0.12);
+  border-radius: 4px;
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+
+.hud-window:hover {
+  border-color: rgba(0, 229, 255, 0.25);
+}
+
+/* Grid background for HUD */
+.hud-grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 229, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Scanline overlay */
+.hud-scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 229, 255, 0.015) 2px,
+    rgba(0, 229, 255, 0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Glowing border animation */
+@keyframes hud-border-pulse {
+  0%, 100% { border-color: rgba(0, 229, 255, 0.12); }
+  50% { border-color: rgba(0, 229, 255, 0.25); }
+}
+
+/* Data stream animation */
+@keyframes hud-data-flow {
+  0% { transform: translateY(0); opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { transform: translateY(-100%); opacity: 0; }
+}
+
+/* Corner bracket decorations for main HUD */
+.hud-corner-tl::before,
+.hud-corner-tr::before,
+.hud-corner-bl::before,
+.hud-corner-br::before {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: rgba(0, 229, 255, 0.3);
+  border-style: solid;
+  border-width: 0;
+  z-index: 10;
+}
+
+.hud-corner-tl::before { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+.hud-corner-tr::before { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
+.hud-corner-bl::before { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
+.hud-corner-br::before { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
+
 /* Animation for typing indicator */
 @keyframes bounce-dot {
   0%, 80%, 100% {

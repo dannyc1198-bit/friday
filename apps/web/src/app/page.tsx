@@ -11,6 +11,7 @@ import { CameraFeed } from "@/components/CameraFeed";
 import { KitchenStatus } from "@/components/KitchenStatus";
 import { AgentDashboard } from "@/components/AgentDashboard";
 import { SystemOverview } from "@/components/SystemOverview";
+import { CryptoPanel, SystemPanel, AgentPanel, BusinessPanel, AlertsPanel } from "@/components/hud";
 import { FridayOrb } from "@/components/JarvisOrb";
 import { useChat } from "@/hooks/useChat";
 import { useVoice } from "@/hooks/useVoice";
@@ -387,7 +388,7 @@ export default function Home() {
         onClose={() => setShowControlPanel(false)}
       />
 
-      <div className={`flex h-screen bg-background transition-opacity duration-500 ${!isAwake ? "opacity-0" : "opacity-100"}`}>
+      <div className={`flex h-screen bg-background hud-grid-bg hud-scanlines transition-opacity duration-500 ${!isAwake ? "opacity-0" : "opacity-100"}`}>
         {/* Executing banner */}
         {isLoading && (
           <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-3 py-2 bg-orange-500/90 text-black font-mono text-sm font-bold animate-pulse">
@@ -411,10 +412,13 @@ export default function Home() {
 
         {/* Center — Chat */}
         <div className="flex-1 flex flex-col h-full min-w-0">
-          <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background">
-            <h1 className="text-sm font-semibold text-text-primary truncate">
-              {activeConversation?.title || "New Conversation"}
-            </h1>
+          <header className="flex items-center justify-between px-4 py-2 border-b border-cyan-900/30 bg-[#060e14]/80 backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <h1 className="text-xs font-mono uppercase tracking-widest text-cyan-300/80 truncate">
+                {activeConversation?.title || "F.R.I.D.A.Y. — Active Session"}
+              </h1>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowRightPanel((prev) => !prev)}
@@ -461,38 +465,29 @@ export default function Home() {
           <InputBar onSend={handleSendMessage} disabled={isLoading} voice={voice} />
         </div>
 
-        {/* Right Sidebar — HUD Dashboard */}
+        {/* Right Sidebar — FRIDAY HUD Dashboard */}
         {showRightPanel && (
-          <div className="w-80 border-l border-gray-800 bg-gray-950 overflow-y-auto flex flex-col gap-3 p-3">
-            {/* Camera Feed */}
+          <div className="w-80 border-l border-cyan-900/30 bg-[#060e14]/90 overflow-y-auto flex flex-col gap-2 p-2">
+            {/* Market data with sparkline charts */}
+            <CryptoPanel />
+
+            {/* Business intelligence */}
+            <BusinessPanel />
+
+            {/* System vitals with progress bars */}
+            <SystemPanel />
+
+            {/* Agent roster with dispatch */}
+            <AgentPanel />
+
+            {/* Activity feed */}
+            <AlertsPanel />
+
+            {/* Camera + Kitchen (existing, below new panels) */}
             <CameraFeed
               frameUrl={sidecar.frameUrl}
               connected={sidecar.connected}
               analysis={sidecar.status?.last_analysis as Record<string, unknown>}
-            />
-
-            {/* Kitchen Nagger Status */}
-            <KitchenStatus
-              messLevel={sidecar.status?.mess_level ?? 0}
-              consecutiveNags={sidecar.status?.consecutive_nags ?? 0}
-              totalNagsToday={sidecar.status?.total_nags_today ?? 0}
-              totalCleanupsToday={sidecar.status?.total_cleanups_today ?? 0}
-              dailyEvents={sidecar.status?.daily_events ?? []}
-            />
-
-            {/* Agent Dashboard */}
-            <AgentDashboard
-              agents={agents}
-              tasks={tasks}
-              loading={agentLoading}
-              onDispatch={dispatchTask}
-            />
-
-            {/* System Overview */}
-            <SystemOverview
-              orchestratorStatus={status}
-              sidecarConnected={sidecar.connected}
-              voiceMode={sidecar.status?.voice_mode ?? "off"}
             />
           </div>
         )}
