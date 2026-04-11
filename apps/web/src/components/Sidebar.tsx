@@ -2,7 +2,6 @@
 
 import { Conversation } from "@/types";
 import { ConversationItem } from "./ConversationItem";
-import { APP_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
@@ -19,58 +18,56 @@ export function Sidebar({
   onNewChat,
 }: SidebarProps) {
   return (
-    <div className="w-72 h-full bg-JARVIS-sidebar border-r border-JARVIS-border flex flex-col">
-      {/* Header */}
-      <div className="p-4 border-b border-JARVIS-border">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-JARVIS-accent to-blue-700 flex items-center justify-center">
-            <svg
-              className="w-5 h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-              />
-            </svg>
+    <div className="w-64 h-full bg-[#060e1a] border-r border-[rgba(0,180,255,0.06)] flex flex-col">
+      {/* Header — Stark Industries style */}
+      <div className="p-4 border-b border-[rgba(0,180,255,0.06)]">
+        <div className="flex items-center gap-3 mb-5">
+          {/* Logo mark */}
+          <div className="relative w-9 h-9">
+            <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#00b4ff]/20 to-[#00dcff]/5 border border-[#00b4ff]/15" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-3.5 h-3.5 rounded-full border-2 border-[#00dcff]/60 flex items-center justify-center">
+                <div className="w-1 h-1 rounded-full bg-[#00dcff] shadow-[0_0_6px_rgba(0,220,255,0.6)]" />
+              </div>
+            </div>
           </div>
-          <span className="text-lg font-semibold text-JARVIS-text">
-            {APP_NAME}
-          </span>
+          <div>
+            <h1 className="text-sm font-display font-bold tracking-[0.15em] text-[#e0f0ff] uppercase">
+              F.R.I.D.A.Y.
+            </h1>
+            <p className="text-[8px] font-mono tracking-[0.25em] text-[#5a8aaa] uppercase">
+              Command Terminal
+            </p>
+          </div>
         </div>
 
         {/* New Chat Button */}
         <button
           onClick={onNewChat}
           className={cn(
-            "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg",
-            "bg-JARVIS-accent hover:bg-JARVIS-accent-hover",
-            "text-white font-medium text-sm transition-colors"
+            "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md",
+            "bg-[#00b4ff]/10 border border-[#00b4ff]/20",
+            "text-[#00dcff] font-mono text-[11px] tracking-[0.15em] uppercase",
+            "hover:bg-[#00b4ff]/20 hover:border-[#00b4ff]/35 hover:shadow-glow-sm",
+            "active:scale-[0.98] transition-all duration-300"
           )}
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
           </svg>
-          New Chat
+          New Session
         </button>
       </div>
 
+      {/* Session history label */}
+      <div className="px-4 py-2.5">
+        <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-[#1e3a50]">
+          Session History
+        </span>
+      </div>
+
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5 scrollbar-thin">
         {conversations.map((conversation) => (
           <ConversationItem
             key={conversation.id}
@@ -79,6 +76,16 @@ export function Sidebar({
             onClick={() => onSelectConversation(conversation.id)}
           />
         ))}
+      </div>
+
+      {/* Bottom status */}
+      <div className="px-4 py-3 border-t border-[rgba(0,180,255,0.04)]">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#66ffb2] status-dot-glow" style={{ color: '#66ffb2' }} />
+          <span className="text-[8px] font-mono uppercase tracking-[0.2em] text-[#5a8aaa]">
+            Systems Nominal
+          </span>
+        </div>
       </div>
     </div>
   );

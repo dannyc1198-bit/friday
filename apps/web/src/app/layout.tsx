@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { APP_NAME } from "@/lib/constants";
 
 export const metadata: Metadata = {
-  title: `${APP_NAME} - Personal AI Assistant`,
-  description: "Your intelligent personal assistant powered by AI",
+  title: "F.R.I.D.A.Y. — Command Terminal",
+  description: "Female Replacement Intelligent Digital Assistant Youth",
 };
 
 export default function RootLayout({
@@ -14,7 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="antialiased">{children}</body>
+      <body className="font-body antialiased">{children}</body>
     </html>
   );
 }

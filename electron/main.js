@@ -3,12 +3,23 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 
+// Fix GPU cache errors on Windows
+app.setPath('userData', path.join(require('os').homedir(), '.friday-electron'));
+
 let mainWindow;
 let orchestratorProcess;
 let webProcess;
+let servicesStartedByUs = false;
 
 const WEB_URL = process.env.FRIDAY_WEB_PORT ? `http://localhost:${process.env.FRIDAY_WEB_PORT}` : 'http://localhost:3000';
 const ORCHESTRATOR_URL = 'http://localhost:3001';
+
+// Check if a service is already running
+function isServiceRunning(url) {
+  return new Promise((resolve) => {
+    http.get(url, () => resolve(true)).on('error', () => resolve(false));
+  });
+}
 
 // ── Service management ──────────────────────────────────────────────
 
@@ -95,23 +106,41 @@ async function createWindow() {
     }
   });
 
-  // Start services
-  const orchestratorDir = path.join(__dirname, '..', 'apps', 'orchestrator');
-  const webDir = path.join(__dirname, '..', 'apps', 'web');
-
-  orchestratorProcess = startService('orchestrator', orchestratorDir, 'npm', ['run', 'dev']);
-  webProcess = startService('web', webDir, 'npm', ['run', 'dev']);
-
-  // Show "CONNECTING..." while waiting
+  // Show boot screen immediately
   mainWindow.loadURL(`data:text/html,
     <html>
-      <body style="background:#000;color:#00d4ff;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:monospace;font-size:24px;letter-spacing:8px;">
-        CONNECTING...
+      <body style="background:#020a14;color:#00b4ff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:'Segoe UI',monospace;">
+        <div style="width:60px;height:60px;border:2px solid rgba(0,180,255,0.2);border-top-color:#00dcff;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:30px;"></div>
+        <div style="font-size:14px;letter-spacing:6px;font-weight:300;opacity:0.6;">INITIALIZING F.R.I.D.A.Y.</div>
+        <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
       </body>
     </html>
   `);
 
-  // Wait for orchestrator then web app
+  // Smart service detection — only start if not already running
+  const orchestratorDir = path.join(__dirname, '..', 'apps', 'orchestrator');
+  const webDir = path.join(__dirname, '..', 'apps', 'web');
+
+  const orchAlready = await isServiceRunning(ORCHESTRATOR_URL);
+  const webAlready = await isServiceRunning(WEB_URL);
+
+  if (!orchAlready) {
+    console.log('[FRIDAY] Starting orchestrator...');
+    orchestratorProcess = startService('orchestrator', orchestratorDir, 'npm', ['run', 'dev']);
+  } else {
+    console.log('[FRIDAY] Orchestrator already running on 3001');
+  }
+
+  if (!webAlready) {
+    console.log('[FRIDAY] Starting web...');
+    webProcess = startService('web', webDir, 'npm', ['run', 'dev']);
+  } else {
+    console.log('[FRIDAY] Web already running on 3000');
+  }
+
+  servicesStartedByUs = !orchAlready || !webAlready;
+
+  // Wait for both services to be ready
   try {
     await waitForService(ORCHESTRATOR_URL, 30, 1000);
     console.log('[FRIDAY] Orchestrator ready');
@@ -163,11 +192,11 @@ app.whenReady().then(async () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
-  killChildren();
+  if (servicesStartedByUs) killChildren();
 });
 
 app.on('window-all-closed', () => {
-  killChildren();
+  if (servicesStartedByUs) killChildren();
   if (process.platform !== 'darwin') app.quit();
 });
 

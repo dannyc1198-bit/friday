@@ -1,10 +1,6 @@
 "use client";
 
 import { ReactNode } from "react";
-import {
-  Activity, Cpu, TrendingUp, Shield, Users, Zap,
-  Wifi, WifiOff, AlertTriangle, CheckCircle2
-} from "lucide-react";
 
 interface DataWindowProps {
   title: string;
@@ -15,11 +11,11 @@ interface DataWindowProps {
   compact?: boolean;
 }
 
-const statusColors = {
-  online: "bg-emerald-500",
-  offline: "bg-red-500",
-  warning: "bg-amber-500",
-  loading: "bg-cyan-400 animate-pulse",
+const statusConfig = {
+  online: { color: "#66ffb2", label: "LIVE" },
+  offline: { color: "#ff5252", label: "OFF" },
+  warning: { color: "#ffa726", label: "WARN" },
+  loading: { color: "#00dcff", label: "SYNC" },
 };
 
 export function DataWindow({
@@ -30,35 +26,39 @@ export function DataWindow({
   className = "",
   compact = false,
 }: DataWindowProps) {
+  const { color, label } = statusConfig[status];
+
   return (
-    <div className={`hud-window group ${className}`}>
-      {/* Top border glow */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/60 to-transparent" />
+    <div className={`hud-window hud-brackets group ${className}`}>
+      {/* Top edge glow */}
+      <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-[#00b4ff]/30 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
 
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-cyan-900/30">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[rgba(0,180,255,0.05)]">
         <div className="flex items-center gap-2">
-          <span className="text-cyan-400/70 w-4 h-4">{icon}</span>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-cyan-300/80">
+          <span className="text-[#00dcff]/50 [&>svg]:w-3.5 [&>svg]:h-3.5">{icon}</span>
+          <span className="text-[9px] font-display font-semibold uppercase tracking-[0.2em] text-[#5a8aaa] group-hover:text-[#e0f0ff] transition-colors duration-300">
             {title}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full ${statusColors[status]}`} />
-          <span className="text-[9px] font-mono text-cyan-600 uppercase">{status}</span>
+          <div
+            className="w-1.5 h-1.5 rounded-full"
+            style={{
+              backgroundColor: color,
+              boxShadow: `0 0 4px ${color}, 0 0 8px ${color}40`,
+            }}
+          />
+          <span className="text-[8px] font-mono tracking-[0.15em]" style={{ color: `${color}80` }}>
+            {label}
+          </span>
         </div>
       </div>
 
       {/* Content */}
-      <div className={`${compact ? "p-2" : "p-3"} text-sm`}>
+      <div className={`${compact ? "p-2.5" : "p-3"} text-sm`}>
         {children}
       </div>
-
-      {/* Corner brackets */}
-      <div className="absolute top-0 left-0 w-3 h-3 border-t border-l border-cyan-500/40" />
-      <div className="absolute top-0 right-0 w-3 h-3 border-t border-r border-cyan-500/40" />
-      <div className="absolute bottom-0 left-0 w-3 h-3 border-b border-l border-cyan-500/40" />
-      <div className="absolute bottom-0 right-0 w-3 h-3 border-b border-r border-cyan-500/40" />
     </div>
   );
 }
@@ -76,18 +76,18 @@ interface StatProps {
 export function Stat({ label, value, change, unit, small }: StatProps) {
   return (
     <div className={small ? "flex items-center justify-between" : ""}>
-      <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-600">
+      <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-[#5a8aaa]">
         {label}
       </span>
       <div className="flex items-baseline gap-1">
-        <span className={`font-mono font-bold ${small ? "text-sm" : "text-lg"} text-cyan-100`}>
+        <span className={`font-mono font-bold ${small ? "text-sm" : "text-lg"} text-[#e0f0ff]`}>
           {value}
         </span>
-        {unit && <span className="text-[10px] text-cyan-600">{unit}</span>}
+        {unit && <span className="text-[9px] text-[#5a8aaa]">{unit}</span>}
         {change !== undefined && (
           <span
-            className={`text-[10px] font-mono ${
-              change >= 0 ? "text-emerald-400" : "text-red-400"
+            className={`text-[9px] font-mono ${
+              change >= 0 ? "text-[#66ffb2]" : "text-[#ff5252]"
             }`}
           >
             {change >= 0 ? "+" : ""}
@@ -111,25 +111,31 @@ interface ProgressBarProps {
 export function ProgressBar({ value, max, label, color = "cyan" }: ProgressBarProps) {
   const pct = Math.min(100, (value / max) * 100);
   const colorMap: Record<string, string> = {
-    cyan: "bg-cyan-400",
-    green: "bg-emerald-400",
-    red: "bg-red-400",
-    amber: "bg-amber-400",
-    purple: "bg-purple-400",
-    blue: "bg-blue-400",
+    cyan: "#00dcff",
+    green: "#66ffb2",
+    red: "#ff5252",
+    amber: "#ffa726",
+    purple: "#a855f7",
+    blue: "#00b4ff",
   };
+  const c = colorMap[color] || colorMap.cyan;
+
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       {label && (
-        <div className="flex justify-between text-[9px] font-mono">
-          <span className="text-cyan-600 uppercase">{label}</span>
-          <span className="text-cyan-400">{pct.toFixed(0)}%</span>
+        <div className="flex justify-between text-[8px] font-mono">
+          <span className="text-[#5a8aaa] uppercase tracking-[0.1em]">{label}</span>
+          <span style={{ color: c }}>{pct.toFixed(0)}%</span>
         </div>
       )}
-      <div className="h-1 bg-cyan-950/50 rounded-full overflow-hidden">
+      <div className="h-[3px] bg-[#0a1a2e] rounded-full overflow-hidden">
         <div
-          className={`h-full rounded-full ${colorMap[color] || colorMap.cyan} transition-all duration-700`}
-          style={{ width: `${pct}%` }}
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${pct}%`,
+            backgroundColor: c,
+            boxShadow: `0 0 8px ${c}40`,
+          }}
         />
       </div>
     </div>

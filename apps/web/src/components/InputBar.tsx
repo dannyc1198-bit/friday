@@ -23,19 +23,20 @@ interface InputBarProps {
   voice?: VoiceState;
 }
 
-// ─── Sub-components ─────────────────────────────────────────
+// ─── Waveform ───────────────────────────────────────────────
 
-/** Animated waveform bars shown when FRIDAY is speaking */
 function SpeakingWaveform() {
   return (
-    <div className="flex items-center gap-0.5 h-5">
-      {[0, 1, 2, 3, 4].map((i) => (
+    <div className="flex items-center gap-[3px] h-5">
+      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
         <div
           key={i}
-          className="w-0.5 bg-JARVIS-accent rounded-full animate-waveform-bar"
+          className="w-[2px] rounded-full animate-waveform-bar"
           style={{
-            animationDelay: `${i * 0.15}s`,
-            minHeight: "4px",
+            animationDelay: `${i * 0.1}s`,
+            minHeight: "3px",
+            background: "linear-gradient(180deg, #00dcff, #00b4ff)",
+            boxShadow: "0 0 4px rgba(0, 220, 255, 0.4)",
           }}
         />
       ))}
@@ -76,7 +77,6 @@ export function InputBar({ onSend, disabled = false, voice }: InputBarProps) {
 
   const hasInput = input.trim().length > 0;
 
-  // Determine voice status text
   const voiceStatusText = voice?.isListening
     ? "Listening..."
     : voice?.isTranscribing
@@ -86,23 +86,23 @@ export function InputBar({ onSend, disabled = false, voice }: InputBarProps) {
     : null;
 
   return (
-    <div className="border-t border-JARVIS-border bg-JARVIS-bg">
-      {/* Voice Status Overlay */}
+    <div className="border-t border-[rgba(0,180,255,0.06)] bg-[#020a14]/95 backdrop-blur-xl">
+      {/* Voice Status */}
       {voiceStatusText && (
-        <div className="flex items-center justify-center gap-2 py-2 px-4">
+        <div className="flex items-center justify-center gap-3 py-2.5 px-4">
           {voice?.isListening && (
-            <div className="w-2 h-2 rounded-full bg-blue-500 animate-recording-pulse" />
+            <div className="w-2 h-2 rounded-full bg-[#00b4ff] animate-recording-pulse" />
           )}
           {voice?.isTranscribing && (
-            <div className="w-2 h-2 rounded-full bg-yellow-400 animate-transcribe-shimmer" />
+            <div className="w-2 h-2 rounded-full bg-[#ffa726] animate-transcribe-shimmer" />
           )}
           {voice?.isSpeaking && <SpeakingWaveform />}
           <span
             className={cn(
-              "text-xs font-medium uppercase tracking-wide",
-              voice?.isListening && "text-blue-400",
-              voice?.isTranscribing && "text-yellow-400 animate-transcribe-shimmer",
-              voice?.isSpeaking && "text-JARVIS-accent"
+              "text-[10px] font-mono uppercase tracking-[0.2em]",
+              voice?.isListening && "text-[#00b4ff]",
+              voice?.isTranscribing && "text-[#ffa726] animate-transcribe-shimmer",
+              voice?.isSpeaking && "text-[#00dcff]"
             )}
           >
             {voiceStatusText}
@@ -110,7 +110,8 @@ export function InputBar({ onSend, disabled = false, voice }: InputBarProps) {
         </div>
       )}
 
-      <div className="flex items-end gap-3 p-4">
+      <div className="flex items-end gap-2.5 p-4">
+        {/* Input field */}
         <div className="flex-1 relative">
           <textarea
             value={input}
@@ -119,97 +120,64 @@ export function InputBar({ onSend, disabled = false, voice }: InputBarProps) {
             placeholder={
               voice?.isListening
                 ? "Listening... release backtick to send"
-                : "Type a message... (hold ` to talk)"
+                : "Command FRIDAY... (hold ` to talk)"
             }
             disabled={disabled || voice?.isListening}
             rows={1}
             className={cn(
-              "w-full px-4 py-3 rounded-xl resize-none",
-              "bg-JARVIS-card border border-JARVIS-border",
-              "text-JARVIS-text placeholder-JARVIS-muted",
-              "focus:outline-none focus:border-JARVIS-accent focus:ring-1 focus:ring-JARVIS-accent",
-              "disabled:opacity-50 disabled:cursor-not-allowed",
+              "w-full px-4 py-3 rounded-lg frost-input",
+              "text-[13px] font-light text-[#e0f0ff] placeholder-[#1e3a50]",
+              "focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed",
               "max-h-32 scrollbar-thin",
-              voice?.isListening && "border-blue-500/50 ring-1 ring-blue-500/30"
+              voice?.isListening && "border-[#00b4ff]/30 shadow-[0_0_20px_rgba(0,180,255,0.1)]"
             )}
             style={{ minHeight: "48px" }}
           />
         </div>
 
-        {/* Mute/Unmute Button */}
+        {/* Mute Button */}
         {voice && (
           <button
             type="button"
             onClick={voice.toggleMute}
-            title={voice.isMuted ? "Unmute voice (M)" : "Mute voice (M)"}
+            title={voice.isMuted ? "Unmute (M)" : "Mute (M)"}
             className={cn(
-              "p-3 rounded-xl transition-colors",
+              "p-3 rounded-lg transition-all duration-300",
               voice.isMuted
-                ? "bg-blue-500/20 border border-blue-500/30 text-blue-400 hover:bg-blue-500/30"
-                : "bg-JARVIS-card border border-JARVIS-border text-JARVIS-muted hover:text-JARVIS-text hover:border-JARVIS-accent/50"
+                ? "bg-[#00b4ff]/15 border border-[#00b4ff]/25 text-[#00dcff]"
+                : "bg-[#071422] border border-[rgba(0,180,255,0.08)] text-[#5a8aaa] hover:text-[#e0f0ff] hover:border-[rgba(0,180,255,0.2)]"
             )}
           >
             {voice.isMuted ? (
-              /* Speaker X (muted) */
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-                />
+              <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
               </svg>
             ) : (
-              /* Speaker on */
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                />
+              <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
               </svg>
             )}
           </button>
         )}
 
-        {/* Mic Button — now functional */}
+        {/* Mic Button */}
         <button
           type="button"
           onClick={handleMicClick}
           disabled={!voice}
-          title={
-            voice?.isListening
-              ? "Release to stop recording"
-              : "Click to start recording (or hold `)"
-          }
+          title={voice?.isListening ? "Stop recording" : "Start recording (hold `)"}
           className={cn(
-            "p-3 rounded-xl transition-colors",
+            "p-3 rounded-lg transition-all duration-300",
             voice?.isListening
-              ? "bg-blue-500 text-white animate-recording-pulse"
+              ? "bg-[#00b4ff] text-black shadow-glow-accent animate-recording-pulse"
               : voice
-              ? "bg-JARVIS-card border border-JARVIS-border text-JARVIS-muted hover:text-JARVIS-text hover:border-JARVIS-accent/50"
-              : "bg-JARVIS-card border border-JARVIS-border text-JARVIS-muted opacity-50 cursor-not-allowed"
+              ? "bg-[#071422] border border-[rgba(0,180,255,0.08)] text-[#5a8aaa] hover:text-[#e0f0ff] hover:border-[rgba(0,180,255,0.2)] hover:shadow-glow-sm"
+              : "bg-[#071422] border border-[rgba(0,180,255,0.04)] text-[#1e3a50] opacity-40 cursor-not-allowed"
           )}
         >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-            />
+          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
         </button>
 
@@ -219,33 +187,23 @@ export function InputBar({ onSend, disabled = false, voice }: InputBarProps) {
           onClick={handleSend}
           disabled={!hasInput || disabled}
           className={cn(
-            "p-3 rounded-xl transition-colors",
+            "p-3 rounded-lg transition-all duration-300",
             hasInput && !disabled
-              ? "bg-JARVIS-accent hover:bg-JARVIS-accent-hover text-white"
-              : "bg-JARVIS-card border border-JARVIS-border text-JARVIS-muted opacity-50 cursor-not-allowed"
+              ? "bg-gradient-to-r from-[#00b4ff] to-[#00dcff] text-black shadow-glow-accent hover:shadow-glow-lg active:scale-95"
+              : "bg-[#071422] border border-[rgba(0,180,255,0.04)] text-[#1e3a50] opacity-30 cursor-not-allowed"
           )}
         >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-            />
+          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
           </svg>
         </button>
       </div>
 
-      {/* TTS Status Badge */}
+      {/* TTS fallback badge */}
       {voice && voice.ttsAvailable === false && (
         <div className="flex justify-center pb-2">
-          <span className="text-[10px] text-yellow-500/60 uppercase tracking-wider">
-            TTS offline — using browser voice
+          <span className="text-[8px] font-mono text-[#ffa726]/40 uppercase tracking-[0.2em]">
+            TTS offline — browser voice active
           </span>
         </div>
       )}

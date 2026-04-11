@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { DataWindow } from "./hud/DataWindow";
+import { Camera, User, AlertTriangle } from "lucide-react";
 
 interface CameraFeedProps {
   frameUrl: string;
@@ -14,51 +16,96 @@ export function CameraFeed({ frameUrl, connected, analysis }: CameraFeedProps) {
   const messLevel = (analysis?.mess_level as number) || 0;
   const person = analysis?.person_detected as boolean;
   const observation = analysis?.general_observation as string;
+  const securityConcern = analysis?.security_concern as string;
+
+  const messColor = messLevel >= 7 ? "#ff5252" : messLevel >= 4 ? "#ffa726" : "#66ffb2";
 
   return (
-    <div className="bg-gray-900/50 rounded-lg border border-gray-700/50 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700/50">
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-red-400"}`} />
-          <span className="text-xs font-mono text-gray-400 uppercase tracking-wider">Camera Feed</span>
-        </div>
-        {person && <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">Person Detected</span>}
-      </div>
-
-      <div className="relative aspect-video bg-black">
+    <DataWindow
+      title="Vision Feed"
+      icon={<Camera className="w-4 h-4" />}
+      status={connected ? "online" : "offline"}
+      compact
+    >
+      {/* Camera viewport */}
+      <div className="relative aspect-video rounded overflow-hidden bg-[#020a14] border border-[rgba(0,180,255,0.06)]">
         {connected && frameUrl && !imgError ? (
           <img
             src={frameUrl}
-            alt="FRIDAY Camera"
+            alt="FRIDAY Vision"
             className="w-full h-full object-cover"
             onError={() => setImgError(true)}
             onLoad={() => setImgError(false)}
           />
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-500 text-sm font-mono">
-            {connected ? "Waiting for frame..." : "SIDECAR OFFLINE"}
+          <div className="flex flex-col items-center justify-center h-full gap-2">
+            <Camera className="w-6 h-6 text-[#1e3a50]" />
+            <span className="text-[10px] font-mono text-[#1e3a50] uppercase tracking-[0.2em]">
+              {connected ? "Awaiting frame..." : "Sidecar Offline"}
+            </span>
           </div>
         )}
 
-        {/* Overlay: mess level indicator */}
+        {/* Scanline overlay on feed */}
+        <div className="absolute inset-0 pointer-events-none"
+          style={{ background: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,180,255,0.02) 2px, rgba(0,180,255,0.02) 4px)" }}
+        />
+
+        {/* Corner brackets on feed */}
+        <div className="absolute top-1 left-1 w-4 h-4 border-l border-t border-[#00b4ff]/30" />
+        <div className="absolute top-1 right-1 w-4 h-4 border-r border-t border-[#00b4ff]/30" />
+        <div className="absolute bottom-1 left-1 w-4 h-4 border-l border-b border-[#00b4ff]/30" />
+        <div className="absolute bottom-1 right-1 w-4 h-4 border-r border-b border-[#00b4ff]/30" />
+
+        {/* Person detected badge */}
+        {person && (
+          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-[#00b4ff]/20 border border-[#00b4ff]/30 backdrop-blur-sm">
+            <User className="w-3 h-3 text-[#00dcff]" />
+            <span className="text-[8px] font-mono text-[#00dcff] uppercase tracking-wider">Detected</span>
+          </div>
+        )}
+
+        {/* Mess level overlay */}
         {messLevel > 0 && (
           <div className="absolute bottom-2 left-2 flex items-center gap-2">
-            <div className={`px-2 py-1 rounded text-xs font-bold ${
-              messLevel >= 7 ? "bg-red-500/80 text-white" :
-              messLevel >= 4 ? "bg-yellow-500/80 text-black" :
-              "bg-green-500/80 text-white"
-            }`}>
-              MESS: {messLevel}/10
+            <div
+              className="px-2 py-1 rounded text-[9px] font-mono font-bold backdrop-blur-sm border"
+              style={{
+                backgroundColor: `${messColor}15`,
+                borderColor: `${messColor}40`,
+                color: messColor,
+              }}
+            >
+              MESS {messLevel}/10
             </div>
+          </div>
+        )}
+
+        {/* Security concern */}
+        {securityConcern && securityConcern !== "none" && (
+          <div className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-[#ff5252]/15 border border-[#ff5252]/30 backdrop-blur-sm">
+            <AlertTriangle className="w-3 h-3 text-[#ff5252]" />
+            <span className="text-[8px] font-mono text-[#ff5252] uppercase">Alert</span>
+          </div>
+        )}
+
+        {/* REC indicator */}
+        {connected && (
+          <div className="absolute top-2 left-2 flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#ff5252] animate-pulse" />
+            <span className="text-[8px] font-mono text-[#ff5252]/70 uppercase">REC</span>
           </div>
         )}
       </div>
 
+      {/* Observation text */}
       {observation && (
-        <div className="px-3 py-2 text-xs text-gray-400 font-mono truncate">
-          {observation}
+        <div className="mt-2 px-1">
+          <span className="text-[9px] font-mono text-[#5a8aaa] leading-relaxed line-clamp-2">
+            {observation}
+          </span>
         </div>
       )}
-    </div>
+    </DataWindow>
   );
 }

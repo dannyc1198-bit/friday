@@ -42,6 +42,11 @@ Thumbs.db
 .claude-flow/
 .mcp.json
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
 # Temp
 *.tmp
 *.bak

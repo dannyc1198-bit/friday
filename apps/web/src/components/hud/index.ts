@@ -4,3 +4,5 @@ export { SystemPanel } from "./SystemPanel";
 export { AgentPanel } from "./AgentPanel";
 export { BusinessPanel } from "./BusinessPanel";
 export { AlertsPanel } from "./AlertsPanel";
+export { ComputePanel } from "./ComputePanel";
+export { NetworkPanel } from "./NetworkPanel";
