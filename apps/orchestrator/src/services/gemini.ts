@@ -56,10 +56,14 @@ function getGeminiFunctionDeclarations(): FunctionDeclaration[] {
       const properties: Record<string, any> = {};
       if (params.properties) {
         for (const [key, val] of Object.entries(params.properties as Record<string, any>)) {
-          properties[key] = {
+          const mapped: Record<string, any> = {
             type: mapType(val.type || "string"),
             description: val.description || key,
           };
+          if (mapped.type === SchemaType.ARRAY) {
+            mapped.items = val.items ?? { type: SchemaType.STRING };
+          }
+          properties[key] = mapped;
         }
       }
 
@@ -78,10 +82,14 @@ function getGeminiFunctionDeclarations(): FunctionDeclaration[] {
     const paramArray: ToolParameter[] = Array.isArray(params) ? params : [];
     const properties: Record<string, any> = {};
     for (const param of paramArray) {
-      properties[param.name] = {
+      const mapped: Record<string, any> = {
         type: mapType(param.type),
         description: param.description,
       };
+      if (mapped.type === SchemaType.ARRAY) {
+        mapped.items = (param as any).items ?? { type: SchemaType.STRING };
+      }
+      properties[param.name] = mapped;
     }
 
     return {

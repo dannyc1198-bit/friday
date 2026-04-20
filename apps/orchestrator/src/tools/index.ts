@@ -24,6 +24,8 @@ import { registerBusinessIntelTools } from "./business-intel.js";
 import { registerCodeAgentTools } from "./code-agent.js";
 import { registerDanClawTools } from "./danclaw-tools.js";
 import { registerMetaGlassesTools } from "./meta-glasses-tools.js";
+import { registerMusicTools } from "./music-tools.js";
+import { registerQuietModeTools } from "./quiet-mode-tools.js";
 import { toolRegistry } from "./registry.js";
 
 // Initialize all tools
@@ -97,6 +99,12 @@ export function initializeTools(): void {
 
   registerMetaGlassesTools();
   console.log("  ✓ Meta Glasses Vision tools registered (describe, ask, status, file)");
+
+  registerMusicTools();
+  console.log("  ✓ Music tools registered (local library + media keys)");
+
+  registerQuietModeTools();
+  console.log("  ✓ Quiet mode tools registered (DND priority filter)");
 
   const allTools = toolRegistry.getAllTools();
   console.log(`\n📦 Total tools available: ${allTools.length}`);

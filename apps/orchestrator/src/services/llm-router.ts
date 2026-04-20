@@ -4,11 +4,21 @@
 
 import { streamChatCompletion } from "./openai.js";
 import { streamGeminiCompletion } from "./gemini.js";
+import { streamOllamaCompletion } from "./ollama.js";
 import { config } from "../config/index.js";
 import type { Message, StreamChunk } from "../types/index.js";
 
 // ─── Provider Types ──────────────────────────────────────────
-type Provider = "gemini" | "claude";
+type Provider = "ollama" | "gemini" | "claude";
+
+// ─── Trivial patterns — route to local Ollama (T0, free) ─────
+// Only pure conversational filler with zero tool/reasoning needs.
+const TRIVIAL_PATTERNS = [
+  /^(hi|hello|hey|sup|yo|good\s+(morning|afternoon|evening|night))[\s!.?]*$/i,
+  /^(thanks|thank\s+you|cheers|ty|thx|nice|cool|got\s+it|ok|okay|k)[\s!.?]*$/i,
+  /^(how\s+are\s+you|how'?s\s+it\s+going|what'?s\s+up)[\s?!.]*$/i,
+  /^(bye|goodbye|cya|later|talk\s+(to\s+you\s+)?later)[\s!.?]*$/i,
+];
 
 // ─── Tools that require Claude's superior reasoning ──────────
 const COMPLEX_TOOLS = new Set([
@@ -95,6 +105,17 @@ function classifyComplexity(
 
   const userMsg = message.toLowerCase().trim();
 
+  // T0: trivial chatter → local Ollama (free, fast)
+  // Only applies when there's no prior tool use in the conversation.
+  const priorToolUse = messages.some((m) => m.toolCalls && m.toolCalls.length > 0);
+  if (!priorToolUse && userMsg.length < 60) {
+    for (const pattern of TRIVIAL_PATTERNS) {
+      if (pattern.test(userMsg)) {
+        return { provider: "ollama", reason: `trivial pattern: ${pattern.source.slice(0, 40)}` };
+      }
+    }
+  }
+
   // Check if previous conversation rounds used complex tools
   const usedComplexTool = messages.some(
     (m) =>
@@ -153,21 +174,51 @@ export async function* streamChatWithRouting(
   const { provider, reason } = classifyComplexity(messageText, messages);
   console.log(`[LLM Router] Routing to ${provider.toUpperCase()} — ${reason}`);
 
-  if (provider === "gemini") {
+  // Tier ladder: try primary, fall back through cheaper/local tiers.
+  // Retryable errors only — bad-request style errors surface immediately.
+  const claudeTier = { name: "Claude", run: () => streamChatCompletion(messages, signal, systemPromptExtras) };
+  const geminiTier = { name: "Gemini", run: () => streamGeminiCompletion(messages, signal, systemPromptExtras) };
+  const ollamaTier = { name: "Ollama", run: () => streamOllamaCompletion(messages, signal, systemPromptExtras) };
+
+  const ladder: Array<{
+    name: string;
+    run: () => AsyncGenerator<StreamChunk>;
+  }> =
+    provider === "ollama"
+      ? [ollamaTier, geminiTier, claudeTier]
+      : provider === "gemini"
+      ? [geminiTier, claudeTier, ollamaTier]
+      : [claudeTier, geminiTier, ollamaTier];
+
+  let lastError: unknown;
+  for (let i = 0; i < ladder.length; i++) {
+    const tier = ladder[i];
     try {
-      yield* streamGeminiCompletion(messages, signal, systemPromptExtras);
+      yield* tier.run();
       return;
     } catch (error) {
-      // Fallback to Claude on any Gemini failure
-      const errorMsg = error instanceof Error ? error.message : "Unknown Gemini error";
-      console.warn(`[LLM Router] Gemini failed, falling back to Claude: ${errorMsg}`);
-      yield* streamChatCompletion(messages, signal, systemPromptExtras);
-      return;
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      const isLast = i === ladder.length - 1;
+      if (isLast || !isRetryable(msg)) {
+        throw error;
+      }
+      console.warn(`[LLM Router] ${tier.name} failed, falling back to ${ladder[i + 1].name}: ${msg.slice(0, 200)}`);
     }
   }
+  if (lastError) throw lastError;
+}
 
-  // Claude path — direct passthrough
-  yield* streamChatCompletion(messages, signal, systemPromptExtras);
+// ─── Fallback Policy ─────────────────────────────────────────
+// Retryable: transient/provider-outage errors — fall back to next tier.
+// Non-retryable: caller's prompt is the problem — surface immediately.
+function isRetryable(errorMsg: string): boolean {
+  if (/invalid_request_error|authentication_error|permission_denied/i.test(errorMsg)) {
+    return false;
+  }
+  return /credit_balance_too_low|rate_limit|quota|overloaded|429|5\d{2}|ECONNREFUSED|ETIMEDOUT|fetch failed/i.test(
+    errorMsg
+  );
 }
 
 // ─── Router Stats (for debugging) ────────────────────────────

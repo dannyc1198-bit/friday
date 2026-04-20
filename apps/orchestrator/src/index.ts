@@ -18,6 +18,8 @@ import { classifyIntent, requiresToolExecution } from "./services/intent.js";
 import { memoryService } from "./services/memory/index.js";
 import { textToSpeech, isTTSAvailable, stripForTTS } from "./services/tts.js";
 import { receptionistRoutes } from "./routes/receptionist.js";
+import { fridayPhoneRoutes } from "./routes/friday-phone.js";
+import { openaiCompatRoutes } from "./routes/openai-compat.js";
 import type { StreamChunk } from "./types/index.js";
 
 // ─── Unified Brain Systems ──────────────────────────────────────
@@ -68,6 +70,8 @@ app.addHook("onRequest", authMiddleware);
 
 // Virtual Receptionist routes (VAPI webhook + status)
 await app.register(receptionistRoutes, { prefix: "/api/receptionist" });
+await app.register(fridayPhoneRoutes, { prefix: "/api/friday-phone" });
+await app.register(openaiCompatRoutes);
 
 // Initialize tools
 initializeTools();

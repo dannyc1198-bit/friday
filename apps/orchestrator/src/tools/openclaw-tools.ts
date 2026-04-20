@@ -25,7 +25,7 @@ const USER_HOME = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\123
 
 // File access whitelist — JARVIS can only read/write within these dirs
 const ALLOWED_PATHS = [
-  normalize(join(USER_HOME, "JARVIS")),
+  normalize(join(USER_HOME, "jarvis")),
   normalize(join(USER_HOME, "projects")),
   normalize(join(USER_HOME, "Desktop")),
   normalize(join(USER_HOME, "Documents")),

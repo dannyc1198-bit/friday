@@ -146,18 +146,20 @@ function readTaskSummary(): TaskSummary {
   }
 
   try {
-    const tasks = JSON.parse(readFileSync(tasksFile, "utf8")) as Array<{
-      title: string;
-      priority?: string;
-      completed?: boolean;
-      dueDate?: string;
-    }>;
+    const raw = JSON.parse(readFileSync(tasksFile, "utf8")) as
+      | Array<{ text?: string; title?: string; priority?: string; completed?: boolean; due?: string; dueDate?: string }>
+      | { tasks: Array<{ text?: string; title?: string; priority?: string; completed?: boolean; due?: string; dueDate?: string }> };
+    const tasks = Array.isArray(raw) ? raw : raw.tasks ?? [];
 
     const pending = tasks.filter((t) => !t.completed);
     const highPriority = pending.filter((t) => t.priority === "high");
     const now = new Date();
-    const overdue = pending.filter((t) => t.dueDate && new Date(t.dueDate) < now);
-    const topTask = highPriority[0]?.title ?? pending[0]?.title ?? null;
+    const overdue = pending.filter((t) => {
+      const d = t.due ?? t.dueDate;
+      return d && new Date(d) < now;
+    });
+    const label = (t: { text?: string; title?: string }) => t.text ?? t.title ?? null;
+    const topTask = label(highPriority[0] ?? pending[0] ?? {});
 
     return {
       total: pending.length,

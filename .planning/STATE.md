@@ -12,7 +12,15 @@ See: .planning/PROJECT.md (updated 2026-01-16)
 Phase: 9 of 10 (Packaging) — COMPLETE (wizard skipped — Danny already configured)
 Plan: All 9 phases done. Crypto HUD skipped per Danny's request. Setup wizard skipped (not needed — already configured). install.bat written.
 Status: All core systems live — 120+ tools, voice, browser, vault, proactive monitor, morning briefing, market alerts, learning engine, Gemini router, health tracking, code agent, content creation, business intel
-Last activity: 2026-04-06 — Phase 6-9 verified/closed, Phase 7-9 gaps filled, system prompt updated
+Last activity: 2026-04-19 — A2 + A2.5 done. FRIDAY registered as OpenClaw's primary LLM; 3-tier router (Claude→Gemini→Ollama llama3.2:3b) verified. OpenClaw can now call FRIDAY via /v1/chat/completions and survives all-paid-tier outage by degrading to local.
+
+Fixes this session:
+- Gemini adapter: array params missing `items` now default to `{type:STRING}` (gemini.ts)
+- openai-compat: `request.raw.on("close")` bug caused premature abort on non-stream requests — now only wired via `reply.raw` for streaming path
+- Orchestrator `.env` missing `GEMINI_API_KEY` — added (copied from OpenClaw config)
+- Ollama default model: `gemma4` → `llama3.2:3b` (Gemma 4 needed 9.8GB RAM, host has ~5GB free)
+
+Followup (known): Anthropic SDK error shape breaks `isRetryable()` regex — complex prompts don't fall through Claude→Gemini→Ollama on credit_balance_too_low. ~5 line fix.
 
 Next: Final Integration — end-to-end scenario testing (manual + code verification)
 
@@ -423,9 +431,18 @@ Built direct API integrations instead of routing everything through OpenClaw:
 
 ## Session Continuity
 
-Last session: 2026-02-28
-Stopped at: Phase 4 CODE COMPLETE. 101 tools registered. Phase 5 (Permissions) is next.
-Resume action: Begin Phase 5 (Permission system, credential vault)
+Last session: 2026-04-19 — OpenClaw unification (C1 plan)
+Stopped at: **A1 COMPLETE** — OpenAI-compatible endpoint live at `/v1/chat/completions` + `/v1/models`. Type-checks clean. Paused before A2 for Danny's Ollama decisions.
+
+**Resume action:** Answer 3 questions, then start A2 (edit `~/.openclaw/openclaw.json`):
+  1. Which Ollama model? (llama3.2:3b / qwen2.5:7b / llama3.1:8b)
+  2. Ollama auto-start via supervisor or manual?
+  3. A2 first with current router, or add Ollama tier first?
+
+Full plan + progress: `C:\Users\12368\.claude\projects\C--\memory\project_friday_openclaw_integration.md`
+
+### Previous continuity notes
+Prior stop (2026-02-28): Phase 4 CODE COMPLETE. 101 tools registered. Phase 5 (Permissions) is next.
 
 **Danny's manual TODO (deferred):**
 - Phase 1: Install Wispr Flow, add ELEVENLABS_API_KEY, test voice quality

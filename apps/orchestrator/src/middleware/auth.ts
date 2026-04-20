@@ -108,6 +108,9 @@ export async function authMiddleware(
   if (path.startsWith("/api/receptionist")) {
     return;
   }
+  if (path.startsWith("/api/friday-phone")) {
+    return;
+  }
 
   // Extract Bearer token
   const authHeader = request.headers.authorization;

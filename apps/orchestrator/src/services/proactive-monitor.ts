@@ -45,11 +45,19 @@ const DATA_DIR = join(
 
 // ─── ProactiveMonitor ────────────────────────────────────────────────
 
+interface QuietMode {
+  enabled: boolean;
+  until: number;                   // ms epoch when DND lifts
+  minPriority: "low" | "medium" | "high";  // alerts below this are dropped
+  reason?: string;
+}
+
 class ProactiveMonitor {
   private alertQueue: ProactiveAlert[] = [];
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private alertsThisHour = 0;
   private hourResetTime = Date.now() + 60 * 60 * 1000;
+  private quietMode: QuietMode = { enabled: false, until: 0, minPriority: "high" };
 
   private checkStates: Record<string, CheckState> = {
     tasks:    { lastRun: 0, cooldownMs: 30 * 60 * 1000, lastAlertTime: 0 },
@@ -99,6 +107,45 @@ class ProactiveMonitor {
     this.emit(alert, alert.type);
   }
 
+  // ── Quiet mode (DND with priority filter) ────────────────────────
+
+  enableQuietMode(durationMs: number, minPriority: "low" | "medium" | "high" = "high", reason?: string): QuietMode {
+    this.quietMode = {
+      enabled: true,
+      until: Date.now() + durationMs,
+      minPriority,
+      reason,
+    };
+    console.log(`[Proactive Monitor] Quiet mode ON until ${new Date(this.quietMode.until).toLocaleTimeString()} (min priority: ${minPriority})`);
+    return { ...this.quietMode };
+  }
+
+  disableQuietMode(): void {
+    this.quietMode = { enabled: false, until: 0, minPriority: "high" };
+    console.log("[Proactive Monitor] Quiet mode OFF");
+  }
+
+  getQuietModeStatus(): QuietMode & { remainingMs: number } {
+    // Auto-expire if past `until`
+    if (this.quietMode.enabled && Date.now() >= this.quietMode.until) {
+      this.disableQuietMode();
+    }
+    return {
+      ...this.quietMode,
+      remainingMs: this.quietMode.enabled ? Math.max(0, this.quietMode.until - Date.now()) : 0,
+    };
+  }
+
+  private passesQuietFilter(priority: "low" | "medium" | "high"): boolean {
+    if (!this.quietMode.enabled) return true;
+    if (Date.now() >= this.quietMode.until) {
+      this.disableQuietMode();
+      return true;
+    }
+    const rank = { low: 0, medium: 1, high: 2 };
+    return rank[priority] >= rank[this.quietMode.minPriority];
+  }
+
   // ── Internal helpers ─────────────────────────────────────────────
 
   private isQuietHours(): boolean {
@@ -128,6 +175,10 @@ class ProactiveMonitor {
     checkKey: string
   ): void {
     if (!this.canAlert()) return;
+    if (!this.passesQuietFilter(alert.priority)) {
+      console.log(`[Proactive Monitor] Suppressed by quiet mode: [${alert.priority}] ${alert.title}`);
+      return;
+    }
 
     const state = this.checkStates[checkKey];
     if (state && Date.now() - state.lastAlertTime < state.cooldownMs) return;
