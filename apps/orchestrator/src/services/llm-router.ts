@@ -213,12 +213,21 @@ export async function* streamChatWithRouting(
 // Retryable: transient/provider-outage errors — fall back to next tier.
 // Non-retryable: caller's prompt is the problem — surface immediately.
 function isRetryable(errorMsg: string): boolean {
-  if (/invalid_request_error|authentication_error|permission_denied/i.test(errorMsg)) {
+  // Provider-outage / billing / capacity — fall back.
+  // Check these FIRST so credit errors (which Anthropic wraps as
+  // invalid_request_error) still trigger fallback.
+  if (
+    /credit[_\s]?balance[_\s]?too[_\s]?low|credit balance is too low|insufficient_quota|rate[_\s]?limit|\bquota\b|overloaded|overloaded_error|\b429\b|\b5\d{2}\b|ECONNREFUSED|ETIMEDOUT|fetch failed|network error|model requires more system memory/i.test(
+      errorMsg
+    )
+  ) {
+    return true;
+  }
+  // Genuine prompt-is-broken errors — surface immediately.
+  if (/authentication_error|permission_denied|invalid_api_key|invalid_request_error/i.test(errorMsg)) {
     return false;
   }
-  return /credit_balance_too_low|rate_limit|quota|overloaded|429|5\d{2}|ECONNREFUSED|ETIMEDOUT|fetch failed/i.test(
-    errorMsg
-  );
+  return false;
 }
 
 // ─── Router Stats (for debugging) ────────────────────────────
