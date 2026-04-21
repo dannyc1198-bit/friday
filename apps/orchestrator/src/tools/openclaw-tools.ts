@@ -14,6 +14,11 @@ import {
 import { readFileSync, writeFileSync, existsSync, mkdirSync, realpathSync } from "fs";
 import { join, resolve, normalize } from "path";
 import { execFileSync } from "child_process";
+import {
+  requireConfirmation,
+  isSafeShellCommand,
+  isSafeFilePath,
+} from "../services/permission-gate.js";
 
 // ─── Config ──────────────────────────────────────────────────────
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY || "";
@@ -320,13 +325,19 @@ const gmailSendTool: Tool = {
     },
   ],
   execute: async (params): Promise<ToolResult> => {
-    // Permission gate: never send without explicit confirmation
-    if (params.confirmed !== true) {
-      return makeResult(
-        false,
-        undefined,
-        "Email not sent. I need your confirmation first, sir. Shall I send this email?"
-      );
+    const to = String(params.to ?? "");
+    const subject = String(params.subject ?? "");
+    const body = String(params.body ?? "");
+
+    // Real permission gate: always require user approval via UI.
+    const { promise } = requireConfirmation({
+      action: "gmail_send",
+      risk: "high",
+      details: `To: ${to}\nSubject: ${subject}\nBody (first 300 chars): ${body.slice(0, 300)}`,
+    });
+    const approved = await promise;
+    if (!approved) {
+      return makeResult(false, undefined, "Email send denied by user (or timed out).");
     }
 
     if (!(await isOpenClawAvailable())) {
@@ -338,11 +349,7 @@ const gmailSendTool: Tool = {
     }
 
     try {
-      const result = await callOpenClaw("gmail_send", {
-        to: params.to,
-        subject: params.subject,
-        body: params.body,
-      });
+      const result = await callOpenClaw("gmail_send", { to, subject, body });
       return makeResult(true, result);
     } catch (error) {
       return makeResult(
@@ -621,13 +628,17 @@ const vapiCallTool: Tool = {
     },
   ],
   execute: async (params): Promise<ToolResult> => {
-    // Permission gate
-    if (params.confirmed !== true) {
-      return makeResult(
-        false,
-        undefined,
-        "Phone call not made. I need your confirmation first, sir. Shall I make this call?"
-      );
+    const phoneNumber = String(params.phone_number ?? "");
+
+    // Real permission gate: always require user approval via UI.
+    const { promise } = requireConfirmation({
+      action: "vapi_call",
+      risk: "high",
+      details: `Phone: ${phoneNumber}\nAssistant ID: ${VAPI_ASSISTANT_ID}`,
+    });
+    const approved = await promise;
+    if (!approved) {
+      return makeResult(false, undefined, "Phone call denied by user (or timed out).");
     }
 
     if (!VAPI_API_KEY) {

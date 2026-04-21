@@ -12,7 +12,35 @@ See: .planning/PROJECT.md (updated 2026-01-16)
 Phase: 9 of 10 (Packaging) — COMPLETE (wizard skipped — Danny already configured)
 Plan: All 9 phases done. Crypto HUD skipped per Danny's request. Setup wizard skipped (not needed — already configured). install.bat written.
 Status: All core systems live — 120+ tools, voice, browser, vault, proactive monitor, morning briefing, market alerts, learning engine, Gemini router, health tracking, code agent, content creation, business intel
-Last activity: 2026-04-19 — A2 + A2.5 done. FRIDAY registered as OpenClaw's primary LLM; 3-tier router (Claude→Gemini→Ollama llama3.2:3b) verified. OpenClaw can now call FRIDAY via /v1/chat/completions and survives all-paid-tier outage by degrading to local.
+Last activity: 2026-04-20 — Deep audit + parallel swarm started. FRIDAY known to be ~60% (not 90% as old memory claimed). 3 agents spawned to close gaps; Danny stopped mid-swarm. All agent output landed on disk but NOT wired into index.ts.
+
+**UNWIRED FILES ON DISK (safe to leave, but not active until registered):**
+- `src/services/memory/sqlite-store.ts` — new SQLite+FTS memory backend (ChromaDB replacement). `better-sqlite3` installed.
+- `src/services/scheduler.ts` + `src/services/alert-delivery.ts` — nerve system (morning briefing at 5 AM, TTS high-pri alerts)
+- `src/routes/proactive-alerts.ts` — GET/POST `/api/proactive/alerts` routes
+- `src/services/permission-gate.ts` + `src/routes/confirm.ts` — real shell/file/email/vapi confirmation gates w/ whitelist
+- `src/services/wavelength-context.ts` + `src/tools/wavelength-tools.ts` — Obsidian-backed business context loader
+- `C:\Users\12368\Obsidian\Wavelength\FRIDAY_BRAIN\wavelength-context.md` — Danny's living pitch doc (template, needs filling)
+
+**ALREADY WIRED (LIVE):**
+- `llm-router.ts` imports + calls `getWavelengthPromptExtras()` before routing — graceful fail if context file absent
+- 3-tier router (Claude→Gemini→Ollama) — complete
+- `/v1/chat/completions` OpenAI-compat shim — live, bearer-auth protected
+- isRetryable regex fix — credit_balance errors now fall through
+- GEMINI_API_KEY added to orchestrator .env
+- Ollama default → llama3.2:3b (Gemma 4 needs 10GB RAM, host has 5GB free)
+
+**KNOWN GAPS (from audit memo, prioritized):**
+P0: shell_run/file_write/gmail_send/vapi_call have NO real gates (permission-gate.ts built but not wrapped around tools yet). NETLIFY_AUTH_TOKEN in plaintext .env.
+P1: Proactive alerts queue to void (fix exists in alert-delivery.ts, not registered). Morning briefing never fires (fix in scheduler.ts, not registered). No voice input (STT) at all.
+P2: Wavelength context is template only — Danny hasn't filled wavelength-context.md.
+P3: Electron wrapper 0%. Tool count drift (MEMORY.md says 120+, actual 160).
+
+**TO RESUME:** register the unwired files in `src/index.ts`. Agent 1 (nerve system) gave exact lines needed — see `project_friday_openclaw_integration.md` or re-spawn to get them. Agent 2 and 3 were rejected before reporting; you'll need to ask them or manually wire permission gates + wavelength tools.
+
+**FRIDAY IS RUNNING RIGHT NOW:** web UI at http://localhost:3000, orchestrator at 3001. Chat works (falls through to llama3.2 since paid tiers down). Proactive alerts still queue to nowhere until scheduler/alert-delivery are registered.
+
+Next: Final Integration — end-to-end scenario testing (manual + code verification)
 
 Fixes this session:
 - Gemini adapter: array params missing `items` now default to `{type:STRING}` (gemini.ts)

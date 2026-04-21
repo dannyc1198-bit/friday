@@ -5,6 +5,7 @@
 import { streamChatCompletion } from "./openai.js";
 import { streamGeminiCompletion } from "./gemini.js";
 import { streamOllamaCompletion } from "./ollama.js";
+import { getWavelengthPromptExtras } from "./wavelength-context.js";
 import { config } from "../config/index.js";
 import type { Message, StreamChunk } from "../types/index.js";
 
@@ -171,14 +172,27 @@ export async function* streamChatWithRouting(
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   const messageText = lastUserMsg?.content || "";
 
+  // Inject Wavelength business context if the user message matches business intent.
+  // Safe on failure (returns null) so we never crash the request on context-load errors.
+  let effectiveExtras = systemPromptExtras;
+  try {
+    const wavelengthExtras = await getWavelengthPromptExtras(messageText);
+    if (wavelengthExtras) {
+      effectiveExtras = wavelengthExtras + (systemPromptExtras ? "\n\n" + systemPromptExtras : "");
+      console.log(`[LLM Router] Wavelength context injected (${wavelengthExtras.length} chars)`);
+    }
+  } catch (err) {
+    console.warn("[LLM Router] Wavelength context load failed (skipping):", err);
+  }
+
   const { provider, reason } = classifyComplexity(messageText, messages);
   console.log(`[LLM Router] Routing to ${provider.toUpperCase()} — ${reason}`);
 
   // Tier ladder: try primary, fall back through cheaper/local tiers.
   // Retryable errors only — bad-request style errors surface immediately.
-  const claudeTier = { name: "Claude", run: () => streamChatCompletion(messages, signal, systemPromptExtras) };
-  const geminiTier = { name: "Gemini", run: () => streamGeminiCompletion(messages, signal, systemPromptExtras) };
-  const ollamaTier = { name: "Ollama", run: () => streamOllamaCompletion(messages, signal, systemPromptExtras) };
+  const claudeTier = { name: "Claude", run: () => streamChatCompletion(messages, signal, effectiveExtras) };
+  const geminiTier = { name: "Gemini", run: () => streamGeminiCompletion(messages, signal, effectiveExtras) };
+  const ollamaTier = { name: "Ollama", run: () => streamOllamaCompletion(messages, signal, effectiveExtras) };
 
   const ladder: Array<{
     name: string;
