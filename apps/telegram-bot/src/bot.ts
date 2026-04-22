@@ -123,13 +123,60 @@ bot.use(async (ctx, next) => {
 });
 
 bot.start(async (ctx) => {
-  await ctx.reply("FRIDAY online. Talk to me, boss.");
+  await ctx.reply(
+    "FRIDAY online. Talk to me, boss.\n\n" +
+      "Commands:\n" +
+      "/status — check orchestrator + tools\n" +
+      "/reset — clear this conversation\n" +
+      "/help — this message"
+  );
+});
+
+bot.help(async (ctx) => {
+  await ctx.reply(
+    "Send any text and I'll pass it to FRIDAY.\n\n" +
+      "/status — orchestrator health, tool count, conversation length\n" +
+      "/reset — wipe this conversation's history\n" +
+      "/help — show this message"
+  );
 });
 
 bot.command("reset", async (ctx) => {
   const id = ctx.from?.id;
   if (id != null) history.delete(id);
   await ctx.reply("Conversation cleared.");
+});
+
+bot.command("status", async (ctx) => {
+  const userId = ctx.from?.id;
+  const convLen = userId != null ? (history.get(userId)?.length ?? 0) : 0;
+  try {
+    const [healthRes, toolsRes] = await Promise.all([
+      fetch(`${FRIDAY_URL}/api/health`, {
+        headers: { Authorization: `Bearer ${FRIDAY_API_KEY}` },
+        signal: AbortSignal.timeout(5000),
+      }),
+      fetch(`${FRIDAY_URL}/api/tools`, {
+        headers: { Authorization: `Bearer ${FRIDAY_API_KEY}` },
+        signal: AbortSignal.timeout(5000),
+      }),
+    ]);
+    if (!healthRes.ok) {
+      await ctx.reply(`⚠️ orchestrator: HTTP ${healthRes.status}`);
+      return;
+    }
+    const health = (await healthRes.json()) as { service?: string; version?: string };
+    const tools = toolsRes.ok ? ((await toolsRes.json()) as { count?: number }) : { count: 0 };
+    await ctx.reply(
+      `✅ ${health.service ?? "orchestrator"} ${health.version ?? ""}\n` +
+        `🔧 ${tools.count ?? 0} tools\n` +
+        `💬 ${convLen} messages in this conversation\n` +
+        `🔗 ${FRIDAY_URL}`
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await ctx.reply(`❌ can't reach orchestrator: ${msg}`);
+  }
 });
 
 bot.on(message("text"), async (ctx) => {
