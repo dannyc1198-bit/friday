@@ -3,4 +3,3 @@
 
 export * from "./openai.js";
 export * from "./conversation.js";
-export * from "./intent.js";

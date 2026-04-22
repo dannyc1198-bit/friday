@@ -6,12 +6,11 @@
 //   GET  /v1/models                      — discovery, returns FRIDAY's catalog
 //   POST /v1/chat/completions            — streaming + non-streaming
 //
-// Routing internally uses streamChatWithRouting (Gemini → Claude fallback).
-// OpenClaw's own fallback list (Sonnet/Gemini/Ollama) still applies if this
-// endpoint is unavailable — we never break the user's brain.
+// Direct call into streamChatCompletion (Claude Sonnet 4.6 + prompt caching).
+// Router layer was removed in the simple-friday amputation.
 
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { streamChatWithRouting } from "../services/llm-router.js";
+import { streamChatCompletion } from "../services/openai.js";
 import type { Message, StreamChunk } from "../types/index.js";
 
 // ─── OpenAI request/response shapes (minimal) ─────────────────
@@ -181,7 +180,7 @@ export async function openaiCompatRoutes(app: FastifyInstance): Promise<void> {
         sseDelta(reply, id, created, { role: "assistant", content: "" });
 
         try {
-          for await (const chunk of streamChatWithRouting(
+          for await (const chunk of streamChatCompletion(
             messages,
             abortController.signal,
             systemExtras || undefined
@@ -213,7 +212,7 @@ export async function openaiCompatRoutes(app: FastifyInstance): Promise<void> {
       // ── Non-streaming path ────────────────────────────────
       let fullText = "";
       try {
-        for await (const chunk of streamChatWithRouting(
+        for await (const chunk of streamChatCompletion(
           messages,
           abortController.signal,
           systemExtras || undefined
