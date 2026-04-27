@@ -13,6 +13,13 @@ export const config = {
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
 
+  // Groq (free tier — primary LLM provider on simple-friday)
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || "",
+    baseUrl: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+    model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+  },
+
   // Gemini (free tier — used for simple/routine tasks)
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",
@@ -64,10 +71,6 @@ export const config = {
     apiKey: process.env.VAPI_API_KEY || "",
     assistantId: process.env.VAPI_ASSISTANT_ID || "4653720f-ef5d-4f08-acaf-89422bf203ab",
   },
-  openclaw: {
-    baseUrl: process.env.OPENCLAW_BASE_URL || "http://localhost:18789",
-    token: process.env.OPENCLAW_GATEWAY_TOKEN || "",
-  },
   netlify: {
     authToken: process.env.NETLIFY_AUTH_TOKEN || "",
   },
@@ -103,8 +106,8 @@ export const config = {
 export function validateConfig(): string[] {
   const errors: string[] = [];
 
-  if (!config.anthropicApiKey) {
-    errors.push("ANTHROPIC_API_KEY is required");
+  if (!config.groq.apiKey) {
+    errors.push("GROQ_API_KEY is required (free at https://console.groq.com)");
   }
 
   return errors;

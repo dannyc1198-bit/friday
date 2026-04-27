@@ -10,7 +10,7 @@ AI personal assistant: voice, tool execution, smart-home control, browser contro
 
 **Amputated down from ~18K LOC of orchestrator code to ~3.6K LOC.** See `.planning/STATE.md` and commit `668ec2c` for the full audit.
 
-- **LLM:** Anthropic Claude `claude-sonnet-4-6` with prompt caching. System prompt + tool schemas are cached (`cache_control: ephemeral`); per-turn memory context rides in a separate uncached block so it never invalidates the prefix.
+- **LLM:** Groq via OpenAI SDK. Default model `llama-3.3-70b-versatile` (override via `GROQ_MODEL`). Free tier. **Prompt caching dropped 2026-04-27** — Groq doesn't support `cache_control`; the previous Anthropic-shaped caching invariants below are historical. The provider swap was Danny's "free path" decision; if reverting to Anthropic, `git log services/openai.ts` for the pre-swap version.
 - **Tools:** 50 registered from 5 modules (pc-control, memory-tools, task-manager, vault-tools, browser-control). Eight more modules are **frozen** — on disk but unregistered (hue, bluetooth, health-monitor, obsidian, health-tracking, music-tools, quiet-mode-tools, identity-tools).
 - **Services deleted:** llm-router, gemini, ollama, agent-swarm, agent-dispatch, ralph-loop, intent, wavelength-context, sidecar-bridge, openclaw-bridge.
 - **Services frozen:** learning-engine, proactive-monitor, morning-briefing, market-monitor, alert-delivery, permission-gate. Files on disk, not imported from `index.ts`.
@@ -49,30 +49,27 @@ apps/
 - **Separate "wired" from "verified end-to-end."** Code that imports and boots is not the same as code that answers a real request. Check end-to-end before declaring something done.
 - **Don't re-introduce tier routing.** One model, one path. If you feel tempted to add Gemini/Ollama fallback, talk to Danny first — the last router is what hid the credit-balance 400 behind a 126s hang.
 - **Prompt caching invariant:** render order is `tools → system → messages`. Never interpolate a timestamp, UUID, or session-varying field into `FRIDAY_SYSTEM_PROMPT` or into the tool list. All volatile context must ride in the second system block (no `cache_control`) or as message content.
-- **Never write secrets into the repo.** `.env` only, gitignored. `apps/orchestrator/.env` has `ANTHROPIC_API_KEY` and `FRIDAY_API_KEY`; `apps/telegram-bot/.env` has the bot token + allowlist.
+- **Never write secrets into the repo.** `.env` only, gitignored. `apps/orchestrator/.env` has `GROQ_API_KEY` and `FRIDAY_API_KEY`; `apps/telegram-bot/.env` has the bot token + allowlist.
 - **Rate limiting, CORS, input validation, error sanitization** — all in `apps/orchestrator/src/index.ts`. Preserve on any rewrites.
 
 ---
 
 ## Architecture Decisions
 
-### Anthropic SDK (preserve)
+### Groq via OpenAI SDK (current, 2026-04-27)
 
-- `openai.ts` filename kept to minimize import churn (only `index.ts` and `routes/openai-compat.ts` import from it now).
-- System prompt goes in the separate `system` parameter, NOT as a message role.
-- Tool definitions: `parameters` → `input_schema`.
-- Streaming: `content_block_delta` events.
-- Tool calls: `tool_use` content blocks with agentic loop (`MAX_TOOL_ROUNDS=10`).
-- Tool results: `user` message with `tool_result` content blocks.
-- Anthropic requires alternating user/assistant roles — `mergeConsecutiveMessages()` in `openai.ts` handles this.
+- `openai.ts` filename now matches the actual SDK in use — `openai` package pointed at `https://api.groq.com/openai/v1`. Two consumers: `index.ts` and `routes/openai-compat.ts`.
+- System prompt is a `role: "system"` message (NOT a separate parameter like Anthropic).
+- Tool definitions: `{ type: "function", function: { name, description, parameters: <JSON Schema> } }`.
+- Streaming: `delta.content` for text, `delta.tool_calls[]` indexed-by-position for tool calls.
+- Tool calls: `assistant` message with `tool_calls[]` array; tool results go as `role: "tool"` messages with `tool_call_id`.
+- No mergeConsecutiveMessages needed (OpenAI accepts consecutive same-role messages).
 - SSE headers must be set manually via `reply.raw.writeHead()` (Fastify middleware doesn't reach raw writes).
+- Tunables block at the top of `openai.ts` (MODEL, MAX_TOKENS, MAX_TOOL_ROUNDS, TEMPERATURE) is the intended adjustment surface — change there, not deep in the loop.
 
-### Prompt caching (added 2026-04-21)
+### Prompt caching — REMOVED 2026-04-27
 
-- `buildSystemBlocks(extras)` in `openai.ts` returns a two-block system array: stable `FRIDAY_SYSTEM_PROMPT` (with `cache_control: ephemeral`) and optional volatile extras (no cache_control).
-- Tools cache together with system (they render first). Cache breakpoint on the last system block covers both.
-- Verify hits via `finalMessage.usage.cache_read_input_tokens` — logged on round 0 of every request as `[FRIDAY] cache read=X write=Y uncached=Z`.
-- Minimum cacheable prefix on Sonnet 4.6 is 2048 tokens. `FRIDAY_SYSTEM_PROMPT` + 50 tool schemas clears that easily.
+Groq does not support prompt caching. The previous `cache_control` ephemeral blocks are gone. If the codebase ever moves back to Anthropic, restore the two-block system array pattern from git history (commit `668ec2c` had the working version).
 
 ### Exports from `openai.ts`
 
