@@ -1,26 +1,34 @@
 """
-Kitchen Nagger — Claude Vision scene analysis + escalating nags.
-Detects mess, tracks escalation (gentle -> drill_sergeant), praises cleanup.
+Kitchen Nagger — Gemini Vision scene analysis + Groq nag generation.
+
+Vision: gemini-2.5-flash (free tier, ~1500 req/day).
+Text:   llama-3.3-70b-versatile via Groq (free tier).
+Identity is decided UPSTREAM by face_recognizer (hard gate); we just receive
+a hint here and bake it into the scene prompt as a known fact.
 """
 import json
 import base64
 import logging
 import time
 
-import anthropic
+import google.generativeai as genai
+from openai import OpenAI
 
 from config import (
-    ANTHROPIC_API_KEY, CLAUDE_MODEL, CLAUDE_HAIKU,
+    GEMINI_API_KEY, GROQ_API_KEY,
+    GEMINI_VISION_MODEL, GROQ_TEXT_MODEL,
     MESS_THRESHOLD, NAG_COOLDOWN, ESCALATION_LEVELS,
 )
 
 log = logging.getLogger("sidecar.kitchen")
 
-SCENE_ANALYSIS_PROMPT = """You are Danny's Home AI Companion watching his home through a camera.
+SCENE_ANALYSIS_PROMPT_TMPL = """You are Danny's Home AI Companion watching his home through a camera.
+
+{identity_hint}
 
 Analyze this image and respond with ONLY valid JSON (no markdown, no code blocks):
 
-{
+{{
   "scene_type": "<kitchen|living_room|entrance|other>",
   "person_detected": <true|false>,
   "person_appears_to_be": "<entering|leaving|sitting|cooking|cleaning|walking|unknown>",
@@ -33,7 +41,7 @@ Analyze this image and respond with ONLY valid JSON (no markdown, no code blocks
   "general_observation": "<brief 1-sentence description of what you see>",
   "time_of_day_guess": "<morning|afternoon|evening|night based on lighting>",
   "mood_suggestion": "<a helpful or encouraging observation for someone with ADHD>"
-}
+}}
 
 Mess scoring:
 - 1-2: Spotless. A few items out is fine.
@@ -48,25 +56,44 @@ If image is too dark or unclear, set mess_level to 0 and note in general_observa
 
 class KitchenNagger:
     def __init__(self):
-        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        if not GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY missing — add it to apps/orchestrator/.env")
+        genai.configure(api_key=GEMINI_API_KEY)
+        self._vision = genai.GenerativeModel(GEMINI_VISION_MODEL)
 
-    def analyze_scene(self, frame_bytes: bytes) -> dict:
-        """Full scene analysis with Claude Vision."""
-        b64 = base64.standard_b64encode(frame_bytes).decode("utf-8")
-        response = self.client.messages.create(
-            model=CLAUDE_MODEL, max_tokens=600,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
-                    {"type": "text", "text": SCENE_ANALYSIS_PROMPT},
-                ],
-            }],
+        if not GROQ_API_KEY:
+            raise RuntimeError("GROQ_API_KEY missing — add it to apps/orchestrator/.env")
+        self._text = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+
+    def analyze_scene(self, frame_bytes: bytes, identity: str | None = None) -> dict:
+        """
+        Full scene analysis with Gemini Vision.
+
+        identity: name of the recognized person (e.g. 'danny') from face_recognizer,
+                  or None for unknown / no-face. Baked into the prompt so the VLM
+                  knows whether it's looking at the owner or a stranger.
+        """
+        if identity:
+            hint = f"IDENTITY (verified by local face recognition, not by you): The person in frame is {identity}. Treat as the homeowner. security_concern should NOT be 'unknown_person'."
+        else:
+            hint = "IDENTITY: No verified face match. If a person is visible, they are NOT the homeowner — set person_detected=true and security_concern='unknown_person'."
+
+        prompt = SCENE_ANALYSIS_PROMPT_TMPL.format(identity_hint=hint)
+
+        response = self._vision.generate_content(
+            [
+                {"mime_type": "image/jpeg", "data": frame_bytes},
+                prompt,
+            ],
+            generation_config={"temperature": 0.2, "max_output_tokens": 600},
         )
-        text = response.content[0].text.strip()
+        text = (response.text or "").strip()
+        # Gemini occasionally wraps in fences despite instructions
         if text.startswith("```"):
-            text = text.split("\n", 1)[1]
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
             text = text.rsplit("```", 1)[0]
+        if text.startswith("json"):
+            text = text[4:].lstrip()
         return json.loads(text)
 
     def check_and_nag(self, analysis: dict, state: dict) -> str | None:
@@ -93,7 +120,6 @@ class KitchenNagger:
                 return None
 
         elif mess < MESS_THRESHOLD and state.get("consecutive_nags", 0) > 0:
-            # Kitchen cleaned!
             state["total_cleanups_today"] = state.get("total_cleanups_today", 0) + 1
             state["consecutive_nags"] = 0
             praise = "Nice work Danny! Kitchen's looking clean. You crushed it, boss."
@@ -116,11 +142,14 @@ class KitchenNagger:
 Tone: {level} -- {tone[level]}
 Mess level: {analysis['mess_level']}/10
 What's messy: {analysis.get('mess_description', '')}
-Tasks:\n{tasks}
+Tasks:
+{tasks}
 Rules: SHORT, specific items, one action to do RIGHT NOW, ADHD-friendly, never mean."""
 
-        response = self.client.messages.create(
-            model=CLAUDE_HAIKU, max_tokens=200,
+        resp = self._text.chat.completions.create(
+            model=GROQ_TEXT_MODEL,
             messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.8,
         )
-        return response.content[0].text.strip().strip('"')
+        return resp.choices[0].message.content.strip().strip('"')

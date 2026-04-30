@@ -50,6 +50,7 @@ from plugins.greeting_system import GreetingSystem
 from plugins.notification_manager import NotificationManager
 from plugins.push_to_talk import PushToTalk
 from plugins.meta_glasses import MetaGlassesVision
+from plugins import face_recognizer
 
 # ─── Logging ───────────────────────────────────────────────────
 LOG_FILE = Path(__file__).parent / "data" / "sidecar.log"
@@ -161,21 +162,34 @@ def scan_loop(args):
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                 (FRAMES_DIR / f"frame_{ts}.jpg").write_bytes(frame)
 
-            # Full scene analysis with Claude Vision
+            # ── FACE RECOGNITION (hard gate, runs BEFORE vision LLM) ──
+            try:
+                match = face_recognizer.recognize(frame)
+            except Exception as e:
+                log.error(f"Face recognition failed: {e}")
+                match = None
+            verified_identity: str | None = match[0] if match else None
+            if match:
+                log.info(f"Face match: {match[0]} (score={match[1]:.3f})")
+            else:
+                log.info("Face match: none (Unknown / no face)")
+
+            # Full scene analysis with Gemini Vision (identity passed as a known fact)
             log.info("Analyzing scene...")
-            analysis = nagger.analyze_scene(frame)
+            analysis = nagger.analyze_scene(frame, identity=verified_identity)
             last_analysis = analysis
+            last_analysis["verified_identity"] = verified_identity
 
             person = analysis.get("person_detected", False)
             mess = analysis.get("mess_level", 0)
             observation = analysis.get("general_observation", "")
 
             log.info(f"Scene: {observation}")
-            log.info(f"Person: {person} | Mess: {mess}/10")
-            add_event("scan", f"Person: {person}, Mess: {mess}/10 — {observation}")
+            log.info(f"Person: {person} | Identity: {verified_identity or 'Unknown'} | Mess: {mess}/10")
+            add_event("scan", f"Person: {person} ({verified_identity or 'Unknown'}), Mess: {mess}/10 — {observation}")
 
-            # ── GREETING ──
-            greeting_msg = greeting.check(analysis, state)
+            # ── GREETING (only fires for verified owner) ──
+            greeting_msg = greeting.check(analysis, state, verified_identity)
             if greeting_msg and not args.no_voice:
                 voice.speak(greeting_msg)
                 add_event("greeting", greeting_msg)
@@ -190,10 +204,10 @@ def scan_loop(args):
                 state["daily_events"].append(f"{datetime.now().strftime('%H:%M')} Security: {alert_msg}")
                 push_event_to_orchestrator("security", {"alert": alert_msg})
 
-            # ── KITCHEN NAGGER ──
+            # ── KITCHEN NAGGER (only nag the verified owner — don't lecture strangers) ──
             nag_msg = nagger.check_and_nag(analysis, state)
             if nag_msg:
-                if not args.no_voice and person:
+                if not args.no_voice and verified_identity:
                     voice.speak(nag_msg)
                 add_event("nag", nag_msg)
                 esc_level = state.get("consecutive_nags", 0)
