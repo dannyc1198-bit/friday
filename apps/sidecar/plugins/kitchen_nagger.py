@@ -1,17 +1,17 @@
 """
 Kitchen Nagger — Gemini Vision scene analysis + Groq nag generation.
 
-Vision: gemini-2.5-flash (free tier, ~1500 req/day).
+Vision: gemini-2.5-flash (free tier, ~1500 req/day) via google-genai SDK.
 Text:   llama-3.3-70b-versatile via Groq (free tier).
 Identity is decided UPSTREAM by face_recognizer (hard gate); we just receive
 a hint here and bake it into the scene prompt as a known fact.
 """
 import json
-import base64
 import logging
 import time
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 from openai import OpenAI
 
 from config import (
@@ -58,8 +58,7 @@ class KitchenNagger:
     def __init__(self):
         if not GEMINI_API_KEY:
             raise RuntimeError("GEMINI_API_KEY missing — add it to apps/orchestrator/.env")
-        genai.configure(api_key=GEMINI_API_KEY)
-        self._vision = genai.GenerativeModel(GEMINI_VISION_MODEL)
+        self._gemini = genai.Client(api_key=GEMINI_API_KEY)
 
         if not GROQ_API_KEY:
             raise RuntimeError("GROQ_API_KEY missing — add it to apps/orchestrator/.env")
@@ -80,12 +79,13 @@ class KitchenNagger:
 
         prompt = SCENE_ANALYSIS_PROMPT_TMPL.format(identity_hint=hint)
 
-        response = self._vision.generate_content(
-            [
-                {"mime_type": "image/jpeg", "data": frame_bytes},
+        response = self._gemini.models.generate_content(
+            model=GEMINI_VISION_MODEL,
+            contents=[
+                genai_types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"),
                 prompt,
             ],
-            generation_config={"temperature": 0.2, "max_output_tokens": 600},
+            config=genai_types.GenerateContentConfig(temperature=0.2, max_output_tokens=600),
         )
         text = (response.text or "").strip()
         # Gemini occasionally wraps in fences despite instructions
