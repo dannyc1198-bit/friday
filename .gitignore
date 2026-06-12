@@ -11,6 +11,10 @@ dist/
 .env
 .env.*
 !.env.example
+# Explicit live env paths (belt-and-suspenders)
+apps/orchestrator/.env
+apps/web/.env.local
+apps/telegram-bot/.env
 
 # Database
 *.db
