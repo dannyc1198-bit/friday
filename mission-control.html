@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mission Control — Wavelength AI</title>
+  <style>
+    :root {
+      --bg: #080c14;
+      --surface: #0d1520;
+      --surface2: #111d2e;
+      --border: rgba(99,179,237,0.12);
+      --accent: #3b82f6;
+      --accent2: #06b6d4;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --purple: #a855f7;
+      --text: #e2e8f0;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+    .shell { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8,12,20,0.88);
+      backdrop-filter: blur(16px);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900; color: #fff;
+      box-shadow: 0 0 20px rgba(59,130,246,0.4);
+    }
+    .logo-text { font-size: 15px; font-weight: 600; letter-spacing: 0.05em; }
+    .logo-sub { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .clock { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .pulse-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+    main { flex: 1; padding: 24px 28px; display: grid; gap: 20px; grid-template-rows: auto auto 1fr; }
+    .row { display: grid; gap: 16px; }
+    .row-1 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+    .row-2 { grid-template-columns: 2fr 1fr 1fr; }
+    .row-3 { grid-template-columns: 2fr 1fr; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: rgba(99,179,237,0.28); }
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(59,130,246,0.3), transparent);
+    }
+    .card-title {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .stat-value { font-size: 32px; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .stat-delta { font-size: 11px; margin-top: 8px; }
+    .stat-delta.up { color: var(--green); }
+    .stat-delta.warn { color: var(--amber); }
+    .stat-delta.down { color: var(--red); }
+    .agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .agent-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px; cursor: pointer;
+      transition: all 0.2s; position: relative; overflow: hidden;
+    }
+    .agent-card:hover { border-color: rgba(99,179,237,0.35); transform: translateY(-1px); }
+    .agent-card.active { border-color: rgba(16,185,129,0.25); }
+    .agent-card.offline { opacity: 0.55; }
+    .agent-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .agent-name { font-size: 13px; font-weight: 600; }
+    .agent-role { font-size: 11px; color: var(--muted); }
+    .status-badge {
+      font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .status-badge.active { background: rgba(16,185,129,0.15); color: var(--green); }
+    .status-badge.idle { background: rgba(59,130,246,0.12); color: #60a5fa; }
+    .status-badge.offline { background: rgba(100,116,139,0.15); color: var(--muted); }
+    .status-badge.checking { background: rgba(245,158,11,0.12); color: var(--amber); animation: blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .agent-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .btn-sm {
+      font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent; color: var(--text);
+      cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    .btn-sm:hover { background: rgba(59,130,246,0.15); border-color: var(--accent); color: #93c5fd; }
+    .btn-sm.primary { background: rgba(59,130,246,0.2); border-color: rgba(59,130,246,0.4); color: #93c5fd; }
+    .btn-sm.fire { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.35); color: var(--green); }
+    .feed { display: flex; flex-direction: column; gap: 0; overflow-y: auto; max-height: 360px; }
+    .feed-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 0; border-bottom: 1px solid rgba(99,179,237,0.06);
+      font-size: 12px;
+    }
+    .feed-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+    .feed-content { flex: 1; }
+    .feed-agent { font-weight: 600; margin-right: 5px; }
+    .feed-time { color: var(--muted); font-size: 10px; margin-top: 2px; }
+    .api-grid { display: flex; flex-direction: column; gap: 8px; }
+    .api-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; border-radius: 8px; background: var(--surface2);
+      border: 1px solid var(--border); font-size: 12px;
+    }
+    .api-name { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+    .api-status { font-size: 11px; font-weight: 600; }
+    .api-status.ok { color: var(--green); }
+    .api-status.warn { color: var(--amber); }
+    .api-status.err { color: var(--red); }
+    .cmd-area { display: flex; flex-direction: column; gap: 10px; }
+    .cmd-label { font-size: 10px; color: var(--muted); font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; }
+    .cmd-input-row { display: flex; gap: 8px; }
+    .cmd-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 13px;
+      outline: none; transition: border-color 0.2s; font-family: inherit;
+    }
+    .cmd-input:focus { border-color: rgba(59,130,246,0.5); }
+    .cmd-input::placeholder { color: var(--muted); }
+    .btn-send {
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+      border: none; border-radius: 8px; padding: 10px 18px;
+      color: #fff; font-weight: 600; font-size: 13px; cursor: pointer;
+      transition: opacity 0.15s; white-space: nowrap;
+    }
+    .btn-send:hover { opacity: 0.85; }
+    .cmd-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+    .quick-btn {
+      font-size: 11px; padding: 5px 12px; border-radius: 20px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer; transition: all 0.15s;
+    }
+    .quick-btn:hover { border-color: var(--accent); color: var(--text); background: rgba(59,130,246,0.08); }
+    .kanban { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .kanban-col { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; min-height: 120px; }
+    .kanban-header { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .k-count { background: rgba(99,179,237,0.12); border-radius: 10px; padding: 1px 7px; font-size: 10px; color: var(--muted); }
+    .kanban-item {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px; margin-bottom: 6px;
+      font-size: 12px; cursor: grab; transition: all 0.15s;
+    }
+    .kanban-item:hover { border-color: rgba(99,179,237,0.3); }
+    .k-tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; margin-bottom: 5px; display: inline-block; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(99,179,237,0.2); border-radius: 4px; }
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 999;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 18px; font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      animation: toast-in 0.3s ease; max-width: 340px;
+    }
+    @keyframes toast-in { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    .toast-title { font-weight: 600; margin-bottom: 2px; }
+    .toast-body { color: var(--muted); font-size: 12px; }
+    @media (max-width: 1100px) {
+      .row-1 { grid-template-columns: 1fr 1fr; }
+      .row-2 { grid-template-columns: 1fr 1fr; }
+      .row-3 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 700px) { main { padding: 16px; } .row-1,.row-2,.row-3 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">W</div>
+      <div>
+        <div class="logo-text">MISSION CONTROL</div>
+        <div class="logo-sub">Wavelength AI Operations</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span style="font-size:11px;color:var(--muted)" id="agent-summary">Checking agents...</span>
+      <div class="pulse-dot"></div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+  <main>
+    <div class="row row-1">
+      <div class="card">
+        <div class="card-title">Agents Online</div>
+        <div class="stat-value" id="stat-agents">—</div>
+        <div class="stat-label">of 6 total</div>
+        <div class="stat-delta up" id="stat-agents-delta">checking...</div>
+      </div>
+      <div class="card">
+        <div class="card-title">API Services</div>
+        <div class="stat-value">7</div>
+        <div class="stat-label">integrations linked</div>
+        <div class="stat-delta warn">1 needs attention</div>
+      </div>
+      <div class="card">
+        <div class="card-title">VAPI Calls Today</div>
+        <div class="stat-value">3</div>
+        <div class="stat-label">outbound attempts</div>
+        <div class="stat-delta warn">Last: EL voice error</div>
+      </div>
+      <div class="card">
+        <div class="card-title">ElevenLabs</div>
+        <div class="stat-value" style="color:var(--amber);font-size:28px">Past Due</div>
+        <div class="stat-label">Blocking VAPI calls</div>
+        <div class="stat-delta warn"><a href="https://elevenlabs.io" target="_blank" style="color:var(--amber);text-decoration:none">Pay invoice to fix calls →</a></div>
+      </div>
+    </div>
+    <div class="row row-2">
+      <div class="card">
+        <div class="card-title">Agent Roster <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">live status checks every 30s</span></div>
+        <div class="agent-grid" id="agent-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Command Center</div>
+        <div class="cmd-area">
+          <div>
+            <div class="cmd-label">Ask Hermes</div>
+            <div class="cmd-input-row" style="margin-top:8px">
+              <input class="cmd-input" id="cmd-input" placeholder="What do you need?" />
+              <button class="btn-send" onclick="sendToHermes()">Send</button>
+            </div>
+          </div>
+          <div class="cmd-quick">
+            <button class="quick-btn" onclick="fillCmd('Daily brief')">Brief me</button>
+            <button class="quick-btn" onclick="fillCmd('What tasks are pending?')">Tasks</button>
+            <button class="quick-btn" onclick="fillCmd('Memory summary')">Memory</button>
+            <button class="quick-btn" onclick="fillCmd('VAPI status check')">VAPI</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--border);margin:4px 0">
+          <div class="cmd-label" style="margin-bottom:8px">Quick Actions</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button class="btn-sm fire" style="width:100%;padding:8px" onclick="triggerVapiCall()">📞 Call Me via VAPI</button>
+            <button class="btn-sm primary" style="width:100%;padding:8px" onclick="openFriday()">🖥 Open Friday Dashboard</button>
+            <button class="btn-sm" style="width:100%;padding:8px" onclick="openTelegram()">✈ Open Telegram Bot</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Integration Status</div>
+        <div class="api-grid" id="api-grid"></div>
+      </div>
+    </div>
+    <div class="row row-3">
+      <div class="card">
+        <div class="card-title">Activity Feed <button class="btn-sm" onclick="clearFeed()">Clear</button></div>
+        <div class="feed" id="feed"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Task Board</div>
+        <div class="kanban">
+          <div class="kanban-col" id="drop-todo" ondragover="event.preventDefault()" ondrop="dropTask(event,'todo')">
+            <div class="kanban-header" style="color:#f59e0b">Queue <span class="k-count" id="k-todo-count">0</span></div>
+            <div id="k-todo"></div>
+          </div>
+          <div class="kanban-col" id="drop-wip" ondragover="event.preventDefault()" ondrop="dropTask(event,'wip')">
+            <div class="kanban-header" style="color:#3b82f6">In Progress <span class="k-count" id="k-wip-count">0</span></div>
+            <div id="k-wip"></div>
+          </div>
+          <div class="kanban-col" id="drop-done" ondragover="event.preventDefault()" ondrop="dropTask(event,'done')">
+            <div class="kanban-header" style="color:#10b981">Done <span class="k-count" id="k-done-count">0</span></div>
+            <div id="k-done"></div>
+          </div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:6px">
+          <input class="cmd-input" id="new-task-input" placeholder="Add task..." style="font-size:12px;padding:7px 10px" onkeydown="if(event.key==='Enter')addTask()" />
+          <button class="btn-sm primary" onclick="addTask()">Add</button>
+        </div>
+      </div>
+    </div>
+  
+    <!-- Prospector Agent Row -->
+    <div class="row" style="grid-template-columns: 1fr 1fr 1fr;">
+
+      <!-- Stats -->
+      <div class="card" style="border-color:rgba(168,85,247,0.2)">
+        <div class="card-title" style="color:#a855f7">🎯 Prospector Agent</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+          <div style="text-align:center">
+            <div style="font-size:28px;font-weight:700;color:#a855f7" id="p-leads">—</div>
+            <div style="font-size:11px;color:var(--muted)">Leads found</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:28px;font-weight:700;color:#06b6d4" id="p-sites">—</div>
+            <div style="font-size:11px;color:var(--muted)">Sites live</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:28px;font-weight:700;color:#10b981" id="p-emails">—</div>
+            <div style="font-size:11px;color:var(--muted)">Emails sent</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)" id="p-pipeline">Pipeline: not yet run</div>
+      </div>
+
+      <!-- Run controls -->
+      <div class="card" style="border-color:rgba(168,85,247,0.2)">
+        <div class="card-title">Run Pipeline</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:6px">
+            <input class="cmd-input" id="p-city" placeholder="City (e.g. Vancouver, BC)" style="font-size:12px;padding:7px 10px" />
+          </div>
+          <div style="display:flex;gap:6px">
+            <input class="cmd-input" id="p-types" placeholder="Types: restaurant,hair_care,gym..." style="font-size:12px;padding:7px 10px" />
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn-sm fire" style="flex:1;padding:8px" onclick="runProspector('full')">▶ Full Pipeline</button>
+            <button class="btn-sm primary" style="flex:1;padding:8px" onclick="runProspector('dry')">👁 Dry Run</button>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn-sm" style="flex:1" onclick="runProspector('prospect')">🔍 Prospect</button>
+            <button class="btn-sm" style="flex:1" onclick="runProspector('build')">🏗 Build</button>
+            <button class="btn-sm" style="flex:1" onclick="runProspector('deploy')">🚀 Deploy</button>
+            <button class="btn-sm" style="flex:1" onclick="runProspector('email')">📧 Email</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent leads -->
+      <div class="card" style="border-color:rgba(168,85,247,0.2)">
+        <div class="card-title">Recent Leads</div>
+        <div id="p-leads-list" style="font-size:12px;color:var(--muted)">
+          Run the pipeline to see leads here.
+        </div>
+        <div style="margin-top:10px;font-size:10px;color:var(--muted)">
+          💡 Each site pitched at <strong style="color:#10b981">$1,000</strong> — no monthly fees
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+<div id="toast-container"></div>
+<script>
+const CONFIG = { fridayUrl:'http://localhost:3001', webUrl:'http://localhost:3000', telegramUrl:'https://t.me/dannyc1198666_bot' };
+
+// Clock
+function tick(){ document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-CA',{hour12:false}); }
+tick(); setInterval(tick,1000);
+
+// Agents
+const AGENTS = [
+  {id:'hermes',name:'Hermes',role:'Personal AI Brain',color:'#3b82f6',emoji:'🧠',status:'active',actions:[{label:'Message',fn:'openTelegram'},{label:'Brief me',fn:'sendBrief'}]},
+  {id:'friday',name:'Friday',role:'Voice Orchestrator',color:'#06b6d4',emoji:'🎙',status:'checking',check:CONFIG.fridayUrl+'/api/health',actions:[{label:'Open HUD',fn:'openFriday'}]},
+  {id:'receptionist',name:'Receptionist',role:'VAPI Voice AI',color:'#a855f7',emoji:'📞',status:'active',actions:[{label:'Call me',fn:'triggerVapiCall'},{label:'VAPI →',fn:'openVapi'}]},
+  {id:'telegram',name:'Telegram Bot',role:'Messaging Bridge',color:'#ec4899',emoji:'✈',status:'active',actions:[{label:'Open',fn:'openTelegram'}]},
+  {id:'web',name:'Web HUD',role:'JARVIS Frontend',color:'#10b981',emoji:'🖥',status:'checking',check:CONFIG.webUrl+'/api/health',actions:[{label:'Open',fn:'openFriday'}]},
+  {id:'sidecar',name:'Sidecar',role:'Python Eyes & Ears',color:'#f59e0b',emoji:'👁',status:'checking',check:'http://localhost:3002/health',actions:[]},
+];
+
+window.openTelegram=()=>{ window.open(CONFIG.telegramUrl,'_blank'); addFeed('You','#60a5fa','Opened Telegram bot'); };
+window.openFriday=()=>{ window.open(CONFIG.webUrl,'_blank'); addFeed('You','#60a5fa','Opened Friday dashboard'); };
+window.openVapi=()=>{ window.open('https://dashboard.vapi.ai','_blank'); };
+window.sendBrief=()=>{ fillCmd('Give me my morning briefing'); sendToHermes(); };
+window.triggerVapiCall=()=>{
+  toast('📞 VAPI Call','Opening Telegram — ask Hermes to call you (ElevenLabs invoice needs paying first).');
+  addFeed('Receptionist','#a855f7','Call requested — EL voice pipeline blocked (past_due)');
+  window.open(CONFIG.telegramUrl,'_blank');
+};
+
+function renderAgents(){
+  document.getElementById('agent-grid').innerHTML = AGENTS.map(a=>`
+    <div class="agent-card ${a.status}" id="ac-${a.id}">
+      <div class="agent-header">
+        <div><div class="agent-name">${a.emoji} ${a.name}</div><div class="agent-role">${a.role}</div></div>
+        <span class="status-badge ${a.status}" id="ab-${a.id}">${a.status==='checking'?'Checking...':a.status==='active'?'Active':'Offline'}</span>
+      </div>
+      <div class="agent-actions">
+        ${a.actions.map(ac=>`<button class="btn-sm" onclick="window['${ac.fn}']&&window['${ac.fn}']();addFeed('${a.name}','${a.color}','${ac.label} triggered')">${ac.label}</button>`).join('')}
+      </div>
+    </div>`).join('');
+}
+renderAgents();
+
+async function checkHealth(){
+  let online=0;
+  for(const a of AGENTS){
+    if(a.status==='active'){online++;continue;}
+    if(!a.check){continue;}
+    try{
+      const r=await fetch(a.check,{signal:AbortSignal.timeout(3000)});
+      const ok=r.ok;
+      a.status=ok?'active':'offline';
+      document.getElementById('ac-'+a.id).className='agent-card '+(ok?'active':'offline');
+      const b=document.getElementById('ab-'+a.id);
+      b.className='status-badge '+(ok?'active':'offline');
+      b.textContent=ok?'Active':'Offline';
+      if(ok)online++;
+    }catch{
+      a.status='offline';
+      document.getElementById('ac-'+a.id).className='agent-card offline';
+      const b=document.getElementById('ab-'+a.id);b.className='status-badge offline';b.textContent='Offline';
+    }
+  }
+  document.getElementById('stat-agents').textContent=online;
+  document.getElementById('stat-agents-delta').textContent=online===AGENTS.length?'All systems go':AGENTS.length-online+' offline';
+  document.getElementById('stat-agents-delta').className='stat-delta '+(online>=4?'up':'warn');
+  document.getElementById('agent-summary').textContent=online+'/'+AGENTS.length+' agents online';
+}
+checkHealth();setInterval(checkHealth,30000);
+
+// APIs
+const APIS=[
+  {name:'Anthropic / Claude',icon:'🤖',s:'ok',l:'Active'},
+  {name:'VAPI',icon:'📞',s:'ok',l:'Active'},
+  {name:'ElevenLabs',icon:'🎙',s:'warn',l:'Past Due ⚠'},
+  {name:'Telegram Bot',icon:'✈',s:'ok',l:'Connected'},
+  {name:'Notion',icon:'📝',s:'ok',l:'Linked'},
+  {name:'Gmail',icon:'📧',s:'ok',l:'Linked'},
+  {name:'Groq LLM',icon:'⚡',s:'ok',l:'Free Tier'},
+  {name:'Tavily Search',icon:'🔍',s:'ok',l:'Active'},
+];
+document.getElementById('api-grid').innerHTML=APIS.map(a=>`
+  <div class="api-row">
+    <div class="api-name"><span>${a.icon}</span>${a.name}</div>
+    <span class="api-status ${a.s}">${a.l}</span>
+  </div>`).join('');
+
+// Feed
+const feedData=[
+  {agent:'Hermes',color:'#3b82f6',msg:'Mission Control online',time:'just now'},
+  {agent:'Receptionist',color:'#a855f7',msg:'Last call failed: pipeline-error-eleven-labs-voice-failed',time:'5m ago'},
+  {agent:'Friday',color:'#06b6d4',msg:'Health check loop started (30s interval)',time:'just now'},
+];
+function renderFeed(){
+  document.getElementById('feed').innerHTML=feedData.slice().reverse().map(f=>`
+    <div class="feed-item">
+      <div class="feed-dot" style="background:${f.color};box-shadow:0 0 5px ${f.color}66"></div>
+      <div class="feed-content">
+        <span class="feed-agent" style="color:${f.color}">${f.agent}</span><span>${f.msg}</span>
+        <div class="feed-time">${f.time}</div>
+      </div>
+    </div>`).join('');
+}
+renderFeed();
+window.addFeed=function(agent,color,msg){feedData.push({agent,color,msg,time:'just now'});renderFeed();};
+window.clearFeed=function(){feedData.length=0;renderFeed();};
+
+// Kanban
+const tasks={
+  todo:[
+    {id:'t1',title:'Pay ElevenLabs invoice',tag:'Urgent',tc:'#ef4444'},
+    {id:'t2',title:'Fix VAPI voice pipeline',tag:'Bug',tc:'#f59e0b'},
+    {id:'t3',title:'Abe sales call prep',tag:'Sales',tc:'#a855f7'},
+    {id:'t4',title:'Set up Codex agent lane',tag:'Dev',tc:'#3b82f6'},
+  ],
+  wip:[{id:'w1',title:'Mission Control dashboard',tag:'Dev',tc:'#3b82f6'}],
+  done:[
+    {id:'d1',title:'VoiceOrb component built',tag:'Done',tc:'#10b981'},
+    {id:'d2',title:'Brian voice configured',tag:'Done',tc:'#10b981'},
+    {id:'d3',title:'JARVIS web HUD wired',tag:'Done',tc:'#10b981'},
+  ]
+};
+function renderKanban(){
+  for(const col of['todo','wip','done']){
+    document.getElementById('k-'+col).innerHTML=tasks[col].map(t=>`
+      <div class="kanban-item" draggable="true" ondragstart="event.dataTransfer.setData('text','${t.id}|${col}')">
+        <span class="k-tag" style="background:${t.tc}22;color:${t.tc}">${t.tag}</span>
+        <div>${t.title}</div>
+      </div>`).join('');
+    document.getElementById('k-'+col+'-count').textContent=tasks[col].length;
+  }
+}
+renderKanban();
+window.dropTask=function(e,toCol){
+  const [id,fromCol]=e.dataTransfer.getData('text').split('|');
+  if(fromCol===toCol)return;
+  const idx=tasks[fromCol].findIndex(t=>t.id===id);
+  if(idx===-1)return;
+  const item=tasks[fromCol].splice(idx,1)[0];
+  tasks[toCol].push(item);
+  renderKanban();
+  addFeed('You','#60a5fa','Moved "'+item.title+'" → '+toCol);
+};
+window.addTask=function(){
+  const inp=document.getElementById('new-task-input');
+  const v=inp.value.trim();if(!v)return;
+  tasks.todo.push({id:'t'+Date.now(),title:v,tag:'New',tc:'#64748b'});
+  inp.value='';renderKanban();
+  addFeed('You','#60a5fa','Task added: "'+v+'"');
+};
+
+// Commands
+window.fillCmd=t=>{document.getElementById('cmd-input').value=t;document.getElementById('cmd-input').focus();};
+window.sendToHermes=function(){
+  const v=document.getElementById('cmd-input').value.trim();if(!v)return;
+  addFeed('You → Hermes','#3b82f6',v);
+  toast('Sent to Hermes','Opening Telegram: "'+v.slice(0,50)+'"');
+  window.open(CONFIG.telegramUrl,'_blank');
+  document.getElementById('cmd-input').value='';
+};
+document.getElementById('cmd-input').addEventListener('keydown',e=>{if(e.key==='Enter')sendToHermes();});
+
+// Toast
+window.toast=function(title,body,ms=4500){
+  const el=document.createElement('div');el.className='toast';
+  el.innerHTML='<div class="toast-title">'+title+'</div><div class="toast-body">'+body+'</div>';
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(()=>el.remove(),ms);
+};
+setTimeout(()=>toast('Mission Control Online','All agents checked. ElevenLabs invoice needs payment to restore VAPI calls.'),1000);
+
+// ═══════════════════════════════════════
+// PROSPECTOR PANEL
+// ═══════════════════════════════════════
+const PROSPECTOR_DIR = 'C:\\\\Users\\\\12368\\\\jarvis\\\\agents\\\\prospector';
+
+window.runProspector = function(mode) {
+  const city  = document.getElementById('p-city').value.trim()  || 'Vancouver, BC';
+  const types = document.getElementById('p-types').value.trim() || 'restaurant,hair_care,gym';
+
+  let cmd = `cd "${PROSPECTOR_DIR}" && python run_agent.py`;
+  if (mode === 'dry')       cmd += ' --dry-run';
+  else if (mode !== 'full') cmd += ` --step ${mode}`;
+
+  const cityFlag  = ` --city "${city}"`.replace(/"/g, '\"');
+  const typesFlag = ` --types "${types}"`.replace(/"/g, '\"');
+
+  const fullCmd = cmd + (mode === 'prospect' || mode === 'full' || mode === 'dry'
+    ? `
+
+# Set these in .env: TARGET_CITY="${city}" TARGET_TYPES="${types}"`
+    : '');
+
+  // Show instructions + copy command
+  const label = {full:'Full Pipeline',dry:'Dry Run',prospect:'Prospect Only',build:'Build Sites',deploy:'Deploy',email:'Send Emails'}[mode];
+  toast('📋 Command copied', `Run in terminal: ${label}`);
+  addFeed('Prospector','#a855f7',`${label} queued — open terminal to run`);
+
+  // Copy to clipboard
+  const toCopy = `cd C:\\Users\\12368\\jarvis\\agents\\prospector
+${cmd.replace('cd "'+PROSPECTOR_DIR+'" && ','')}`;
+  navigator.clipboard.writeText(toCopy).catch(()=>{});
+
+  // Show a mock "running" state
+  document.getElementById('p-pipeline').textContent = `Status: ${label} — open terminal to execute`;
+  document.getElementById('p-pipeline').style.color = 'var(--amber)';
+};
+
+// Load stats from lead files (reads via fetch if served, else mock)
+function loadProspectorStats() {
+  // In a real local server setup these would be real file reads
+  // For now show placeholder until first run
+  const pipelineTxt = document.getElementById('p-pipeline');
+  if (!pipelineTxt.textContent.includes('queued')) {
+    document.getElementById('p-leads').textContent = '—';
+    document.getElementById('p-sites').textContent = '—';
+    document.getElementById('p-emails').textContent = '—';
+  }
+}
+loadProspectorStats();
+
+</script>
+</body>
+</html>

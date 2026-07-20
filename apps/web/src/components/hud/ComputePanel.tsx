@@ -132,7 +132,7 @@ export function ComputePanel() {
   }, []);
 
   return (
-    <DataWindow title="AI Compute" icon={<Brain className="w-4 h-4" />} status="online" compact>
+    <DataWindow title="AI Compute" icon={<Brain className="w-4 h-4" />} status="online" compact popoutPath="ai-compute">
       <motion.div
         className="space-y-3"
         initial={{ opacity: 0, y: 12 }}

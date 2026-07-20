@@ -71,7 +71,7 @@ function scoreMemory(memory: Memory, queryWords: string[]): number {
 const memorySaveTool: Tool = {
   name: "memory_save",
   description:
-    "Save a fact, preference, or piece of information to long-term memory. Use this proactively when Danny mentions preferences, important facts, or things to remember.",
+    "CRITICAL: Call this tool IMMEDIATELY whenever Danny says any of: 'remember', 'remind me', 'save this', 'note this', 'don't forget', 'keep in mind', 'I want you to remember', 'make a note', or states a preference/fact about himself. Do NOT just acknowledge verbally — actually invoke memory_save with the content. Also call proactively when Danny reveals: preferences, names, dates, decisions, opinions, ongoing projects, people in his life, his goals, his schedule, or anything personal worth retaining across sessions.",
   category: "memory",
   parameters: [
     {

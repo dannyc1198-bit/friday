@@ -139,7 +139,7 @@ export function NetworkPanel() {
   const totalCount = connections.length;
 
   return (
-    <DataWindow title="Network" icon={<Globe className="w-4 h-4" />} status={offlineMode ? "offline" : "online"} compact>
+    <DataWindow title="Network" icon={<Globe className="w-4 h-4" />} status={offlineMode ? "offline" : "online"} compact popoutPath="network">
       <motion.div
         className="space-y-2.5"
         initial={{ opacity: 0, y: 12 }}

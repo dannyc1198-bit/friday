@@ -10,8 +10,10 @@ interface VoiceState {
   isTranscribing: boolean;
   isSpeaking: boolean;
   isMuted: boolean;
+  isLiveMode: boolean;
   ttsAvailable: boolean | null;
   toggleMute: () => void;
+  toggleLiveMode: () => void;
   startListening: () => void;
   stopListening: () => void;
   stopSpeaking: () => void;
@@ -83,6 +85,8 @@ export function InputBar({ onSend, disabled = false, voice }: InputBarProps) {
     ? "Processing..."
     : voice?.isSpeaking
     ? "Speaking..."
+    : voice?.isLiveMode
+    ? "Live mode active"
     : null;
 
   return (
@@ -102,11 +106,17 @@ export function InputBar({ onSend, disabled = false, voice }: InputBarProps) {
               "text-[10px] font-mono uppercase tracking-[0.2em]",
               voice?.isListening && "text-[#00b4ff]",
               voice?.isTranscribing && "text-[#ffa726] animate-transcribe-shimmer",
-              voice?.isSpeaking && "text-[#00dcff]"
+              voice?.isSpeaking && "text-[#00dcff]",
+              !voice?.isListening && !voice?.isTranscribing && !voice?.isSpeaking && voice?.isLiveMode && "text-[#34d399]"
             )}
           >
             {voiceStatusText}
           </span>
+          {voice?.isLiveMode && (
+            <span className="px-1.5 py-0.5 rounded-sm border border-[#34d399]/40 bg-[#34d399]/10 text-[8px] font-mono uppercase tracking-[0.25em] text-[#34d399] animate-pulse">
+              LIVE
+            </span>
+          )}
         </div>
       )}
 
@@ -156,6 +166,33 @@ export function InputBar({ onSend, disabled = false, voice }: InputBarProps) {
             ) : (
               <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+              </svg>
+            )}
+          </button>
+        )}
+
+        {/* Live Voice Mode Toggle — phone-call style continuous conversation */}
+        {voice && (
+          <button
+            type="button"
+            onClick={voice.toggleLiveMode}
+            title={voice.isLiveMode ? "End live voice conversation" : "Start live voice conversation"}
+            className={cn(
+              "p-3 rounded-lg transition-all duration-300 relative",
+              voice.isLiveMode
+                ? "bg-[#34d399] text-black shadow-[0_0_18px_rgba(52,211,153,0.55)] animate-recording-pulse"
+                : "bg-[#071422] border border-[rgba(0,180,255,0.08)] text-[#5a8aaa] hover:text-[#34d399] hover:border-[#34d399]/30 hover:shadow-[0_0_10px_rgba(52,211,153,0.25)]"
+            )}
+          >
+            {voice.isLiveMode ? (
+              // Hangup icon — rotated phone
+              <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A11.05 11.05 0 0112 21a11.05 11.05 0 01-9-8.21l2.5-2.5a1 1 0 011.41 0l2 2a1 1 0 010 1.41l-1.2 1.2a8.5 8.5 0 005.59 5.59l1.2-1.2a1 1 0 011.41 0l2 2a1 1 0 010 1.41z" transform="rotate(135 12 12)" />
+              </svg>
+            ) : (
+              // Phone-call icon
+              <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
               </svg>
             )}
           </button>

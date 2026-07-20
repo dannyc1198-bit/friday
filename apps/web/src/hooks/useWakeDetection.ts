@@ -25,6 +25,15 @@ export type WakeState = "idle" | "armed" | "triggered";
 interface UseWakeDetectionOptions {
   onWake: () => void;
   enabled?: boolean;
+  /**
+   * Lazy mic init. Default `false` — the hook does NOT touch getUserMedia or
+   * SpeechRecognition until `startMic()` is called. Avoids stealing the system
+   * audio focus from background tabs (YouTube, Spotify) on page mount.
+   * The audio constraints also disable AEC/NS/AGC, which on Chromium would
+   * otherwise put the stream into the "communications" category and duck
+   * other tabs' media even when we're just passively listening.
+   */
+  armed?: boolean;
 }
 
 interface UseWakeDetectionReturn {
@@ -36,6 +45,7 @@ interface UseWakeDetectionReturn {
 export function useWakeDetection({
   onWake,
   enabled = true,
+  armed = false,
 }: UseWakeDetectionOptions): UseWakeDetectionReturn {
   const [wakeState, setWakeState]     = useState<WakeState>("idle");
   const [isListening, setIsListening] = useState(false);
@@ -84,8 +94,10 @@ export function useWakeDetection({
   }, []);
 
   // ── Speech recognition (phrase detection) ───────────────────
+  // Gated by `armed`: SpeechRecognition.start() also requests mic permission
+  // and joins the same audio session as getUserMedia. Don't fire on mount.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !armed) return;
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -128,18 +140,26 @@ export function useWakeDetection({
       try { recognition.stop(); } catch { /* ignore */ }
       recognitionRef.current = null;
     };
-  }, [enabled, arm]);
+  }, [enabled, armed, arm]);
 
   // ── Clap detection (audio amplitude) ────────────────────────
+  // Lazy: only fires after `armed` flips true (i.e. user explicit gesture).
+  // AEC/NS/AGC all disabled so the captured stream stays in the "media"
+  // category instead of "communications" — otherwise Chromium ducks other
+  // tabs' audio (YouTube, Spotify) the moment we open the mic.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !armed) return;
 
     let cancelled = false;
 
     async function startAudio() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true },
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
         });
 
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
@@ -217,7 +237,7 @@ export function useWakeDetection({
       analyserRef.current = null;
       setIsListening(false);
     };
-  }, [enabled, triggerWake]);
+  }, [enabled, armed, triggerWake]);
 
   return { wakeState, isListening, error };
 }

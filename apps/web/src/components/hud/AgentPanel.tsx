@@ -71,7 +71,7 @@ export function AgentPanel() {
   const activeCount = agents.filter((a) => a.status === "active").length;
 
   return (
-    <DataWindow title="Agent Roster" icon={<Users className="w-4 h-4" />} status="online" compact>
+    <DataWindow title="Agent Roster" icon={<Users className="w-4 h-4" />} status="online" compact popoutPath="agent-roster">
       <motion.div
         className="space-y-1.5"
         initial={{ opacity: 0, y: 12 }}

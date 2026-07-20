@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AGENT OS — Wavelength Command</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020810;--s1:#060e1c;--s2:#090f1e;--s3:#0c1525;
+  --border:rgba(0,168,255,.08);--border2:rgba(0,168,255,.18);
+  --text:#b8d0e8;--muted:#2a4055;--accent:0,168,255;
+}
+html,body{width:100%;height:100%;background:var(--bg);color:var(--text);
+  font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,168,255,.018) 1px,transparent 1px),
+  linear-gradient(90deg,rgba(0,168,255,.018) 1px,transparent 1px);
+  background-size:36px 36px}
+#app{position:relative;z-index:1;display:grid;grid-template-rows:42px 1fr 44px;height:100vh}
+
+/* ── Header ── */
+#hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;border-bottom:1px solid var(--border);
+  background:rgba(2,8,16,.95);backdrop-filter:blur(20px)}
+.hlogo{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:800;
+  letter-spacing:.18em;color:rgba(var(--accent),1);text-transform:uppercase}
+.hlogo-icon{width:24px;height:24px;border:1px solid rgba(var(--accent),.5);
+  border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;background:rgba(var(--accent),.08)}
+.hmid{display:flex;align-items:center;gap:12px;font-size:9px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.hright{display:flex;align-items:center;gap:14px}
+.hbtn{padding:5px 12px;border-radius:5px;border:1px solid rgba(var(--accent),.25);
+  background:rgba(var(--accent),.07);color:rgba(var(--accent),.9);
+  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  cursor:pointer;transition:all .15s}
+.hbtn:hover{background:rgba(var(--accent),.18);border-color:rgba(var(--accent),.5)}
+.hbtn.danger{border-color:rgba(255,60,60,.3);background:rgba(255,60,60,.07);color:#ff6060}
+.hbtn.danger:hover{background:rgba(255,60,60,.18)}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#00e87a;
+  box-shadow:0 0 6px #00e87a;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#clock{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:.06em}
+
+/* ── Main layout ── */
+#main{display:grid;grid-template-columns:220px 1fr;overflow:hidden;min-height:0}
+
+/* ── Left control panel ── */
+#ctrl{border-right:1px solid var(--border);display:flex;flex-direction:column;
+  gap:0;overflow-y:auto;background:rgba(6,14,28,.6)}
+#ctrl::-webkit-scrollbar{width:2px}
+#ctrl::-webkit-scrollbar-thumb{background:rgba(var(--accent),.15)}
+.csec{padding:12px;border-bottom:1px solid var(--border)}
+.csec-title{font-size:8px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(var(--accent),.5);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.csec-title::before{content:'';display:inline-block;width:8px;height:1px;
+  background:rgba(var(--accent),.35)}
+
+/* Spawn form */
+.spawn-form{display:flex;flex-direction:column;gap:7px}
+.finput{background:var(--s3);border:1px solid var(--border2);border-radius:5px;
+  padding:7px 9px;color:var(--text);font-size:11px;font-family:inherit;
+  outline:none;width:100%;transition:border-color .2s;resize:none}
+.finput:focus{border-color:rgba(var(--accent),.45)}
+.finput::placeholder{color:var(--muted)}
+select.finput{cursor:pointer}
+.spawn-btn{width:100%;padding:8px;border-radius:5px;
+  background:linear-gradient(135deg,rgba(var(--accent),.25),rgba(var(--accent),.12));
+  border:1px solid rgba(var(--accent),.4);color:rgba(var(--accent),1);
+  font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  cursor:pointer;transition:all .15s}
+.spawn-btn:hover{background:linear-gradient(135deg,rgba(var(--accent),.4),rgba(var(--accent),.2))}
+
+/* Agent roster */
+.agent-roster{display:flex;flex-direction:column;gap:6px}
+.roster-item{padding:8px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--s2);cursor:pointer;transition:all .15s;position:relative}
+.roster-item:hover{border-color:rgba(var(--accent),.3)}
+.roster-item.selected{border-color:rgba(var(--accent),.5);background:rgba(var(--accent),.06)}
+.ri-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.ri-name{font-size:11px;font-weight:700}
+.ri-badge{font-size:8px;font-weight:700;padding:2px 6px;border-radius:10px;
+  letter-spacing:.08em;text-transform:uppercase}
+.ri-badge.idle{background:rgba(100,116,139,.15);color:#64748b}
+.ri-badge.thinking{background:rgba(255,160,0,.12);color:#ffa500;animation:blink 1s infinite}
+.ri-badge.working{background:rgba(0,168,255,.12);color:rgba(var(--accent),1);animation:blink .8s infinite}
+.ri-badge.done{background:rgba(0,232,122,.12);color:#00e87a}
+.ri-badge.error{background:rgba(255,60,60,.12);color:#ff6060}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.ri-task{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ri-kill{position:absolute;top:6px;right:6px;width:16px;height:16px;
+  border-radius:3px;border:1px solid rgba(255,60,60,.2);background:transparent;
+  color:#ff6060;font-size:10px;cursor:pointer;display:none;
+  align-items:center;justify-content:center;line-height:1}
+.roster-item:hover .ri-kill{display:flex}
+
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stat-box{background:var(--s3);border:1px solid var(--border);border-radius:5px;
+  padding:8px;text-align:center}
+.stat-num{font-size:22px;font-weight:700;color:rgba(var(--accent),1);line-height:1}
+.stat-lbl{font-size:8px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-top:2px}
+
+/* Log */
+.log-feed{display:flex;flex-direction:column;gap:2px;max-height:160px;overflow-y:auto}
+.log-feed::-webkit-scrollbar{width:2px}
+.log-feed::-webkit-scrollbar-thumb{background:rgba(var(--accent),.1)}
+.log-item{font-size:9px;display:flex;gap:5px;padding:2px 0;
+  border-bottom:1px solid rgba(255,255,255,.02)}
+.log-dot{width:3px;height:3px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.log-msg{color:var(--text);opacity:.6;flex:1;word-break:break-word;line-height:1.4}
+.log-time{color:var(--muted);font-size:8px;flex-shrink:0}
+
+/* ── Agent grid ── */
+#grid{overflow:auto;padding:10px;display:grid;gap:10px;
+  grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+  align-content:start}
+#grid::-webkit-scrollbar{width:4px;height:4px}
+#grid::-webkit-scrollbar-thumb{background:rgba(var(--accent),.12);border-radius:2px}
+#empty-state{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;height:100%;gap:12px;color:var(--muted);padding:40px}
+.es-icon{font-size:48px;opacity:.3}
+.es-txt{font-size:13px;letter-spacing:.05em}
+.es-sub{font-size:11px;opacity:.6}
+
+/* Agent card */
+.acard{background:var(--s1);border:1px solid var(--border);border-radius:10px;
+  display:flex;flex-direction:column;position:relative;overflow:hidden;
+  transition:border-color .3s;min-height:220px}
+.acard::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--agent-color, rgba(0,168,255,.4)),transparent)}
+.acard.thinking{border-color:rgba(255,160,0,.25)}
+.acard.thinking::before{background:linear-gradient(90deg,transparent,rgba(255,160,0,.5),transparent)}
+.acard.working{border-color:rgba(0,168,255,.3);animation:card-pulse 2s ease-in-out infinite}
+.acard.done{border-color:rgba(0,232,122,.2)}
+.acard.done::before{background:linear-gradient(90deg,transparent,rgba(0,232,122,.4),transparent)}
+.acard.error{border-color:rgba(255,60,60,.25)}
+@keyframes card-pulse{0%,100%{box-shadow:0 0 0 0 transparent}
+  50%{box-shadow:0 0 12px rgba(0,168,255,.08)}}
+
+.acard-hdr{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px 8px;border-bottom:1px solid var(--border)}
+.acard-id{display:flex;align-items:center;gap:8px}
+.acard-num{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;
+  justify-content:center;font-size:10px;font-weight:900;
+  background:rgba(var(--accent),.12);border:1px solid rgba(var(--accent),.3);
+  color:rgba(var(--accent),1)}
+.acard-name{font-size:12px;font-weight:700;letter-spacing:.04em}
+.acard-model{font-size:9px;color:var(--muted);margin-top:1px}
+.acard-status{display:flex;align-items:center;gap:6px}
+.status-pill{font-size:8px;font-weight:700;padding:2px 8px;border-radius:10px;
+  letter-spacing:.1em;text-transform:uppercase}
+.sp-idle{background:rgba(100,116,139,.12);color:#64748b}
+.sp-thinking{background:rgba(255,160,0,.12);color:#ffa500}
+.sp-working{background:rgba(0,168,255,.1);color:rgba(var(--accent),1)}
+.sp-done{background:rgba(0,232,122,.1);color:#00e87a}
+.sp-error{background:rgba(255,60,60,.1);color:#ff6060}
+.kill-btn{width:20px;height:20px;border-radius:4px;border:1px solid rgba(255,60,60,.2);
+  background:transparent;color:#ff6060;font-size:11px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.kill-btn:hover{background:rgba(255,60,60,.15);border-color:rgba(255,60,60,.5)}
+
+.acard-task{padding:6px 12px;font-size:10px;color:rgba(var(--accent),.7);
+  background:rgba(var(--accent),.04);border-bottom:1px solid var(--border);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.03em}
+
+/* Thought stream */
+.acard-stream{flex:1;padding:10px 12px;overflow-y:auto;min-height:0;
+  display:flex;flex-direction:column;gap:4px}
+.acard-stream::-webkit-scrollbar{width:2px}
+.acard-stream::-webkit-scrollbar-thumb{background:rgba(var(--accent),.1);border-radius:1px}
+
+.msg{display:flex;gap:7px;font-size:10px;line-height:1.55;animation:fadein .2s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.msg-icon{font-size:11px;flex-shrink:0;margin-top:1px;width:14px;text-align:center}
+.msg-body{flex:1;word-break:break-word}
+.msg.thought .msg-body{color:rgba(255,160,0,.75);font-style:italic}
+.msg.tool .msg-body{color:rgba(0,168,255,.8)}
+.msg.tool-result .msg-body{color:rgba(0,232,122,.7)}
+.msg.response .msg-body{color:var(--text)}
+.msg.system .msg-body{color:var(--muted);font-size:9px}
+.msg.error .msg-body{color:#ff6060}
+
+/* Typing cursor */
+.cursor{display:inline-block;width:6px;height:10px;background:rgba(var(--accent),.7);
+  margin-left:2px;vertical-align:middle;animation:cursor-blink .7s infinite}
+@keyframes cursor-blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* Tool call chip */
+.tool-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;
+  background:rgba(0,168,255,.08);border:1px solid rgba(0,168,255,.2);
+  border-radius:10px;font-size:9px;color:rgba(0,168,255,.85);
+  font-weight:600;letter-spacing:.06em;margin:2px 0}
+
+/* Progress bar */
+.acard-footer{padding:6px 12px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:8px}
+.progress-bar{flex:1;height:2px;background:rgba(255,255,255,.04);border-radius:1px;overflow:hidden}
+.progress-fill{height:100%;border-radius:1px;transition:width .4s ease;
+  background:linear-gradient(90deg,rgba(var(--accent),.4),rgba(var(--accent),.9))}
+.acard-footer-txt{font-size:8px;color:var(--muted);white-space:nowrap;letter-spacing:.06em}
+.elapsed{font-size:8px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* Footer bar */
+#ftr{display:flex;align-items:center;gap:8px;padding:0 12px;
+  border-top:1px solid var(--border);background:rgba(2,8,16,.92);
+  backdrop-filter:blur(16px)}
+#cmd-input{flex:1;background:rgba(9,15,30,.8);border:1px solid rgba(var(--accent),.15);
+  border-radius:5px;padding:7px 12px;color:var(--text);font-size:11px;
+  font-family:inherit;outline:none;transition:border-color .2s}
+#cmd-input:focus{border-color:rgba(var(--accent),.4)}
+#cmd-input::placeholder{color:var(--muted)}
+#broadcast-btn{padding:7px 14px;border-radius:5px;
+  background:rgba(var(--accent),.12);border:1px solid rgba(var(--accent),.3);
+  color:rgba(var(--accent),1);font-size:10px;font-weight:700;
+  letter-spacing:.1em;cursor:pointer;transition:all .15s;white-space:nowrap}
+#broadcast-btn:hover{background:rgba(var(--accent),.22)}
+.ftr-stat{font-size:9px;color:var(--muted);letter-spacing:.08em;white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header id="hdr">
+    <div class="hlogo">
+      <div class="hlogo-icon">⬡</div>
+      AGENT OS
+    </div>
+    <div class="hmid">
+      <div class="live-dot"></div>
+      <span>WAVELENGTH COMMAND</span>
+      <span>│</span>
+      <span id="agent-count-hdr">0 AGENTS</span>
+      <span>│</span>
+      <span id="clock">--:--:--</span>
+    </div>
+    <div class="hright">
+      <button class="hbtn" onclick="spawnAgent()">⊕ SPAWN AGENT</button>
+      <button class="hbtn" onclick="pauseAll()">⏸ PAUSE ALL</button>
+      <button class="hbtn danger" onclick="killAll()">✕ KILL ALL</button>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main id="main">
+
+    <!-- Control Panel -->
+    <aside id="ctrl">
+
+      <div class="csec">
+        <div class="csec-title">Spawn Agent</div>
+        <div class="spawn-form">
+          <input class="finput" id="agent-name-input" placeholder="Agent name (e.g. Researcher)" />
+          <select class="finput" id="agent-model-select">
+            <option value="gemini">Gemini 2.5 Flash (free)</option>
+            <option value="claude">Claude Sonnet 4</option>
+            <option value="groq">Groq Llama 3.3</option>
+          </select>
+          <textarea class="finput" id="agent-task-input" placeholder="Task for this agent..." rows="3"></textarea>
+          <button class="spawn-btn" onclick="spawnAgent()">⊕ SPAWN AGENT</button>
+        </div>
+      </div>
+
+      <div class="csec">
+        <div class="csec-title">Active Agents</div>
+        <div class="agent-roster" id="roster">
+          <div style="font-size:10px;color:var(--muted);text-align:center;padding:12px">
+            No agents running
+          </div>
+        </div>
+      </div>
+
+      <div class="csec">
+        <div class="csec-title">Session Stats</div>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-num" id="stat-total">0</div>
+            <div class="stat-lbl">Total Spawned</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num" id="stat-active">0</div>
+            <div class="stat-lbl">Active</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num" id="stat-done">0</div>
+            <div class="stat-lbl">Completed</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-num" id="stat-tokens">0</div>
+            <div class="stat-lbl">Tokens</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="csec" style="flex:1">
+        <div class="csec-title">System Log</div>
+        <div class="log-feed" id="sys-log"></div>
+      </div>
+
+    </aside>
+
+    <!-- Agent Grid -->
+    <div id="grid">
+      <div id="empty-state">
+        <div class="es-icon">⬡</div>
+        <div class="es-txt">No agents running</div>
+        <div class="es-sub">Spawn an agent from the control panel to begin</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer id="ftr">
+    <span class="ftr-stat">BROADCAST:</span>
+    <input id="cmd-input" placeholder="Send task to all active agents..." />
+    <button id="broadcast-btn" onclick="broadcastTask()">⊕ BROADCAST</button>
+    <span class="ftr-stat" id="ftr-stat">0 active │ 0 completed │ 0 tokens used</span>
+  </footer>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const agents = new Map(); // id → agent object
+let agentCounter = 0;
+let totalSpawned = 0;
+let totalDone = 0;
+let totalTokens = 0;
+
+const WS_URL = 'ws://localhost:3001/v1/voice';
+
+const MODEL_LABELS = {
+  gemini: 'Gemini 2.5 Flash',
+  claude: 'Claude Sonnet',
+  groq:   'Groq Llama 3.3'
+};
+
+const AGENT_COLORS = [
+  'rgba(0,168,255,.6)',   // blue
+  'rgba(168,85,247,.6)',  // purple
+  'rgba(0,245,175,.6)',   // teal
+  'rgba(255,160,0,.6)',   // amber
+  'rgba(236,72,153,.6)',  // pink
+  'rgba(99,200,100,.6)',  // green
+];
+
+// ═══════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════
+function tick() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-CA', {hour12:false});
+}
+tick(); setInterval(tick, 1000);
+
+// ═══════════════════════════════════════════════════
+// SYSTEM LOG
+// ═══════════════════════════════════════════════════
+function syslog(msg, color) {
+  const feed = document.getElementById('sys-log');
+  const time = new Date().toLocaleTimeString('en-CA',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const el = document.createElement('div');
+  el.className = 'log-item';
+  el.innerHTML = `<div class="log-dot" style="background:${color||'#4a8aaa'}"></div>
+    <div class="log-msg">${msg}</div>
+    <div class="log-time">${time}</div>`;
+  feed.appendChild(el);
+  feed.scrollTop = feed.scrollHeight;
+  while (feed.children.length > 60) feed.removeChild(feed.firstChild);
+}
+
+// ═══════════════════════════════════════════════════
+// SPAWN AGENT
+// ═══════════════════════════════════════════════════
+function spawnAgent(overrideTask) {
+  const name = document.getElementById('agent-name-input').value.trim()
+    || `Agent ${agentCounter + 1}`;
+  const model = document.getElementById('agent-model-select').value;
+  const task = overrideTask || document.getElementById('agent-task-input').value.trim();
+
+  agentCounter++;
+  totalSpawned++;
+  const id = `agent-${agentCounter}`;
+  const color = AGENT_COLORS[(agentCounter - 1) % AGENT_COLORS.length];
+
+  const agent = {
+    id, name, model, task, color,
+    num: agentCounter,
+    status: 'idle',
+    ws: null,
+    messages: [],
+    tokenCount: 0,
+    startTime: Date.now(),
+    elapsed: 0,
+    elapsedTimer: null,
+    progress: 0,
+  };
+
+  agents.set(id, agent);
+  renderCard(agent);
+  renderRoster();
+  updateStats();
+
+  document.getElementById('agent-name-input').value = '';
+  document.getElementById('agent-task-input').value = '';
+  document.getElementById('empty-state')?.remove();
+
+  syslog(`Spawned ${name} (${MODEL_LABELS[model]})`, color);
+
+  // Connect and run
+  connectAgent(agent);
+  if (task) {
+    setTimeout(() => runTask(agent, task), 800);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// WEBSOCKET PER AGENT
+// ═══════════════════════════════════════════════════
+function connectAgent(agent) {
+  agent.ws = new WebSocket(WS_URL);
+  agent.ws.binaryType = 'arraybuffer';
+
+  agent.ws.onopen = () => {
+    addMsg(agent, 'system', '🔗', 'Connected to orchestrator');
+    syslog(`${agent.name} connected`, '#00e87a');
+  };
+
+  agent.ws.onmessage = (ev) => {
+    if (ev.data instanceof ArrayBuffer) {
+      // Play audio for whichever agent is "selected" or all
+      if (agent._expectingAudio) {
+        agent._expectingAudio = false;
+        playAudio(ev.data);
+      }
+      return;
+    }
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+
+    if (msg.type === 'ready') {
+      agent._sessionId = msg.sessionId;
+      setStatus(agent, 'idle');
+    }
+    else if (msg.type === 'assistant_delta') {
+      if (!agent._streamEl) {
+        // Start a new streaming message
+        agent._streamEl = addMsg(agent, 'response', '◈', '');
+      }
+      const body = agent._streamEl.querySelector('.msg-body');
+      body.textContent += msg.text;
+      agent.tokenCount += msg.text.split(/\s+/).length;
+      totalTokens += msg.text.split(/\s+/).length;
+      scrollCard(agent.id);
+    }
+    else if (msg.type === 'assistant_done') {
+      agent._streamEl = null;
+      setStatus(agent, 'done');
+      addMsg(agent, 'system', '✓', `Done in ${Math.round((Date.now()-agent._taskStart)/1000)}s`);
+      stopElapsed(agent);
+      totalDone++;
+      updateStats();
+      syslog(`${agent.name} completed task`, '#00e87a');
+    }
+    else if (msg.type === 'audio_start') {
+      agent._expectingAudio = true;
+    }
+    else if (msg.type === 'audio_unavailable') {
+      agent._expectingAudio = false;
+    }
+    else if (msg.type === 'error') {
+      addMsg(agent, 'error', '⚠', msg.message);
+      setStatus(agent, 'error');
+      syslog(`${agent.name} error: ${msg.message}`, '#ff6060');
+    }
+    updateStats();
+  };
+
+  agent.ws.onclose = () => {
+    addMsg(agent, 'system', '⊗', 'Disconnected');
+    setStatus(agent, 'error');
+  };
+
+  agent.ws.onerror = () => {
+    addMsg(agent, 'error', '⚠', 'Connection failed — is orchestrator running on :3001?');
+    setStatus(agent, 'error');
+  };
+}
+
+// ═══════════════════════════════════════════════════
+// RUN TASK
+// ═══════════════════════════════════════════════════
+function runTask(agent, task) {
+  if (!agent.ws || agent.ws.readyState !== WebSocket.OPEN) {
+    syslog(`${agent.name}: not connected`, '#ff9040');
+    return;
+  }
+  agent.task = task;
+  agent._taskStart = Date.now();
+  agent._streamEl = null;
+  setStatus(agent, 'thinking');
+  startElapsed(agent);
+  addMsg(agent, 'system', '▶', `Task: ${task}`);
+
+  // Update task display
+  const taskEl = document.querySelector(`#${agent.id} .acard-task`);
+  if (taskEl) taskEl.textContent = `▶ ${task}`;
+
+  agent.ws.send(JSON.stringify({type:'transcript', text: task}));
+  syslog(`${agent.name} started: ${task.slice(0,50)}`, '#5aa8ff');
+  updateRosterItem(agent);
+}
+
+// ═══════════════════════════════════════════════════
+// KILL AGENT
+// ═══════════════════════════════════════════════════
+function killAgent(id) {
+  const agent = agents.get(id);
+  if (!agent) return;
+  if (agent.ws) { try { agent.ws.close(); } catch {} }
+  stopElapsed(agent);
+  agents.delete(id);
+  document.getElementById(id)?.remove();
+  renderRoster();
+  updateStats();
+  syslog(`${agent.name} killed`, '#ff9040');
+  if (agents.size === 0) {
+    document.getElementById('grid').innerHTML = `
+      <div id="empty-state">
+        <div class="es-icon">⬡</div>
+        <div class="es-txt">No agents running</div>
+        <div class="es-sub">Spawn an agent from the control panel to begin</div>
+      </div>`;
+  }
+}
+
+function killAll() {
+  for (const id of agents.keys()) killAgent(id);
+}
+
+function pauseAll() {
+  for (const [, agent] of agents) {
+    if (agent.ws && agent.ws.readyState === WebSocket.OPEN) {
+      agent.ws.send(JSON.stringify({type:'interrupt'}));
+      setStatus(agent, 'idle');
+    }
+  }
+  syslog('All agents paused', '#ffaa00');
+}
+
+function broadcastTask() {
+  const task = document.getElementById('cmd-input').value.trim();
+  if (!task) return;
+  document.getElementById('cmd-input').value = '';
+  let count = 0;
+  for (const [, agent] of agents) {
+    if (agent.status !== 'error') {
+      runTask(agent, task);
+      count++;
+    }
+  }
+  syslog(`Broadcast to ${count} agents: ${task.slice(0,40)}`, '#00f5af');
+}
+
+// ═══════════════════════════════════════════════════
+// STATUS
+// ═══════════════════════════════════════════════════
+function setStatus(agent, status) {
+  agent.status = status;
+  const card = document.getElementById(agent.id);
+  if (!card) return;
+  card.className = 'acard ' + status;
+
+  const pill = card.querySelector('.status-pill');
+  if (pill) {
+    pill.className = 'status-pill sp-' + status;
+    pill.textContent = status.toUpperCase();
+  }
+
+  // Update progress
+  const pct = {idle:0, thinking:30, working:65, done:100, error:0}[status] || 0;
+  agent.progress = pct;
+  const fill = card.querySelector('.progress-fill');
+  if (fill) {
+    fill.style.width = pct + '%';
+    fill.style.background = status === 'done' ? 'linear-gradient(90deg,rgba(0,232,122,.4),#00e87a)'
+      : status === 'error' ? 'linear-gradient(90deg,rgba(255,60,60,.4),#ff6060)'
+      : status === 'thinking' ? 'linear-gradient(90deg,rgba(255,160,0,.4),#ffa500)'
+      : 'linear-gradient(90deg,rgba(0,168,255,.4),rgba(0,168,255,.9))';
+  }
+
+  updateRosterItem(agent);
+  updateStats();
+}
+
+// ═══════════════════════════════════════════════════
+// MESSAGES
+// ═══════════════════════════════════════════════════
+function addMsg(agent, type, icon, text) {
+  const stream = document.querySelector(`#${agent.id} .acard-stream`);
+  if (!stream) return null;
+  const el = document.createElement('div');
+  el.className = `msg ${type}`;
+  el.innerHTML = `<div class="msg-icon">${icon}</div><div class="msg-body">${text}</div>`;
+  stream.appendChild(el);
+  stream.scrollTop = stream.scrollHeight;
+  while (stream.children.length > 80) stream.removeChild(stream.firstChild);
+  return el;
+}
+
+function scrollCard(id) {
+  const s = document.querySelector(`#${id} .acard-stream`);
+  if (s) s.scrollTop = s.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════
+// ELAPSED TIMER
+// ═══════════════════════════════════════════════════
+function startElapsed(agent) {
+  stopElapsed(agent);
+  agent._elStart = Date.now();
+  agent.elapsedTimer = setInterval(() => {
+    const secs = Math.floor((Date.now() - agent._elStart) / 1000);
+    const el = document.querySelector(`#${agent.id} .elapsed`);
+    if (el) el.textContent = secs + 's';
+  }, 1000);
+}
+
+function stopElapsed(agent) {
+  if (agent.elapsedTimer) { clearInterval(agent.elapsedTimer); agent.elapsedTimer = null; }
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER CARD
+// ═══════════════════════════════════════════════════
+function renderCard(agent) {
+  const grid = document.getElementById('grid');
+  const card = document.createElement('div');
+  card.className = 'acard idle';
+  card.id = agent.id;
+  card.style.setProperty('--agent-color', agent.color);
+
+  card.innerHTML = `
+    <div class="acard-hdr">
+      <div class="acard-id">
+        <div class="acard-num" style="border-color:${agent.color};color:${agent.color};background:${agent.color.replace(',.6',',.08')}">${agent.num}</div>
+        <div>
+          <div class="acard-name">${agent.name}</div>
+          <div class="acard-model">${MODEL_LABELS[agent.model]}</div>
+        </div>
+      </div>
+      <div class="acard-status">
+        <span class="status-pill sp-idle">IDLE</span>
+        <button class="kill-btn" onclick="killAgent('${agent.id}')" title="Kill agent">✕</button>
+      </div>
+    </div>
+    <div class="acard-task" style="color:${agent.color}">No task assigned</div>
+    <div class="acard-stream"></div>
+    <div class="acard-footer">
+      <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+      <div class="elapsed" style="font-size:8px;color:var(--muted);font-variant-numeric:tabular-nums">0s</div>
+      <div class="acard-footer-txt" id="${agent.id}-tokens">0 tok</div>
+    </div>`;
+
+  grid.appendChild(card);
+
+  // Allow clicking card to run a task
+  card.querySelector('.acard-stream').addEventListener('dblclick', () => {
+    const t = prompt(`Task for ${agent.name}:`);
+    if (t) runTask(agent, t);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER ROSTER
+// ═══════════════════════════════════════════════════
+function renderRoster() {
+  const roster = document.getElementById('roster');
+  if (agents.size === 0) {
+    roster.innerHTML = '<div style="font-size:10px;color:var(--muted);text-align:center;padding:12px">No agents running</div>';
+    return;
+  }
+  roster.innerHTML = '';
+  for (const [, agent] of agents) {
+    const el = document.createElement('div');
+    el.className = 'roster-item';
+    el.id = `roster-${agent.id}`;
+    el.innerHTML = `
+      <button class="ri-kill" onclick="killAgent('${agent.id}');event.stopPropagation()">✕</button>
+      <div class="ri-top">
+        <span class="ri-name" style="color:${agent.color}">${agent.name}</span>
+        <span class="ri-badge ${agent.status}">${agent.status.toUpperCase()}</span>
+      </div>
+      <div class="ri-task">${agent.task || 'No task'}</div>`;
+    el.onclick = () => document.getElementById(agent.id)?.scrollIntoView({behavior:'smooth',block:'center'});
+    roster.appendChild(el);
+  }
+}
+
+function updateRosterItem(agent) {
+  const el = document.getElementById(`roster-${agent.id}`);
+  if (!el) return;
+  const badge = el.querySelector('.ri-badge');
+  if (badge) { badge.className = `ri-badge ${agent.status}`; badge.textContent = agent.status.toUpperCase(); }
+  const task = el.querySelector('.ri-task');
+  if (task) task.textContent = agent.task || 'No task';
+}
+
+// ═══════════════════════════════════════════════════
+// UPDATE STATS
+// ═══════════════════════════════════════════════════
+function updateStats() {
+  const active = [...agents.values()].filter(a => a.status === 'thinking' || a.status === 'working').length;
+  document.getElementById('stat-total').textContent = totalSpawned;
+  document.getElementById('stat-active').textContent = agents.size;
+  document.getElementById('stat-done').textContent = totalDone;
+  document.getElementById('stat-tokens').textContent = totalTokens > 999 ? Math.floor(totalTokens/1000)+'k' : totalTokens;
+  document.getElementById('agent-count-hdr').textContent = `${agents.size} AGENT${agents.size !== 1 ? 'S':''} │ ${active} ACTIVE`;
+  document.getElementById('ftr-stat').textContent = `${agents.size} active │ ${totalDone} completed │ ${totalTokens} tokens`;
+
+  // Update per-agent token display
+  for (const [, agent] of agents) {
+    const el = document.getElementById(`${agent.id}-tokens`);
+    if (el) el.textContent = agent.tokenCount + ' tok';
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════════
+let audioCtx = null;
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+async function playAudio(arrayBuffer) {
+  try {
+    const ctx = getCtx();
+    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    const src = ctx.createBufferSource();
+    src.buffer = decoded; src.connect(ctx.destination); src.start(0);
+  } catch(e) { console.warn('Audio play failed:', e); }
+}
+document.addEventListener('click', () => getCtx(), {once:true});
+
+// ═══════════════════════════════════════════════════
+// KEYBOARD
+// ═══════════════════════════════════════════════════
+document.getElementById('cmd-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') broadcastTask();
+});
+document.getElementById('agent-task-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) spawnAgent();
+});
+
+// ═══════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════
+syslog('Agent OS initialized', '#00a8ff');
+syslog('Orchestrator: ws://localhost:3001', '#4a8aaa');
+syslog('Ready to spawn agents', '#00e87a');
+</script>
+</body>
+</html>

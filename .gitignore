@@ -55,3 +55,8 @@ __pycache__/
 *.tmp
 *.bak
 tmpclaude-*
+.gstack/
+
+# Python venv + runtime logs (added 2026-07-20, ARC Deck Phase 0)
+.venv/
+*.log

@@ -206,15 +206,32 @@ bot.catch((err, ctx) => {
   console.error(`[telegram-bot] unhandled error from ${ctx.from?.id}:`, err);
 });
 
+// Boot ping — tell Danny the bridge is live the moment it comes up.
+// sendMessage works independent of polling, so this fires even before launch settles.
+const BOOT_CHAT_ID = ALLOWLIST[0];
+bot.telegram
+  .sendMessage(
+    BOOT_CHAT_ID,
+    "✅ FRIDAY two-way bridge is online.\n\n" +
+      "This is the same bot that sends your morning ping — except now I answer. " +
+      "Reply to me any time: coding, research, the fleet, Wavelength, anything.\n\n" +
+      "/status — see my brain + tool count\n/reset — clear this chat"
+  )
+  .then(() => console.log(`[telegram-bot] boot ping sent to ${BOOT_CHAT_ID}`))
+  .catch((e) => console.error(`[telegram-bot] boot ping failed: ${e?.message ?? e}`));
+
 bot
   .launch()
   .then(() => {
-    console.log(`[telegram-bot] online — forwarding to ${FRIDAY_URL}, allowlist: [${ALLOWLIST.join(", ")}]`);
+    // Resolves on stop in Telegraf v4 — treat as a clean shutdown, let the wrapper restart us.
+    console.log(`[telegram-bot] polling stopped — exiting for restart`);
+    process.exit(0);
   })
   .catch((err) => {
     console.error("[telegram-bot] launch failed:", err);
     process.exit(1);
   });
+console.log(`[telegram-bot] launching — forwarding to ${FRIDAY_URL}, allowlist: [${ALLOWLIST.join(", ")}]`);
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

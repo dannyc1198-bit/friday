@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const ORCHESTRATOR = process.env.ORCHESTRATOR_URL || "http://localhost:3001";
-const AUTH = () => ({ Authorization: `Bearer ${process.env.JARVIS_API_KEY || ""}` });
+const AUTH = () => ({ Authorization: `Bearer ${process.env.FRIDAY_API_KEY || ""}` });
 
 export async function GET() {
   try {

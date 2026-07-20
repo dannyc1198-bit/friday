@@ -186,10 +186,17 @@ class UnifiedMemoryService {
 
   // ─── OpenClaw Sync ────────────────────────────────────────────
 
-  /** Sync with OpenClaw workspace memory */
+  /** Sync with OpenClaw workspace memory.
+   *  Gated behind OPENCLAW_SYNC=true — default OFF so FRIDAY's memory stays
+   *  decoupled from OpenClaw unless explicitly enabled. */
   syncWithOpenClaw(): { imported: number; exported: number } {
     let imported = 0;
     let exported = 0;
+
+    if (process.env.OPENCLAW_SYNC !== "true") {
+      console.log("[UnifiedMemory] OpenClaw sync disabled (set OPENCLAW_SYNC=true to enable)");
+      return { imported, exported };
+    }
 
     // Import from OpenClaw workspace MEMORY.md
     try {

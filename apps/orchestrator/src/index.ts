@@ -24,14 +24,125 @@ import {
 import { streamChatCompletion } from "./services/openai.js";
 import { memoryService } from "./services/memory/index.js";
 import { textToSpeech, isTTSAvailable } from "./services/tts.js";
+import { getActiveVoice } from "./services/voice-registry.js";
+import {
+  initializeMCPClients,
+  shutdownMCPClients,
+  getMCPStatus,
+} from "./services/mcp-client.js";
+// Un-amputation 2026-05-04: re-imported frozen services. Market monitor
+// stays imported but unstarted — Danny will configure its target later
+// from inside FRIDAY herself.
+import { learningEngine } from "./services/learning-engine.js";
+import { proactiveMonitor } from "./services/proactive-monitor.js";
+import { marketMonitor } from "./services/market-monitor.js";
+import { permissionManager } from "./services/permission-manager.js";
+import { startAlertDelivery, stopAlertDelivery } from "./services/alert-delivery.js";
+import { getMorningBriefing } from "./services/morning-briefing.js";
 import { fridayPhoneRoutes } from "./routes/friday-phone.js";
 import { openaiCompatRoutes } from "./routes/openai-compat.js";
+import { voiceRoutes } from "./routes/voice.js";
+import { vapiLlmRoutes } from "./routes/vapi-llm.js";
+import { dashboardRoutes } from "./routes/dashboard.js";
+import { brainRoutes } from "./routes/brain.js";
+import { initBrain, stopBrain, buildBrainContext } from "./services/brain.js";
+import { startScheduler, stopScheduler } from "./services/scheduler.js";
+import { getLLMInfo } from "./services/openai.js";
 import { authMiddleware, initAuth } from "./middleware/auth.js";
 import { unifiedMemory } from "./services/unified-memory.js";
 import {
   buildFullMemoryContext,
   saveConversationSummary,
 } from "./services/memory-loader.js";
+import { promises as fs } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// ─── Conversation transcript persistence ────────────────────────
+// Every chat turn gets appended to a JSONL file under data/conversations/{id}.jsonl
+// so Danny can scroll back through any past conversation forever, independent of
+// the in-memory conversations Map (which doesn't survive restarts).
+const CONVO_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "conversations");
+
+// Per-conversation write mutex: appends for the same conversation chain onto
+// the previous append's promise so concurrent turns can't interleave partial
+// JSONL lines. Entry is deleted once its chain drains, so the Map stays small.
+const transcriptChains = new Map<string, Promise<void>>();
+
+function appendTranscript(
+  conversationId: string,
+  role: "user" | "assistant",
+  content: string,
+  meta?: { toolCalls?: string[]; toolResultsCount?: number }
+): Promise<void> {
+  if (!content || !content.trim()) return Promise.resolve();
+  const prev = transcriptChains.get(conversationId) || Promise.resolve();
+  const next = prev.then(async () => {
+    try {
+      await fs.mkdir(CONVO_DIR, { recursive: true });
+      const file = path.join(CONVO_DIR, `${conversationId}.jsonl`);
+      const line = JSON.stringify({
+        role,
+        content,
+        timestamp: new Date().toISOString(),
+        ...(meta || {}),
+      }) + "\n";
+      await fs.appendFile(file, line, "utf-8");
+    } catch (err) {
+      console.warn("[Transcript] append failed:", (err as Error).message);
+    }
+  });
+  transcriptChains.set(conversationId, next);
+  next.then(() => {
+    // Only delete if no newer append has been chained on since.
+    if (transcriptChains.get(conversationId) === next) {
+      transcriptChains.delete(conversationId);
+    }
+  });
+  return next;
+}
+
+async function listTranscripts(): Promise<Array<{ id: string; turns: number; firstAt: string; lastAt: string; firstUser: string }>> {
+  try {
+    await fs.mkdir(CONVO_DIR, { recursive: true });
+    const files = await fs.readdir(CONVO_DIR);
+    const out: Array<{ id: string; turns: number; firstAt: string; lastAt: string; firstUser: string }> = [];
+    for (const f of files) {
+      if (!f.endsWith(".jsonl")) continue;
+      const id = f.slice(0, -".jsonl".length);
+      const raw = await fs.readFile(path.join(CONVO_DIR, f), "utf-8");
+      const lines = raw.split("\n").filter(Boolean);
+      if (lines.length === 0) continue;
+      try {
+        const first = JSON.parse(lines[0]);
+        const last = JSON.parse(lines[lines.length - 1]);
+        const firstUserLine = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } }).find((m) => m && m.role === "user");
+        out.push({
+          id,
+          turns: lines.length,
+          firstAt: first.timestamp || "",
+          lastAt: last.timestamp || "",
+          firstUser: firstUserLine?.content?.slice(0, 80) || "(no user turn)",
+        });
+      } catch { /* skip malformed file */ }
+    }
+    return out.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  } catch {
+    return [];
+  }
+}
+
+async function readTranscript(conversationId: string): Promise<Array<{ role: string; content: string; timestamp: string }>> {
+  try {
+    const file = path.join(CONVO_DIR, `${conversationId}.jsonl`);
+    const raw = await fs.readFile(file, "utf-8");
+    return raw.split("\n").filter(Boolean).map((l) => {
+      try { return JSON.parse(l); } catch { return null; }
+    }).filter(Boolean) as Array<{ role: string; content: string; timestamp: string }>;
+  } catch {
+    return [];
+  }
+}
 
 const MAX_MESSAGE_LENGTH = 4000;
 const activeAbortControllers = new Map<string, AbortController>();
@@ -44,7 +155,7 @@ const app = Fastify({
 });
 
 await app.register(cors, {
-  origin: [config.corsOrigin, "http://localhost:3000"],
+  origin: [config.corsOrigin, "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:8080"],
   credentials: true,
 });
 await app.register(rateLimit, { max: 60, timeWindow: "1 minute" });
@@ -55,28 +166,63 @@ app.addHook("onRequest", authMiddleware);
 
 await app.register(fridayPhoneRoutes, { prefix: "/api/friday-phone" });
 await app.register(openaiCompatRoutes);
+await app.register(voiceRoutes);
+await app.register(vapiLlmRoutes, { prefix: "/vapi/llm" });
+await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
+await app.register(brainRoutes, { prefix: "/api/brain" });
 
 initializeTools();
+
+// Obsidian brain: index the vault (sub-second at current size), then keep a
+// 5-min incremental rescan running. Non-fatal if the vault is missing.
+initBrain().catch((err) => console.warn("  ⚠ Brain index failed:", (err as Error).message));
+
+// Time-based jobs: 5 AM briefing + 9:30 PM nightly reflection.
+startScheduler();
+
+await initializeMCPClients();
+
+// Heartbeat: proactive monitor wakes every 5 min and queues alerts;
+// alert-delivery polls that queue every 15s and speaks high-priority
+// items via TTS. Quiet hours (11 PM–5 AM) gate everything.
+proactiveMonitor.start();
+startAlertDelivery();
+
+// Touch the singletons so module side-effects fire (load persisted state).
+void learningEngine;
+void permissionManager;
+void marketMonitor;
 
 memoryService.initialize().then((connected) => {
   console.log(connected ? "  ✓ Long-term memory (ChromaDB) connected" : "  ⚠ Running without long-term memory");
 });
 
-try {
-  const syncResult = unifiedMemory.syncWithOpenClaw();
-  console.log(`  ✓ Unified Memory: ${syncResult.imported} imported, ${syncResult.exported} exported`);
-} catch {
-  console.log("  ⚠ Unified Memory: local-only mode");
+// OpenClaw sync is opt-in (OPENCLAW_SYNC=true). Default = local-only memory.
+if (process.env.OPENCLAW_SYNC === "true") {
+  try {
+    const syncResult = unifiedMemory.syncWithOpenClaw();
+    console.log(`  ✓ Unified Memory: ${syncResult.imported} imported, ${syncResult.exported} exported`);
+  } catch {
+    console.log("  ⚠ Unified Memory: local-only mode");
+  }
+} else {
+  console.log("  ✓ Unified Memory: local-only (OPENCLAW_SYNC not enabled)");
 }
 
 // ─── Core endpoints ─────────────────────────────────────────────
 
-app.get("/api/health", async () => ({
-  ok: true,
-  timestamp: new Date().toISOString(),
-  service: "FRIDAY-orchestrator",
-  version: "2.1.0-simple",
-}));
+app.get("/api/health", async () => {
+  const llm = getLLMInfo();
+  return {
+    ok: true,
+    timestamp: new Date().toISOString(),
+    service: "FRIDAY-orchestrator",
+    version: "2.2.0-brain",
+    llm: { provider: llm.provider, model: llm.model, configured: llm.hasKey },
+    tools: toolRegistry.getToolCount(),
+    tts: isTTSAvailable(),
+  };
+});
 
 app.get("/api/tools", async () => {
   const tools = toolRegistry.getAllTools();
@@ -90,6 +236,8 @@ app.get("/api/tools", async () => {
     })),
   };
 });
+
+app.get("/api/mcp/status", async () => getMCPStatus());
 
 app.post("/api/conversations", async () => {
   const c = createConversation();
@@ -113,7 +261,7 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
     const conversation = getOrCreateConversation(conversationId);
     addUserMessage(conversation.id, message);
 
-    const allowedOrigins = [config.corsOrigin, "http://localhost:3000"];
+    const allowedOrigins = [config.corsOrigin, "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:8080"];
     const requestOrigin = request.headers.origin || "";
     const sseOrigin = allowedOrigins.includes(requestOrigin) ? requestOrigin : config.corsOrigin;
     reply.raw.writeHead(200, {
@@ -121,12 +269,24 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
       "Access-Control-Allow-Origin": sseOrigin,
+      // Echo the conversation id so the client can persist it and pass it back
+      // on the next turn. Exposed via CORS so the browser fetch can read it.
+      "X-Conversation-Id": conversation.id,
+      "Access-Control-Expose-Headers": "X-Conversation-Id",
     });
+
+    // Append every user turn to the on-disk transcript for this conversation.
+    // Fire-and-forget — never blocks the chat path.
+    appendTranscript(conversation.id, "user", message).catch(() => {});
 
     const messages = getMessages(conversation.id);
 
-    // Single memory context injection — no router, no agent classifier, no learning engine
-    const memoryContext = "\n\n" + buildFullMemoryContext() + "\n" + unifiedMemory.buildContextForPrompt(message);
+    // Memory context injection: standing memory + cross-agent memory + the
+    // brain's per-message vault recall (local BM25 — free, instant, relevant).
+    const memoryContext =
+      "\n\n" + buildFullMemoryContext() +
+      "\n" + unifiedMemory.buildContextForPrompt(message) +
+      buildBrainContext(message);
 
     const abortController = new AbortController();
     activeAbortControllers.set(conversation.id, abortController);
@@ -185,10 +345,34 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
         toolResults.length > 0 ? toolResults : undefined
       );
 
+      // Append assistant turn (with any tool activity) to on-disk transcript.
+      appendTranscript(conversation.id, "assistant", fullContent, {
+        toolCalls: toolCalls.map((t) => t.name),
+        toolResultsCount: toolResults.length,
+      }).catch(() => {});
+
       // Lightweight memory save — fire and forget
       const summary = `User: ${message.slice(0, 100)} → FRIDAY: ${fullContent.slice(0, 100)}`;
       const keyFacts = toolCalls.length > 0 ? [`Used tools: ${toolCalls.map((t) => t.name).join(", ")}`] : [];
       saveConversationSummary(summary, keyFacts).catch(() => {});
+
+      // Learning engine: record the turn so tool success rates and behavior
+      // patterns accumulate (it persists itself on every record).
+      try {
+        const failures = toolResults.filter((r) => !r.success).length;
+        learningEngine.recordOutcome({
+          action: `Chat: ${message.slice(0, 60)}`,
+          context: message.slice(0, 200),
+          toolsUsed: toolCalls.map((t) => t.name),
+          outcome:
+            toolResults.length === 0 ? "success"
+            : failures === 0 ? "success"
+            : failures === toolResults.length ? "failure"
+            : "partial",
+        });
+      } catch (err) {
+        app.log.warn({ err }, "learning-engine record failed");
+      }
 
       reply.raw.write(`data: ${JSON.stringify({ type: "done", conversationId: conversation.id })}\n\n`);
     } catch (error) {
@@ -200,6 +384,22 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
     }
   }
 );
+
+// List all on-disk conversation transcripts (newest first)
+app.get("/api/conversations", async () => {
+  const transcripts = await listTranscripts();
+  return { conversations: transcripts };
+});
+
+// Read a single conversation transcript
+app.get<{ Params: { id: string } }>("/api/conversations/:id", async (request, reply) => {
+  const turns = await readTranscript(request.params.id);
+  if (turns.length === 0) {
+    reply.code(404);
+    return { error: "Conversation not found" };
+  }
+  return { id: request.params.id, turns };
+});
 
 app.post<{ Body: { conversationId?: string } }>("/api/stop", async (request) => {
   const { conversationId } = request.body || {};
@@ -280,15 +480,31 @@ app.post<{ Body: { text: string } }>(
   }
 );
 
-app.get("/api/tts/status", async () => ({
-  available: isTTSAvailable(),
-  provider: "elevenlabs",
-  voice: config.elevenlabs.voiceId,
-}));
+app.get("/api/tts/status", async () => {
+  // Resolved per request from the voice registry — reflects switch_voice live.
+  const activeVoice = getActiveVoice();
+  return {
+    available: isTTSAvailable(),
+    provider: "elevenlabs",
+    voice: activeVoice.voiceId,
+    persona: activeVoice.persona,
+    personaName: activeVoice.displayName,
+  };
+});
 
 // ─── Housekeeping ───────────────────────────────────────────────
 
-setInterval(() => cleanupOldConversations(24 * 60 * 60 * 1000), 60 * 60 * 1000);
+// Guard against overlapping runs if cleanup ever becomes slow/async.
+let cleanupRunning = false;
+setInterval(() => {
+  if (cleanupRunning) return;
+  cleanupRunning = true;
+  try {
+    cleanupOldConversations(24 * 60 * 60 * 1000);
+  } finally {
+    cleanupRunning = false;
+  }
+}, 60 * 60 * 1000);
 
 const start = async () => {
   try {
@@ -317,7 +533,15 @@ const start = async () => {
   }
 };
 
-process.on("SIGINT", () => process.exit(0));
-process.on("SIGTERM", () => process.exit(0));
+async function gracefulShutdown(): Promise<void> {
+  stopScheduler();
+  stopBrain();
+  stopAlertDelivery();
+  await shutdownMCPClients();
+  process.exit(0);
+}
+
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);
 
 start();

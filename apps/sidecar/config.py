@@ -49,9 +49,9 @@ CONVERSATION_TIMEOUT = 60     # seconds of silence before returning to sleep
 # ─── Models ───────────────────────────────────────────────────
 GEMINI_VISION_MODEL = "gemini-2.5-flash"          # scene analysis, free tier
 GROQ_TEXT_MODEL = "llama-3.3-70b-versatile"       # nag + greeting text gen
-# Legacy Anthropic model IDs — kept for fallback path only
-CLAUDE_MODEL = "claude-sonnet-4-20250514"
-CLAUDE_HAIKU = "claude-haiku-4-5-20241022"
+# Anthropic model IDs — fallback path only
+CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_HAIKU = "claude-haiku-4-5-20251001"
 
 # ─── Paths ────────────────────────────────────────────────────
 SIDECAR_DIR = Path(__file__).parent

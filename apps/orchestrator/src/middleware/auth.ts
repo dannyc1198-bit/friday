@@ -88,6 +88,27 @@ function safeCompare(a: string, b: string): boolean {
 
 // ─── Middleware ──────────────────────────────────────────────────
 
+// HUD read-only endpoints — safe to expose to same-origin localhost without auth.
+// These are GET-only reads that the dashboard polls every few seconds; requiring
+// the bearer on every poll just floods the console with 401s. The orchestrator
+// binds to 127.0.0.1 (FRIDAY_BIND_HOST), so an unauthed GET from 127.0.0.1 is
+// the user's own browser. Mutating endpoints still require auth.
+const LOCALHOST_READ_PREFIXES = [
+  "/api/system/",
+  "/api/agents/",
+  "/api/learning/",
+  "/api/proactive/",
+  "/api/market/",
+  "/api/memory/stats",
+  "/api/tools",
+  "/api/conversations",
+];
+
+function isLocalhost(request: FastifyRequest): boolean {
+  const ip = request.ip || request.socket?.remoteAddress || "";
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
 export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
@@ -109,6 +130,29 @@ export async function authMiddleware(
     return;
   }
   if (path.startsWith("/api/friday-phone")) {
+    return;
+  }
+
+  // Allow VAPI custom LLM calls — VAPI doesn't send our auth token
+  if (path.startsWith("/vapi/llm")) {
+    return;
+  }
+
+  // Live voice WebSocket upgrade — browsers can't attach Authorization headers
+  // to `new WebSocket()` calls. Orchestrator binds to 127.0.0.1 by default, so
+  // the local-loopback origin is the trust boundary (same as the HUD GET reads
+  // below). If you ever bind to a public interface, gate this on isLocalhost().
+  if (path === "/v1/voice" && isLocalhost(request)) {
+    return;
+  }
+
+  // Allow same-machine HUD reads on whitelisted prefixes.
+  // Method must be GET (no mutations); IP must be local loopback.
+  if (
+    request.method === "GET" &&
+    isLocalhost(request) &&
+    LOCALHOST_READ_PREFIXES.some((p) => path.startsWith(p))
+  ) {
     return;
   }
 

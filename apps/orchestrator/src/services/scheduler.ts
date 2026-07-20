@@ -1,9 +1,10 @@
 // Scheduler — tiny cron-less scheduler for FRIDAY's time-based events
 //
 // Checks once per minute:
-//   - 5 AM local time → fire morning briefing (once per day, even across restarts)
+//   - 5 AM local time  → fire morning briefing (once per day, even across restarts)
+//   - 9:30 PM local    → nightly brain reflection (distill the day into the vault)
 //
-// Persistence: data/scheduler-state.json holds { lastBriefingDate: "YYYY-MM-DD" }
+// Persistence: data/scheduler-state.json holds last-fired dates per job.
 // Quiet hours (23:00–05:00) are respected for everything EXCEPT the 5 AM wake.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
@@ -11,6 +12,7 @@ import { join } from "path";
 import { proactiveMonitor } from "./proactive-monitor.js";
 import { getMorningBriefing } from "./morning-briefing.js";
 import { textToSpeech, isTTSAvailable } from "./tts.js";
+import { runReflection } from "./reflection.js";
 
 const USER_HOME = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368";
 const DATA_DIR = join(USER_HOME, "jarvis", "apps", "orchestrator", "data");
@@ -18,12 +20,15 @@ const STATE_FILE = join(DATA_DIR, "scheduler-state.json");
 
 const CHECK_INTERVAL_MS = 60 * 1000; // every minute
 const BRIEFING_HOUR = 5;             // 5 AM local time
+const REFLECTION_HOUR = 21;          // 9 PM local
+const REFLECTION_MINUTE = 30;        // ...:30 — after gym, before quiet hours
 
 const QUIET_HOUR_START = 23;
 const QUIET_HOUR_END = 5;
 
 interface SchedulerState {
-  lastBriefingDate: string | null; // YYYY-MM-DD
+  lastBriefingDate: string | null;   // YYYY-MM-DD
+  lastReflectionDate?: string | null; // YYYY-MM-DD
 }
 
 // ─── State persistence ───────────────────────────────────────────
@@ -105,6 +110,7 @@ async function fireMorningBriefing(): Promise<void> {
 async function tick(): Promise<void> {
   const now = new Date();
   const hour = now.getHours();
+  const minute = now.getMinutes();
   const state = loadState();
   const today = todayKey(now);
 
@@ -113,6 +119,29 @@ async function tick(): Promise<void> {
     await fireMorningBriefing();
     state.lastBriefingDate = today;
     saveState(state);
+  }
+
+  // 9:30 PM nightly reflection — distill today into the Obsidian brain.
+  // "Once per day" guard persists across restarts; window is >= :30 so a
+  // restart at 9:45 still reflects that night.
+  if (
+    hour === REFLECTION_HOUR &&
+    minute >= REFLECTION_MINUTE &&
+    state.lastReflectionDate !== today
+  ) {
+    state.lastReflectionDate = today; // claim BEFORE the slow LLM call — no double-fire
+    saveState(state);
+    const result = await runReflection(today);
+    if (result.ran) {
+      proactiveMonitor.queueAlert({
+        type: "system",
+        priority: "low",
+        title: "Nightly Reflection",
+        message: `Brain updated: ${result.factsAdded} new fact(s) learned today. ${result.summary || ""}`.trim(),
+      });
+    } else if (result.error) {
+      console.warn(`[Scheduler] Reflection errored (will retry tomorrow): ${result.error}`);
+    }
   }
 }
 

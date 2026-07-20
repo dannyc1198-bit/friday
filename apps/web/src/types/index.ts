@@ -1,11 +1,21 @@
 export type Role = "user" | "assistant";
 
+// One tool invocation inside an assistant turn — rendered as a cognition
+// chip in the chat ("🧠 RECALL", "✎ REMEMBER → Abe", "⚙ browser_open").
+export interface ToolActivity {
+  id: string;
+  tool: string;
+  detail?: string; // short human label derived from parameters (query, entity…)
+  status: "running" | "done" | "error";
+}
+
 export interface Message {
   id: string;
   role: Role;
   content: string;
   timestamp: Date;
   isStreaming?: boolean;
+  activity?: ToolActivity[];
 }
 
 export interface Conversation {
@@ -22,6 +32,35 @@ export interface HealthResponse {
   ok: boolean;
   timestamp: string;
   version: string;
+  llm?: { provider: string; model: string; configured: boolean };
+  tools?: number;
+  tts?: boolean;
+}
+
+// ─── Brain (the Obsidian mind) ──────────────────────────────
+
+export interface BrainStatus {
+  notes: number;
+  chunks: number;
+  entities: number;
+  lastIndexed: string | null;
+  vaultPath: string;
+  reflection: {
+    lastDate: string | null;
+    lastRunAt: string | null;
+    lastSummary: string;
+    lastFactsAdded: number;
+    lastError: string | null;
+  };
+}
+
+export interface BrainLearning {
+  at: string;
+  entity: string;
+  type: string;
+  observation: string;
+  category: string;
+  source: "chat" | "reflection" | "manual";
 }
 
 export interface ChatRequest {

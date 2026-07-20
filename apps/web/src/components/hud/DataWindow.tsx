@@ -9,6 +9,8 @@ interface DataWindowProps {
   status?: "online" | "offline" | "warning" | "loading";
   className?: string;
   compact?: boolean;
+  /** When set, renders an "expand" icon in the header that opens /hud/{popoutPath} in a new tab. */
+  popoutPath?: string;
 }
 
 const statusConfig = {
@@ -25,6 +27,7 @@ export function DataWindow({
   status = "online",
   className = "",
   compact = false,
+  popoutPath,
 }: DataWindowProps) {
   const { color, label } = statusConfig[status];
 
@@ -42,6 +45,22 @@ export function DataWindow({
           </span>
         </div>
         <div className="flex items-center gap-1.5">
+          {popoutPath && (
+            <a
+              href={`/hud/${popoutPath}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`Open ${title} in new tab`}
+              className="text-[#5a8aaa] hover:text-[#00dcff] transition-colors opacity-0 group-hover:opacity-100"
+              aria-label={`Pop out ${title}`}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 3h6v6" />
+                <path d="M10 14L21 3" />
+                <path d="M21 14v7H3V3h7" />
+              </svg>
+            </a>
+          )}
           <div
             className="w-1.5 h-1.5 rounded-full"
             style={{

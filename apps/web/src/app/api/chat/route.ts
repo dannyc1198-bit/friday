@@ -1,7 +1,22 @@
 import { NextRequest } from "next/server";
 
-// Orchestrator API URL (use environment variable in production)
+// Chat proxy — forwards the orchestrator's structured SSE to the browser.
+//
+// The old version flattened everything to plain text, which destroyed the
+// tool_call / tool_result events — the window could never show WHAT FRIDAY
+// was doing (recalling, remembering, browsing). Now events pass through
+// verbatim as SSE lines and useChat renders them as cognition chips.
+//
+// Event shapes (orchestrator → browser, one JSON per `data:` line):
+//   {type:"text", content}
+//   {type:"tool_call", tool, parameters}
+//   {type:"tool_result", tool, result, success}
+//   {type:"error", content}
+//   {type:"done", conversationId}
+
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:3001";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   const { message, conversationId } = await request.json();
@@ -10,91 +25,41 @@ export async function POST(request: NextRequest) {
     return new Response("Message is required", { status: 400 });
   }
 
-  // Try to connect to orchestrator
   try {
     const orchestratorResponse = await fetch(`${ORCHESTRATOR_URL}/api/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.FRIDAY_API_KEY || ""}`,
       },
       body: JSON.stringify({ message, conversationId }),
     });
 
-    if (!orchestratorResponse.ok) {
+    if (!orchestratorResponse.ok || !orchestratorResponse.body) {
       throw new Error(`Orchestrator returned ${orchestratorResponse.status}`);
     }
 
-    // Transform SSE from orchestrator to plain text stream for frontend
-    const reader = orchestratorResponse.body?.getReader();
-    if (!reader) {
-      throw new Error("No response body from orchestrator");
-    }
-
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          let buffer = "";
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? ""; // keep incomplete last line for next chunk
-
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  if (data.type === "text" && data.content) {
-                    controller.enqueue(encoder.encode(data.content));
-                  } else if (data.type === "tool_result" && data.result?.message) {
-                    controller.enqueue(encoder.encode(`\n\n✓ ${data.result.message}\n\n`));
-                  } else if (data.type === "error") {
-                    controller.enqueue(encoder.encode(`\n\n⚠ Error: ${data.content}\n`));
-                  }
-                } catch (parseErr) {
-                  console.error("[chat/route] Malformed SSE data line:", line);
-                }
-              }
-            }
-          }
-          controller.close();
-        } catch (error) {
-          controller.error(error);
-        }
-      },
-    });
-
-    return new Response(stream, {
+    // Pass the SSE body through untouched — parsing happens client-side in
+    // useChat, which is the only consumer.
+    const convId = orchestratorResponse.headers.get("X-Conversation-Id");
+    return new Response(orchestratorResponse.body, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Transfer-Encoding": "chunked",
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        ...(convId ? { "X-Conversation-Id": convId } : {}),
       },
     });
   } catch (error) {
-    // Tell the user the truth — don't mask a broken backend with fake responses
     console.error("[chat/route] Orchestrator connection failed:", error);
-
-    const errorMessage = "I'm having trouble connecting to my core systems, sir. " +
-      "The orchestrator may be down or unreachable. " +
-      "Please check that it is running on port 3001.";
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(errorMessage));
-        controller.close();
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-      },
+    // Same SSE shape as the happy path so the client parser handles it.
+    const payload =
+      `data: ${JSON.stringify({
+        type: "error",
+        content:
+          "I can't reach my core systems, boss — the orchestrator on port 3001 looks down. Start it and try me again.",
+      })}\n\n` + `data: ${JSON.stringify({ type: "done" })}\n\n`;
+    return new Response(payload, {
+      headers: { "Content-Type": "text/event-stream" },
     });
   }
 }

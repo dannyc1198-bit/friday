@@ -1,18 +1,21 @@
 /**
  * Text-to-Speech Service — ElevenLabs Integration
  *
- * Voice: Rachel (21m00Tcm4TlvDq8ikWAM) — Female, calm, professional (FRIDAY)
- * Model: eleven_v3
+ * Voice: resolved per call from services/voice-registry.ts — switchable
+ * between JARVIS (Daniel) and FRIDAY (Rachel) via the switch_voice tool.
+ * ELEVENLABS_VOICE_ID env still wins globally if set (legacy override).
+ * Model: eleven_flash_v2_5
  * Fallback: returns null → frontend uses browser speechSynthesis
  */
 
-import { config } from "../config/index.js";
-
-// ElevenLabs configuration
-const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
-const MODEL_ID = "eleven_v3";
+import { getActiveVoice } from "./voice-registry.js";
+// Flash v2.5 generates audio at ~75ms time-to-first-byte vs eleven_v3's
+// ~800ms+. This is the ChatGPT-Advanced-Voice-class model for latency.
+// optimize_streaming_latency=4 is the most aggressive streaming preset.
+const MODEL_ID = "eleven_flash_v2_5";
 const API_BASE = "https://api.elevenlabs.io/v1";
-const TTS_TIMEOUT = 15_000; // 15 seconds max per build spec
+const STREAM_LATENCY = 4;
+const TTS_TIMEOUT = 15_000;
 
 interface TTSOptions {
   stability?: number;
@@ -89,13 +92,14 @@ export async function textToSpeech(
   const truncated = cleaned.length > 5000 ? cleaned.slice(0, 5000) + "..." : cleaned;
 
   const opts = { ...DEFAULT_OPTIONS, ...options };
+  const { voiceId } = getActiveVoice(); // resolved per call — switchable at runtime
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TTS_TIMEOUT);
 
     const response = await fetch(
-      `${API_BASE}/text-to-speech/${VOICE_ID}/stream`,
+      `${API_BASE}/text-to-speech/${voiceId}/stream?optimize_streaming_latency=${STREAM_LATENCY}&output_format=mp3_22050_32`,
       {
         method: "POST",
         headers: {
@@ -154,13 +158,14 @@ export async function streamTextToSpeech(
 
   const truncated = cleaned.length > 5000 ? cleaned.slice(0, 5000) + "..." : cleaned;
   const opts = { ...DEFAULT_OPTIONS, ...options };
+  const { voiceId } = getActiveVoice(); // resolved per call — switchable at runtime
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TTS_TIMEOUT);
 
     const response = await fetch(
-      `${API_BASE}/text-to-speech/${VOICE_ID}/stream`,
+      `${API_BASE}/text-to-speech/${voiceId}/stream?optimize_streaming_latency=${STREAM_LATENCY}&output_format=mp3_22050_32`,
       {
         method: "POST",
         headers: {

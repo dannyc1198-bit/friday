@@ -60,9 +60,14 @@ class KitchenNagger:
             raise RuntimeError("GEMINI_API_KEY missing — add it to apps/orchestrator/.env")
         self._gemini = genai.Client(api_key=GEMINI_API_KEY)
 
-        if not GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY missing — add it to apps/orchestrator/.env")
-        self._text = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+        # Groq is only needed for nag-text generation. Vision scene analysis still
+        # works without it. Defer the hard fail to the moment text-gen is actually
+        # invoked, so the camera-tile-only path boots without a Groq key.
+        if GROQ_API_KEY:
+            self._text = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+        else:
+            self._text = None
+            log.warning("GROQ_API_KEY missing — nag text generation disabled, vision-only mode")
 
     def analyze_scene(self, frame_bytes: bytes, identity: str | None = None) -> dict:
         """
@@ -145,6 +150,12 @@ What's messy: {analysis.get('mess_description', '')}
 Tasks:
 {tasks}
 Rules: SHORT, specific items, one action to do RIGHT NOW, ADHD-friendly, never mean."""
+
+        if self._text is None:
+            # Vision-only mode: emit a static nag derived from the analysis.
+            # Groq key absent → no LLM-generated text. Keeps the route functional.
+            top_task = (analysis.get("cleanup_tasks") or ["Tidy up the kitchen"])[0]
+            return f"Danny — {top_task}. ({level})"
 
         resp = self._text.chat.completions.create(
             model=GROQ_TEXT_MODEL,

@@ -159,7 +159,7 @@ export function BusinessPanel() {
   }, []);
 
   return (
-    <DataWindow title="Revenue Intel" icon={<BarChart3 className="w-4 h-4" />} status="online" compact>
+    <DataWindow title="Revenue Intel" icon={<BarChart3 className="w-4 h-4" />} status="online" compact popoutPath="revenue-intel">
       <motion.div
         className="space-y-3"
         initial={{ opacity: 0, y: 12 }}

@@ -13,6 +13,12 @@ interface UsePushToTalkOptions {
   autoSubmitDelay?: number;
   /** Whether the hook is active */
   enabled?: boolean;
+  /**
+   * Web Speech `continuous` flag.
+   * `true`  → mic stays open until manually stopped (hold-to-talk).
+   * `false` → recognition auto-ends on natural silence (live voice mode).
+   */
+  continuous?: boolean;
 }
 
 interface UsePushToTalkReturn {
@@ -20,6 +26,8 @@ interface UsePushToTalkReturn {
   isTranscribing: boolean;
   sttMethod: STTMethod;
   error: string | null;
+  /** Live partial transcript while user is speaking (Web Speech API only) */
+  interimTranscript: string;
   /** Manually start listening (for button-based activation) */
   startListening: () => void;
   /** Manually stop listening */
@@ -39,11 +47,13 @@ export function usePushToTalk({
   hotkey = "`",
   autoSubmitDelay = 1500,
   enabled = true,
+  continuous = true,
 }: UsePushToTalkOptions): UsePushToTalkReturn {
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [sttMethod, setSTTMethod] = useState<STTMethod>("none");
   const [error, setError] = useState<string | null>(null);
+  const [interimTranscript, setInterimTranscript] = useState("");
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const transcriptRef = useRef<string>("");
@@ -76,7 +86,7 @@ export function usePushToTalk({
     if (!SpeechRecognition) return null;
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;
+    recognition.continuous = continuous;
     recognition.interimResults = true;
     recognition.lang = "en-US";
     recognition.maxAlternatives = 1;
@@ -95,12 +105,22 @@ export function usePushToTalk({
       }
 
       transcriptRef.current = finalTranscript || interimTranscript;
+      // Surface live partial text so UIs can render "what the user is saying"
+      // in real time. Cleared on recognition end below.
+      setInterimTranscript(finalTranscript ? "" : interimTranscript);
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       if (event.error === "not-allowed") {
         setError("Microphone access denied. Please allow mic access in browser settings.");
-      } else if (event.error !== "aborted") {
+      } else if (event.error === "no-speech" || event.error === "aborted") {
+        // Silent — these are normal in live mode:
+        // "no-speech" fires when user stays quiet (silence timeout)
+        // "aborted" fires when we explicitly call stop()
+        // The auto-rearm effect in useVoice will restart the mic.
+      } else if (event.error === "audio-capture") {
+        setError("No microphone detected. Plug one in and refresh.");
+      } else {
         setError(`Speech recognition error: ${event.error}`);
       }
       setIsListening(false);
@@ -121,10 +141,11 @@ export function usePushToTalk({
         }, 200);
       }
       setIsListening(false);
+      setInterimTranscript("");
     };
 
     return recognition;
-  }, [onTranscript]);
+  }, [onTranscript, continuous]);
 
   const startListening = useCallback(() => {
     if (!enabled || isListening) return;
@@ -210,6 +231,7 @@ export function usePushToTalk({
     isTranscribing,
     sttMethod,
     error,
+    interimTranscript,
     startListening,
     stopListening,
   };

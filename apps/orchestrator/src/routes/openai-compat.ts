@@ -6,7 +6,7 @@
 //   GET  /v1/models                      — discovery, returns FRIDAY's catalog
 //   POST /v1/chat/completions            — streaming + non-streaming
 //
-// Direct call into streamChatCompletion (Claude Sonnet 4.6 + prompt caching).
+// Direct call into streamChatCompletion (Claude Haiku 4.5).
 // Router layer was removed in the simple-friday amputation.
 
 import type { FastifyInstance, FastifyReply } from "fastify";

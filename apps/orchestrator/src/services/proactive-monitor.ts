@@ -315,17 +315,15 @@ class ProactiveMonitor {
   // ── Check: Email via OpenClaw (graceful if offline) ──────────────
 
   private async checkEmailViaOpenClaw(now: number): Promise<void> {
+    // OpenClaw decoupled 2026-04-25 — re-wire to a different Gmail source when FRIDAY is unshelved.
     const state = this.checkStates.email;
     if (now - state.lastRun < CHECK_INTERVAL_MS) return;
     state.lastRun = now;
+    return;
 
-    if (!config.openclaw.token || !config.openclaw.baseUrl) return;
-
+    // Dead code below kept as reference for re-wiring; remove when replaced.
     try {
-      const res = await fetch(`${config.openclaw.baseUrl}/api/gmail/unread-count`, {
-        headers: { Authorization: `Bearer ${config.openclaw.token}` },
-        signal: AbortSignal.timeout(8000),
-      });
+      const res = await fetch(``, { signal: AbortSignal.timeout(8000) });
 
       if (!res.ok) return;
 

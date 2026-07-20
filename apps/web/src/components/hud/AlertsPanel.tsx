@@ -57,10 +57,10 @@ const bgFlash = {
 /* ── Default Alerts ───────────────────────────────────────── */
 const DEFAULT_ALERTS: Alert[] = [
   { id: "boot-1", type: "success", message: "FRIDAY online. All systems nominal.", timestamp: Date.now() - 2000 },
-  { id: "boot-2", type: "info", message: "Morning briefing compiled. 3 action items.", timestamp: Date.now() - 60000 },
-  { id: "boot-3", type: "info", message: "21 leads loaded into pipeline.", timestamp: Date.now() - 120000 },
-  { id: "boot-4", type: "warning", message: "ElevenLabs API key missing. Voice degraded.", timestamp: Date.now() - 300000 },
-  { id: "boot-5", type: "info", message: "DanClaw mesh: 8 agents connected.", timestamp: Date.now() - 600000 },
+  { id: "boot-2", type: "success", message: "Gemini 2.5 Flash brain connected.", timestamp: Date.now() - 30000 },
+  { id: "boot-3", type: "success", message: "Lily voice (ElevenLabs) ready.", timestamp: Date.now() - 60000 },
+  { id: "boot-4", type: "info", message: "Sidecar vision feed live on :3002.", timestamp: Date.now() - 120000 },
+  { id: "boot-5", type: "info", message: "50 tools registered, ready to dispatch.", timestamp: Date.now() - 300000 },
 ];
 
 /* ── Simulated new alerts ─────────────────────────────────── */
@@ -136,7 +136,7 @@ export function AlertsPanel({ alerts: propAlerts }: { alerts?: Alert[] }) {
   }, [alerts.length]);
 
   return (
-    <DataWindow title="Activity Feed" icon={<Bell className="w-4 h-4" />} status="online" compact>
+    <DataWindow title="Activity Feed" icon={<Bell className="w-4 h-4" />} status="online" compact popoutPath="activity-feed">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

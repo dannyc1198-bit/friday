@@ -234,6 +234,11 @@ def scan_loop(args):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Sidecar API starting...")
+    # Start the camera capture loop. Required for /api/frame to return frames;
+    # without this, the CLI daemon path is the only one that ever called start(),
+    # so uvicorn-launched servers had a permanently-empty frame buffer.
+    if camera_enabled:
+        camera.start("webcam", 0)
     yield
     log.info("Sidecar API shutting down...")
     camera.stop()

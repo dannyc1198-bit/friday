@@ -5,7 +5,7 @@ const ORCHESTRATOR = process.env.ORCHESTRATOR_URL || "http://localhost:3001";
 export async function GET() {
   try {
     const res = await fetch(`${ORCHESTRATOR}/api/briefing/morning`, {
-      headers: { Authorization: `Bearer ${process.env.JARVIS_API_KEY || ""}` },
+      headers: { Authorization: `Bearer ${process.env.FRIDAY_API_KEY || ""}` },
       next: { revalidate: 0 },
     });
 

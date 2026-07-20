@@ -17,7 +17,10 @@ export async function POST(request: NextRequest) {
   try {
     const response = await fetch(`${ORCHESTRATOR_URL}/api/tts`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.FRIDAY_API_KEY || ""}`,
+      },
       body: JSON.stringify({ text }),
     });
 
@@ -59,7 +62,9 @@ export async function POST(request: NextRequest) {
  */
 export async function GET() {
   try {
-    const response = await fetch(`${ORCHESTRATOR_URL}/api/tts/status`);
+    const response = await fetch(`${ORCHESTRATOR_URL}/api/tts/status`, {
+      headers: { Authorization: `Bearer ${process.env.FRIDAY_API_KEY || ""}` },
+    });
     const data = await response.json();
     return NextResponse.json(data);
   } catch {

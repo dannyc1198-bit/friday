@@ -9,7 +9,7 @@ export async function DELETE(
   try {
     await fetch(`${ORCHESTRATOR}/api/proactive/alerts/${params.id}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${process.env.JARVIS_API_KEY || ""}` },
+      headers: { Authorization: `Bearer ${process.env.FRIDAY_API_KEY || ""}` },
     });
   } catch { /* ignore */ }
   return NextResponse.json({ ok: true });

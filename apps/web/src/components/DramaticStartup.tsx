@@ -461,7 +461,7 @@ export function DramaticStartup({ onComplete }: DramaticStartupProps) {
 
     const fridayFull = "F.R.I.D.A.Y. ONLINE";
     const subtitleFull = "Female Replacement Intelligent Digital Assistant Youth";
-    const greetingFull = "Good morning, boss. All systems operational.";
+    const greetingFull = "Hello Danny. All systems operational.";
     const intervals: ReturnType<typeof setInterval>[] = [];
 
     let idx = 0;

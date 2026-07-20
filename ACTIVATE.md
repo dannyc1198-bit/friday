@@ -9,7 +9,7 @@ curl https://api.anthropic.com/v1/messages \
   -H "x-api-key: $(grep ANTHROPIC_API_KEY apps/orchestrator/.env | cut -d= -f2)" \
   -H "anthropic-version: 2023-06-01" \
   -H "content-type: application/json" \
-  -d '{"model":"claude-sonnet-4-6","max_tokens":8,"messages":[{"role":"user","content":"ping"}]}'
+  -d '{"model":"claude-haiku-4-5-20251001","max_tokens":8,"messages":[{"role":"user","content":"ping"}]}'
 ```
 
 **Expected:** a JSON body with `content: [{type: "text", text: "..."}]`.

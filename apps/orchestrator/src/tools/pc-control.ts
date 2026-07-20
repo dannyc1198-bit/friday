@@ -796,6 +796,12 @@ const getMousePositionTool: Tool = {
 
 // ─── Registration ────────────────────────────────────────────
 
+// Frozen 2026-07-09: coordinate-based mouse control is blind actuation —
+// the LLM has no vision loop to know where to click, so these tools only
+// ever produced random clicks on the real desktop. Flip to true once a
+// screenshot→look→click loop exists.
+const ENABLE_MOUSE_TOOLS = false;
+
 export function registerPcControlTools(): void {
   // System (6)
   toolRegistry.register(openAppTool);
@@ -811,9 +817,11 @@ export function registerPcControlTools(): void {
   toolRegistry.register(keyComboTool);
   toolRegistry.register(typeTextTool);
 
-  // Mouse (4)
-  toolRegistry.register(mouseMoveTool);
-  toolRegistry.register(mouseClickTool);
-  toolRegistry.register(mouseScrollTool);
-  toolRegistry.register(getMousePositionTool);
+  // Mouse (4) — frozen, see ENABLE_MOUSE_TOOLS above
+  if (ENABLE_MOUSE_TOOLS) {
+    toolRegistry.register(mouseMoveTool);
+    toolRegistry.register(mouseClickTool);
+    toolRegistry.register(mouseScrollTool);
+    toolRegistry.register(getMousePositionTool);
+  }
 }

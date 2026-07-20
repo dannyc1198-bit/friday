@@ -64,12 +64,6 @@
         "command": "claude",
         "cwd": "C:/Users/12368/JARVIS",
         "window": "minimized"
-      },
-      {
-        "name": "OpenClaw",
-        "command": "openclaw status",
-        "cwd": "C:/Users/12368/.openclaw/workspace",
-        "window": "minimized"
       }
     ]
   },

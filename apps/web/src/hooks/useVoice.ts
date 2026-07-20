@@ -26,14 +26,20 @@ interface UseVoiceReturn {
   isSpeaking: boolean;
   /** TTS is muted (M key or button toggle) */
   isMuted: boolean;
+  /** Live voice mode — continuous turn-taking conversation */
+  isLiveMode: boolean;
   /** Which STT method is active */
   sttMethod: STTMethod;
   /** Whether ElevenLabs TTS is available */
   ttsAvailable: boolean | null;
   /** Last voice error */
   error: string | null;
+  /** Live partial transcript while the user is speaking */
+  interimTranscript: string;
   /** Toggle mute on/off */
   toggleMute: () => void;
+  /** Toggle live voice mode on/off */
+  toggleLiveMode: () => void;
   /** Manually start listening */
   startListening: () => void;
   /** Manually stop listening */
@@ -46,6 +52,11 @@ interface UseVoiceReturn {
 
 const MUTE_STORAGE_KEY = "JARVIS-voice-muted";
 const TTS_MAX_LENGTH = 5000;
+
+// Breathing room between FRIDAY finishing and the mic re-arming in live mode.
+// Too short → feels twitchy and clips your "uh, actually..." moment.
+// Too long → conversation feels laggy.
+const LIVE_REARM_DELAY_MS = 600;
 
 // ─── Hook ───────────────────────────────────────────────────
 
@@ -64,6 +75,7 @@ export function useVoice({
 }: UseVoiceOptions): UseVoiceReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(false);
   const [ttsAvailable, setTtsAvailable] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,13 +84,23 @@ export function useVoice({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const synthUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const prevIsLoadingRef = useRef(isLoading);
+  const prevIsSpeakingRef = useRef(false);
+  const rearmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Push-to-talk integration ───────────────────────────
-
+  // Live mode uses `continuous: false` so the API auto-ends on silence
+  // and we can rearm after FRIDAY's response. Hold-to-talk needs `true`
+  // so brief pauses don't end the recognition mid-sentence.
   const ptt = usePushToTalk({
     onTranscript,
     enabled,
+    continuous: !isLiveMode,
   });
+
+  // Stable handle to ptt for use in effects without triggering re-runs
+  // every time usePushToTalk's return identity changes.
+  const pttRef = useRef(ptt);
+  pttRef.current = ptt;
 
   // ─── Mute state (localStorage persistence) ──────────────
 
@@ -162,10 +184,13 @@ export function useVoice({
     utterance.pitch = 0.9;
     utterance.volume = 1.0;
 
-    // Try to find a British English voice
+    // Prefer a young British female voice (matches Lily, the ElevenLabs primary).
+    // Browser TTS is only a fallback — when ElevenLabs is reachable, this never
+    // runs. Heuristic: name contains "female" / known female names, en-GB lang.
     const voices = window.speechSynthesis.getVoices();
+    const FEMALE_HINTS = ["female", "lily", "libby", "sonia", "abbi", "olivia", "amy", "hazel", "kate"];
     const britishVoice = voices.find(
-      (v) => v.lang === "en-GB" && v.name.toLowerCase().includes("male")
+      (v) => v.lang === "en-GB" && FEMALE_HINTS.some((h) => v.name.toLowerCase().includes(h))
     ) || voices.find(
       (v) => v.lang === "en-GB"
     ) || voices.find(
@@ -230,6 +255,21 @@ export function useVoice({
     stopSpeaking();
   }, [stopSpeaking]);
 
+  const toggleLiveMode = useCallback(() => {
+    setIsLiveMode((prev) => {
+      const next = !prev;
+      // Exiting live mode → cancel any pending rearm + stop active recognition
+      if (!next) {
+        if (rearmTimerRef.current) {
+          clearTimeout(rearmTimerRef.current);
+          rearmTimerRef.current = null;
+        }
+        if (pttRef.current.isListening) pttRef.current.stopListening();
+      }
+      return next;
+    });
+  }, []);
+
   // ─── M key mute toggle ─────────────────────────────────
 
   useEffect(() => {
@@ -279,6 +319,46 @@ export function useVoice({
     }
   }, [ptt.isListening, isSpeaking, stopSpeaking]);
 
+  // ─── Live voice mode: keep mic always armed ─────────────
+  // Single unified effect — replaces the old "kick off first turn" + "re-arm
+  // after speaking" pair. Watches every state that should gate the mic, and
+  // re-arms whenever the mic is idle and conditions are right. This handles:
+  //   - Initial activation (rising edge of isLiveMode)
+  //   - Re-arm after FRIDAY finishes speaking
+  //   - Re-arm after silence timeout (Chrome auto-ends recognition after ~60s)
+  //   - Re-arm after error recovery (no-speech, aborted)
+  // Mute state is intentionally NOT a guard — mute means "don't speak to me",
+  // not "don't listen to me". Mic stays on so the user can resume by speaking.
+  useEffect(() => {
+    if (!isLiveMode || !enabled) return;
+    if (ptt.isListening || isSpeaking || isLoading) return;
+
+    if (rearmTimerRef.current) clearTimeout(rearmTimerRef.current);
+    rearmTimerRef.current = setTimeout(() => {
+      rearmTimerRef.current = null;
+      // Re-check guards at fire time — state may have shifted during the delay
+      if (
+        isLiveMode &&
+        enabled &&
+        !pttRef.current.isListening &&
+        !isSpeaking &&
+        !isLoading
+      ) {
+        pttRef.current.startListening();
+      }
+    }, LIVE_REARM_DELAY_MS);
+  }, [isLiveMode, enabled, ptt.isListening, isSpeaking, isLoading]);
+
+  // ─── Cleanup pending rearm timer on unmount ─────────────
+  useEffect(() => {
+    return () => {
+      if (rearmTimerRef.current) {
+        clearTimeout(rearmTimerRef.current);
+        rearmTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // ─── Cleanup ────────────────────────────────────────────
 
   useEffect(() => {
@@ -300,10 +380,13 @@ export function useVoice({
     isTranscribing: ptt.isTranscribing,
     isSpeaking,
     isMuted,
+    isLiveMode,
     sttMethod: ptt.sttMethod,
     ttsAvailable,
     error: error || ptt.error,
+    interimTranscript: ptt.interimTranscript,
     toggleMute,
+    toggleLiveMode,
     startListening: ptt.startListening,
     stopListening: ptt.stopListening,
     stopSpeaking,

@@ -1,9 +1,9 @@
 // Memory Loader — Loads all persistent memory sources into the LLM context
-// Sources: MASTER_MEMORY.md, project state, conversation summaries, behavioral patterns
+// Sources: Obsidian FRIDAY_BRAIN/, project state, conversation summaries, behavioral patterns
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
 import { readFile, writeFile, mkdir } from "fs/promises";
-import { join, dirname } from "path";
+import { join, dirname, basename } from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,70 +12,58 @@ const __dirname = dirname(__filename);
 const HOME = process.env.USERPROFILE || process.env.HOME || "";
 const DATA_DIR = join(__dirname, "..", "..", "data");
 
-// ─── MASTER MEMORY (Danny's full context) ────────────────────
+// ─── OBSIDIAN BRAIN (Danny's living second brain) ────────────
+// Replaces MASTER_MEMORY.md as of 2026-05-04. Source of truth lives in
+// the Obsidian vault under FRIDAY_BRAIN/. Every .md file there is
+// concatenated into the system prompt. Edit those notes to teach FRIDAY.
 
-let cachedMasterMemory: string | null = null;
-let masterMemoryLastLoaded = 0;
-const MASTER_MEMORY_CACHE_MS = 300_000; // Re-read every 5 min
+const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || join(HOME, "Obsidian", "Wavelength");
+const BRAIN_DIR = join(VAULT_PATH, "FRIDAY_BRAIN");
 
-function loadMasterMemory(): string {
+let cachedBrain: string | null = null;
+let brainLastLoaded = 0;
+const BRAIN_CACHE_MS = 60_000; // Re-read every 60s — Danny edits notes live
+
+function loadObsidianBrain(): string {
   const now = Date.now();
-  if (cachedMasterMemory && now - masterMemoryLastLoaded < MASTER_MEMORY_CACHE_MS) {
-    return cachedMasterMemory;
+  if (cachedBrain && now - brainLastLoaded < BRAIN_CACHE_MS) {
+    return cachedBrain;
   }
 
-  // Try multiple known locations
-  const paths = [
-    join(HOME, "Desktop", "FRIDAY", "MASTER_MEMORY.md"),
-    join(HOME, "Desktop", "jarvis", "MASTER_MEMORY.md"),
-    join(HOME, "jarvis", "MASTER_MEMORY.md"),
-  ];
-
-  for (const p of paths) {
-    try {
-      if (existsSync(p)) {
-        const raw = readFileSync(p, "utf-8");
-        // Extract the most useful sections (trim to ~4K tokens for context window)
-        cachedMasterMemory = extractKeyMemorySections(raw);
-        masterMemoryLastLoaded = now;
-        console.log(`[MemoryLoader] Loaded MASTER_MEMORY.md from ${p} (${cachedMasterMemory.length} chars)`);
-        return cachedMasterMemory;
-      }
-    } catch {
-      continue;
-    }
+  if (!existsSync(BRAIN_DIR)) {
+    cachedBrain = "";
+    brainLastLoaded = now;
+    return "";
   }
 
-  cachedMasterMemory = "";
-  masterMemoryLastLoaded = now;
-  return "";
-}
+  try {
+    const files = readdirSync(BRAIN_DIR)
+      .filter((f) => f.endsWith(".md"))
+      .sort();
 
-function extractKeyMemorySections(raw: string): string {
-  // Extract the most context-rich sections, skip file locations and architecture details
-  // JARVIS already knows its own architecture
-  const sections: string[] = [];
-
-  const sectionMap: Record<string, boolean> = {
-    "SECTION 1: DANNY": true,         // Identity, schedule, goals
-    "SECTION 2: WAVELENGTH AI": true,  // Business context
-    "SECTION 4: ALL PROJECTS": true,   // Project status
-    "SECTION 5: AGENT TEAM": true,     // Agent roster
-    "SECTION 10: CONTENT STRATEGY": true, // Content context
-    "SECTION 13: BEHAVIORAL RULES": true, // How to behave
-    "SECTION 14: PENDING TASKS": true,    // What's pending
-  };
-
-  const rawSections = raw.split(/^# /m);
-  for (const section of rawSections) {
-    for (const key of Object.keys(sectionMap)) {
-      if (section.includes(key)) {
-        sections.push("# " + section.trim());
+    const sections: string[] = [];
+    for (const f of files) {
+      const full = join(BRAIN_DIR, f);
+      try {
+        const raw = readFileSync(full, "utf-8").trim();
+        if (!raw) continue;
+        const title = basename(f, ".md");
+        sections.push(`# ${title}\n\n${raw}`);
+      } catch {
+        continue;
       }
     }
-  }
 
-  return sections.join("\n\n");
+    cachedBrain = sections.join("\n\n---\n\n");
+    brainLastLoaded = now;
+    console.log(`[MemoryLoader] Loaded Obsidian brain: ${files.length} note(s), ${cachedBrain.length} chars`);
+    return cachedBrain;
+  } catch (err) {
+    console.error("[MemoryLoader] Failed to read FRIDAY_BRAIN:", err);
+    cachedBrain = "";
+    brainLastLoaded = now;
+    return "";
+  }
 }
 
 // ─── PROJECT STATE (.planning/STATE.md) ──────────────────────
@@ -85,7 +73,7 @@ let projectStateLastLoaded = 0;
 
 function loadProjectState(): string {
   const now = Date.now();
-  if (cachedProjectState && now - projectStateLastLoaded < MASTER_MEMORY_CACHE_MS) {
+  if (cachedProjectState && now - projectStateLastLoaded < BRAIN_CACHE_MS) {
     return cachedProjectState;
   }
 
@@ -231,15 +219,44 @@ function formatBehavioralPatterns(): string {
   return `LEARNED BEHAVIORAL PATTERNS:\n${lines.join("\n")}`;
 }
 
+// ─── 30-day persistent facts (memory_save tool writes here) ──
+// Auto-inject every fact saved in the last 30 days, so Lily has standing
+// awareness of recent things Danny told her without needing to call
+// memory_search. Older facts stay searchable on demand.
+
+const MEMORY_RETENTION_DAYS = parseInt(process.env.MEMORY_RETENTION_DAYS || "30", 10);
+const MEMORY_FILE = join(DATA_DIR, "memory.json");
+
+function loadRecentFacts(days: number): string {
+  if (!existsSync(MEMORY_FILE)) return "";
+  try {
+    const raw = readFileSync(MEMORY_FILE, "utf-8");
+    const store = JSON.parse(raw) as { memories: Array<{ content: string; tags: string[]; createdAt: string }> };
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const recent = (store.memories || []).filter((m) => new Date(m.createdAt).getTime() >= cutoff);
+    if (recent.length === 0) return "";
+    // Newest first — let the model see the freshest context at the top.
+    recent.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const lines = recent.map((m) => {
+      const when = new Date(m.createdAt).toISOString().slice(0, 10);
+      const tags = m.tags?.length ? ` [${m.tags.join(", ")}]` : "";
+      return `- ${when}${tags} ${m.content}`;
+    });
+    return `RECENT FACTS (last ${days} days — ${recent.length} entries — you remember these without needing to search):\n${lines.join("\n")}`;
+  } catch {
+    return "";
+  }
+}
+
 // ─── MAIN: Build full memory context ─────────────────────────
 
 export function buildFullMemoryContext(): string {
   const parts: string[] = [];
 
-  // 1. Master Memory (Danny's identity, business, projects, agents, tasks)
-  const master = loadMasterMemory();
-  if (master) {
-    parts.push("\n\n--- MASTER MEMORY (Danny's full context) ---\n" + master);
+  // 1. Obsidian brain (Danny's living second brain — FRIDAY_BRAIN/*.md)
+  const brain = loadObsidianBrain();
+  if (brain) {
+    parts.push("\n\n--- DANNY'S SECOND BRAIN (Obsidian → FRIDAY_BRAIN/) ---\n" + brain);
   }
 
   // 2. Project State (current JARVIS build phase)
@@ -260,7 +277,13 @@ export function buildFullMemoryContext(): string {
     parts.push("\n\n" + behavior);
   }
 
-  // 5. Current date/time
+  // 5. Recent saved facts (30-day rolling window — auto-injected)
+  const recentFacts = loadRecentFacts(MEMORY_RETENTION_DAYS);
+  if (recentFacts) {
+    parts.push("\n\n" + recentFacts);
+  }
+
+  // 6. Current date/time
   parts.push(`\n\nCURRENT DATE/TIME: ${new Date().toLocaleString("en-CA", { timeZone: "America/Vancouver" })}`);
 
   return parts.join("");

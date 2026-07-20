@@ -161,97 +161,51 @@ async function isPasswordField(page: Page, selector: string): Promise<boolean> {
 // ── Tool Definitions ───────────────────────────────────────────────
 const CATEGORY = "Browser Control";
 
-const browserOpenTool: Tool = {
-  name: "browser_open",
-  description: "Open a URL in the browser. Connects to existing Chrome or launches new.",
-  category: CATEGORY,
-  parameters: [
-    { name: "url", type: "string", description: "URL to open", required: true },
-  ],
-  execute: async (params) => {
-    const url = normalizeUrl(params.url as string);
-    if (!isUrlSafe(url)) {
-      return { toolCallId: "", success: false, error: "URL blocked by security policy. Only http/https to public addresses allowed." };
-    }
-    try {
-      const page = await getPage();
-      await page.goto(url, { timeout: 30000, waitUntil: "domcontentloaded" });
-      await injectFRIDAYOverlay(page);
-      return { toolCallId: "", success: true, data: { url, title: await page.title() } };
-    } catch (error) {
-      return { toolCallId: "", success: false, error: `Failed to open URL: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  },
-};
-
+// Consolidated 2026-07-09: browser_open / browser_navigate / browser_back /
+// browser_forward / browser_refresh were five near-identical schemas for the
+// LLM to disambiguate. One verb, one tool.
 const browserNavigateTool: Tool = {
   name: "browser_navigate",
-  description: "Navigate the current browser tab to a new URL.",
+  description:
+    "Navigate the browser. action 'open' goes to a URL (connects to existing Chrome or launches one); 'back'/'forward' move through history; 'refresh' reloads the current page.",
   category: CATEGORY,
   parameters: [
-    { name: "url", type: "string", description: "URL to navigate to", required: true },
+    { name: "action", type: "string", description: "Navigation action", required: true, enum: ["open", "back", "forward", "refresh"] },
+    { name: "url", type: "string", description: "URL to open (required when action is 'open')", required: false },
   ],
   execute: async (params) => {
-    const url = normalizeUrl(params.url as string);
-    if (!isUrlSafe(url)) {
-      return { toolCallId: "", success: false, error: "URL blocked by security policy." };
-    }
+    const action = params.action as string;
     try {
       const page = await getPage();
-      await page.goto(url, { timeout: 30000, waitUntil: "domcontentloaded" });
-      await injectFRIDAYOverlay(page);
-      return { toolCallId: "", success: true, data: { url, title: await page.title() } };
+      switch (action) {
+        case "open": {
+          if (!params.url) {
+            return { toolCallId: "", success: false, error: "action 'open' requires a url." };
+          }
+          const url = normalizeUrl(params.url as string);
+          if (!isUrlSafe(url)) {
+            return { toolCallId: "", success: false, error: "URL blocked by security policy. Only http/https to public addresses allowed." };
+          }
+          await page.goto(url, { timeout: 30000, waitUntil: "domcontentloaded" });
+          await injectFRIDAYOverlay(page);
+          break;
+        }
+        case "back":
+          await page.goBack({ timeout: 10000 });
+          break;
+        case "forward":
+          await page.goForward({ timeout: 10000 });
+          break;
+        case "refresh":
+          await page.reload({ timeout: 15000 });
+          await injectFRIDAYOverlay(page);
+          break;
+        default:
+          return { toolCallId: "", success: false, error: `Unknown action "${action}". Use open, back, forward, or refresh.` };
+      }
+      return { toolCallId: "", success: true, data: { action, url: page.url(), title: await page.title() } };
     } catch (error) {
-      return { toolCallId: "", success: false, error: `Navigation failed: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  },
-};
-
-const browserBackTool: Tool = {
-  name: "browser_back",
-  description: "Go back one page in browser history.",
-  category: CATEGORY,
-  parameters: [],
-  execute: async () => {
-    try {
-      const page = await getPage();
-      await page.goBack({ timeout: 10000 });
-      return { toolCallId: "", success: true, data: { url: page.url(), title: await page.title() } };
-    } catch (error) {
-      return { toolCallId: "", success: false, error: `Back navigation failed: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  },
-};
-
-const browserForwardTool: Tool = {
-  name: "browser_forward",
-  description: "Go forward one page in browser history.",
-  category: CATEGORY,
-  parameters: [],
-  execute: async () => {
-    try {
-      const page = await getPage();
-      await page.goForward({ timeout: 10000 });
-      return { toolCallId: "", success: true, data: { url: page.url(), title: await page.title() } };
-    } catch (error) {
-      return { toolCallId: "", success: false, error: `Forward navigation failed: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  },
-};
-
-const browserRefreshTool: Tool = {
-  name: "browser_refresh",
-  description: "Refresh the current browser page.",
-  category: CATEGORY,
-  parameters: [],
-  execute: async () => {
-    try {
-      const page = await getPage();
-      await page.reload({ timeout: 15000 });
-      await injectFRIDAYOverlay(page);
-      return { toolCallId: "", success: true, data: { url: page.url(), title: await page.title() } };
-    } catch (error) {
-      return { toolCallId: "", success: false, error: `Refresh failed: ${error instanceof Error ? error.message : "Unknown error"}` };
+      return { toolCallId: "", success: false, error: `Navigation (${action}) failed: ${error instanceof Error ? error.message : "Unknown error"}` };
     }
   },
 };
@@ -401,110 +355,75 @@ const browserSelectTool: Tool = {
   },
 };
 
-const browserGetTextTool: Tool = {
-  name: "browser_get_text",
-  description: "Get the text content of an element on the page.",
+// Consolidated 2026-07-09: get_text / get_page_title / get_url /
+// get_page_content / list_tabs were five read-only lookups. One tool,
+// one 'what' parameter.
+const browserReadTool: Tool = {
+  name: "browser_read",
+  description:
+    "Read from the browser. what 'page' returns the readable text of the whole page (max 10000 chars); 'element' returns the text of one element (needs selector); 'info' returns the current title and URL; 'tabs' lists open tabs.",
   category: CATEGORY,
   parameters: [
-    { name: "selector", type: "string", description: "CSS selector of the element", required: true },
+    { name: "what", type: "string", description: "What to read", required: true, enum: ["page", "element", "info", "tabs"] },
+    { name: "selector", type: "string", description: "CSS selector (required when what is 'element')", required: false },
   ],
   execute: async (params) => {
-    const selector = params.selector as string;
+    const what = params.what as string;
     try {
-      const page = await getPage();
-      const text = await page.textContent(selector, { timeout: 10000 });
-      return { toolCallId: "", success: true, data: { selector, text: text?.slice(0, 5000) || "" } };
-    } catch (error) {
-      return { toolCallId: "", success: false, error: `Get text failed: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  },
-};
-
-const browserGetPageTitleTool: Tool = {
-  name: "browser_get_page_title",
-  description: "Get the title of the current browser page.",
-  category: CATEGORY,
-  parameters: [],
-  execute: async () => {
-    try {
-      const page = await getPage();
-      return { toolCallId: "", success: true, data: { title: await page.title(), url: page.url() } };
-    } catch (error) {
-      return { toolCallId: "", success: false, error: `Failed to get title: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  },
-};
-
-const browserGetUrlTool: Tool = {
-  name: "browser_get_url",
-  description: "Get the current URL of the browser.",
-  category: CATEGORY,
-  parameters: [],
-  execute: async () => {
-    try {
-      const page = await getPage();
-      return { toolCallId: "", success: true, data: { url: page.url() } };
-    } catch (error) {
-      return { toolCallId: "", success: false, error: `Failed to get URL: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  },
-};
-
-const browserGetPageContentTool: Tool = {
-  name: "browser_get_page_content",
-  description: "Get the readable text content of the entire page (no HTML tags). Max 10000 chars.",
-  category: CATEGORY,
-  parameters: [],
-  execute: async () => {
-    try {
-      const page = await getPage();
-      const text = await page.evaluate(() => {
-        // Remove script, style, and hidden elements
-        const clone = document.body.cloneNode(true) as HTMLElement;
-        const removeSelectors = ["script", "style", "noscript", "svg", "[hidden]", '[aria-hidden="true"]'];
-        for (const sel of removeSelectors) {
-          clone.querySelectorAll(sel).forEach((el) => el.remove());
+      if (what === "tabs") {
+        if (!browser || !browser.isConnected()) {
+          return { toolCallId: "", success: false, error: "No browser connected" };
         }
-        return (clone.textContent || "")
-          .replace(/\s+/g, " ")
-          .trim();
-      });
-      return {
-        toolCallId: "",
-        success: true,
-        data: { content: text.slice(0, 10000), url: page.url(), title: await page.title(), truncated: text.length > 10000 },
-      };
-    } catch (error) {
-      return { toolCallId: "", success: false, error: `Failed to get content: ${error instanceof Error ? error.message : "Unknown error"}` };
-    }
-  },
-};
-
-const browserListTabsTool: Tool = {
-  name: "browser_list_tabs",
-  description: "List all open browser tabs with their titles and URLs.",
-  category: CATEGORY,
-  parameters: [],
-  execute: async () => {
-    try {
-      if (!browser || !browser.isConnected()) {
-        return { toolCallId: "", success: false, error: "No browser connected" };
+        const tabs: { index: number; title: string; url: string; active: boolean }[] = [];
+        for (const context of browser.contexts()) {
+          for (let i = 0; i < context.pages().length; i++) {
+            const p = context.pages()[i];
+            tabs.push({
+              index: i,
+              title: await p.title(),
+              url: p.url(),
+              active: p === activePage,
+            });
+          }
+        }
+        return { toolCallId: "", success: true, data: { tabs, count: tabs.length } };
       }
-      const tabs: { index: number; title: string; url: string; active: boolean }[] = [];
-      for (const context of browser.contexts()) {
-        for (let i = 0; i < context.pages().length; i++) {
-          const p = context.pages()[i];
-          tabs.push({
-            index: i,
-            title: await p.title(),
-            url: p.url(),
-            active: p === activePage,
+
+      const page = await getPage();
+      switch (what) {
+        case "info":
+          return { toolCallId: "", success: true, data: { title: await page.title(), url: page.url() } };
+        case "element": {
+          if (!params.selector) {
+            return { toolCallId: "", success: false, error: "what 'element' requires a selector." };
+          }
+          const selector = params.selector as string;
+          const text = await page.textContent(selector, { timeout: 10000 });
+          return { toolCallId: "", success: true, data: { selector, text: text?.slice(0, 5000) || "" } };
+        }
+        case "page": {
+          const text = await page.evaluate(() => {
+            // Remove script, style, and hidden elements
+            const clone = document.body.cloneNode(true) as HTMLElement;
+            const removeSelectors = ["script", "style", "noscript", "svg", "[hidden]", '[aria-hidden="true"]'];
+            for (const sel of removeSelectors) {
+              clone.querySelectorAll(sel).forEach((el) => el.remove());
+            }
+            return (clone.textContent || "")
+              .replace(/\s+/g, " ")
+              .trim();
           });
+          return {
+            toolCallId: "",
+            success: true,
+            data: { content: text.slice(0, 10000), url: page.url(), title: await page.title(), truncated: text.length > 10000 },
+          };
         }
+        default:
+          return { toolCallId: "", success: false, error: `Unknown what "${what}". Use page, element, info, or tabs.` };
       }
-      return { toolCallId: "", success: true, data: { tabs, count: tabs.length } };
     } catch (error) {
-      return { toolCallId: "", success: false, error: `Failed to list tabs: ${error instanceof Error ? error.message : "Unknown error"}` };
+      return { toolCallId: "", success: false, error: `Read (${what}) failed: ${error instanceof Error ? error.message : "Unknown error"}` };
     }
   },
 };
@@ -664,23 +583,18 @@ const browserLoginTool: Tool = {
 };
 
 // ── Registration ───────────────────────────────────────────────────
+// 10 tools (was 18): open/back/forward/refresh merged into browser_navigate;
+// get_text/get_page_title/get_url/get_page_content/list_tabs merged into
+// browser_read. See consolidation notes above each merged tool.
 export function registerBrowserTools(): void {
-  toolRegistry.register(browserOpenTool);
   toolRegistry.register(browserNavigateTool);
-  toolRegistry.register(browserBackTool);
-  toolRegistry.register(browserForwardTool);
-  toolRegistry.register(browserRefreshTool);
   toolRegistry.register(browserScreenshotTool);
   toolRegistry.register(browserClickTool);
   toolRegistry.register(browserTypeTool);
   toolRegistry.register(browserPressKeyTool);
   toolRegistry.register(browserScrollTool);
   toolRegistry.register(browserSelectTool);
-  toolRegistry.register(browserGetTextTool);
-  toolRegistry.register(browserGetPageTitleTool);
-  toolRegistry.register(browserGetUrlTool);
-  toolRegistry.register(browserGetPageContentTool);
-  toolRegistry.register(browserListTabsTool);
+  toolRegistry.register(browserReadTool);
   toolRegistry.register(browserCloseTool);
   toolRegistry.register(browserLoginTool);
 }

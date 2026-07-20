@@ -8,7 +8,10 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(`${ORCHESTRATOR_URL}/api/stop`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.FRIDAY_API_KEY || ""}`,
+      },
       body: JSON.stringify(body),
     });
 

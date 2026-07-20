@@ -173,19 +173,8 @@ function readTaskSummary(): TaskSummary {
 }
 
 async function fetchEmailCount(): Promise<{ unread: number; important: number } | null> {
-  if (!config.openclaw.token || !config.openclaw.baseUrl) return null;
-
-  try {
-    const res = await fetch(`${config.openclaw.baseUrl}/api/gmail/unread-count`, {
-      headers: { Authorization: `Bearer ${config.openclaw.token}` },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as { count?: number; important?: number };
-    return { unread: data.count ?? 0, important: data.important ?? 0 };
-  } catch {
-    return null;
-  }
+  // OpenClaw decoupled 2026-04-25 — Gmail source needs to be re-wired (Gmail MCP, IMAP, etc.) when FRIDAY is unshelved.
+  return null;
 }
 
 // ─── Script Builder ───────────────────────────────────────────────

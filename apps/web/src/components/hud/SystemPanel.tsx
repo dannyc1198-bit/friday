@@ -188,7 +188,7 @@ export function SystemPanel() {
   };
 
   return (
-    <DataWindow title="System Vitals" icon={<Cpu className="w-4 h-4" />} status="online" compact>
+    <DataWindow title="System Vitals" icon={<Cpu className="w-4 h-4" />} status="online" compact popoutPath="system-vitals">
       <motion.div
         className="space-y-3"
         initial={{ opacity: 0, y: 12 }}

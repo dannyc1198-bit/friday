@@ -156,7 +156,7 @@ export function CryptoPanel() {
   };
 
   return (
-    <DataWindow title="Market Feed" icon={<TrendingUp className="w-4 h-4" />} status={status} compact>
+    <DataWindow title="Market Feed" icon={<TrendingUp className="w-4 h-4" />} status={status} compact popoutPath="market-feed">
       <div className="relative overflow-hidden">
         <ScanLine />
 

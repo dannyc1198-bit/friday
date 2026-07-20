@@ -16,9 +16,13 @@ log = logging.getLogger("sidecar.greeting")
 
 class GreetingSystem:
     def __init__(self):
-        if not GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY missing")
-        self._client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+        # Greeting text-gen needs Groq. Boot without it (camera-tile-only mode);
+        # check() returns None when client is absent, so no spurious greetings fire.
+        if GROQ_API_KEY:
+            self._client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+        else:
+            self._client = None
+            log.warning("GROQ_API_KEY missing — greeting text generation disabled")
 
     def check(self, analysis: dict, state: dict, verified_identity: str | None) -> str | None:
         """
@@ -64,6 +68,9 @@ class GreetingSystem:
             return "Welcome back, boss."
 
     def _generate_greeting(self, analysis: dict, state: dict) -> str:
+        if self._client is None:
+            return f"Hello, boss. Welcome home — it's {datetime.now().strftime('%I:%M %p')}."
+
         events = state.get("daily_events", [])
         events_str = "\n".join(f"- {e}" for e in events[-10:]) if events else "- Nothing notable yet today"
 
