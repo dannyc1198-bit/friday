@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { rememberFact } from "./brain.js";
+import { publishThought } from "./thought-bus.js";
 import { getBrainDir } from "./vault-config.js";
 
 export interface LearningCandidate {
@@ -58,10 +59,14 @@ export async function writeLearningsFromTurn(userText: string): Promise<{ saved:
   let saved = 0;
   let drafted = 0;
   for (const item of items) {
-    if (item.profile) proposeProfileChange(item.observation);
+    if (item.profile) {
+      proposeProfileChange(item.observation);
+      publishThought({ kind: "learning", label: "Profile proposal", detail: item.observation, source: "proposal" });
+    }
     if (item.draft) {
       appendDraft(item);
       drafted++;
+      publishThought({ kind: "learning", label: "Draft", detail: item.observation, source: "draft" });
       continue;
     }
     const result = await rememberFact({
@@ -74,6 +79,7 @@ export async function writeLearningsFromTurn(userText: string): Promise<{ saved:
     if (!result.duplicate) {
       saved++;
       appendLearningFeed(item);
+      publishThought({ kind: "learning", label: item.entity, detail: item.observation, source: "vault" });
     }
   }
   return { saved, drafted };

@@ -25,6 +25,7 @@ import {
   LearnBoard,
 } from "./Workspaces";
 import { LiveTalk } from "./LiveTalk";
+import { NeuralCoreBoard } from "./NeuralCore";
 
 // FRIDAY — Flight Deck.
 // One screen: the conversation in the middle, truth on both sides.
@@ -125,12 +126,13 @@ export default function Deck() {
         >
           Learning Lab
         </Link>
-        <Link
-          href="/brain"
+        <button
+          type="button"
+          onClick={() => setFocus("neural")}
           className="shrink-0 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber"
         >
           Neural Core
-        </Link>
+        </button>
         <div className="hidden shrink-0 md:block">
           <HealthChips onStatus={setCoreOnline} />
         </div>
@@ -144,6 +146,7 @@ export default function Deck() {
         {focus === "content" && <ContentBoard onAct={ask} />}
         {focus === "ally" && <AllyBoard onAct={ask} />}
         {focus === "learn" && <LearnBoard />}
+        {focus === "neural" && <NeuralCoreBoard />}
         {focus === "agents" && (
           <div className="mx-auto grid w-full max-w-3xl gap-4 px-5 py-6">
             <AgentsCard />

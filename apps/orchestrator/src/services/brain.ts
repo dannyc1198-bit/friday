@@ -310,17 +310,15 @@ export function searchBrain(query: string, limit = 6): BrainHit[] {
   return rankBrainHits(hits, q, limit);
 }
 
-/**
- * Per-message context injection: the top vault chunks relevant to what Danny
- * just said, capped hard so the free-tier token budget survives. Returns ""
- * when nothing relevant — never pads.
- */
-export function buildBrainContext(message: string, maxChars = 1600): string {
+/** Hits for one chat turn. Short messages stay quiet so the prompt is not padded. */
+export function recallHits(message: string, limit = 5): BrainHit[] {
   const m = (message || "").trim();
-  if (m.length < 8) return "";
-  const hits = searchBrain(m, 5);
-  if (hits.length === 0) return "";
+  if (m.length < 8) return [];
+  return searchBrain(m, limit);
+}
 
+export function formatBrainContext(hits: BrainHit[], maxChars = 1600): string {
+  if (hits.length === 0) return "";
   const parts: string[] = [];
   let used = 0;
   for (const h of hits) {
@@ -334,6 +332,15 @@ export function buildBrainContext(message: string, maxChars = 1600): string {
     "\n\nVAULT RECALL (auto-retrieved from the Obsidian brain — relevant to this message; cite naturally, never read paths aloud):\n" +
     parts.join("\n---\n")
   );
+}
+
+/**
+ * Per-message context injection: the top vault chunks relevant to what Danny
+ * just said, capped hard so the free-tier token budget survives. Returns ""
+ * when nothing relevant — never pads.
+ */
+export function buildBrainContext(message: string, maxChars = 1600): string {
+  return formatBrainContext(recallHits(message, 5), maxChars);
 }
 
 // ─── Entity write-back (the brain LEARNS) ───────────────────────

@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { usePoll, Dot } from "./deck-lib";
+import { NeuralMini } from "./NeuralCore";
 
-export type FocusId = "today" | "wavelength" | "content" | "ally" | "talk" | "agents" | "learn";
+export type FocusId = "today" | "wavelength" | "content" | "ally" | "talk" | "agents" | "learn" | "neural";
 
 export const FOCUS: { id: FocusId; label: string }[] = [
   { id: "today", label: "Today" },
@@ -13,6 +14,7 @@ export const FOCUS: { id: FocusId; label: string }[] = [
   { id: "talk", label: "Talk" },
   { id: "agents", label: "Agents" },
   { id: "learn", label: "Learn" },
+  { id: "neural", label: "Neural Core" },
 ];
 
 interface Integration {
@@ -173,6 +175,7 @@ export function TodayBoard({ onAct }: { onAct: (prompt: string) => void }) {
           )
         }
       />
+      <NeuralMini />
     </Shell>
   );
 }

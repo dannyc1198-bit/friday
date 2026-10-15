@@ -155,6 +155,29 @@ FRIDAY's Claude agentic loop runs with a registered tool palette covering:
 
 ---
 
+## Neural Core
+
+The Neural Core tab is a live graph of Friday's real activity. It shows Obsidian notes recalled, tools that ran, learning facts written, and repair events. The language model and the Obsidian vault do the reasoning. The graph is a reading of that work.
+
+A background thinking loop is off until you arm it on that tab (or set `FRIDAY_THINKING=1`). It reviews recent chats and vault notes at most 4 times a day, with 30 minutes between passes. Dated insights go to `FRIDAY_BRAIN/insights/`. Profile lines are written as proposals in `FRIDAY_BRAIN/proposals/DANNY-PROFILE.md` and are not applied. The loop does not send, spend, or trade. Closing the tab stops the live stream. The orchestrator does not keep a simulation running for the graph.
+
+### How to verify
+
+```bat
+cd apps\orchestrator
+npm test
+npx tsc --noEmit
+cd ..\web
+npx tsc --noEmit
+```
+
+Then `start-unified.bat` and open http://127.0.0.1:3000.
+
+- **Neural Core** shows an empty feed until a chat recalls a note, runs a tool, writes a fact, or journals a repair. The live feed names the link.
+- **Today** shows the same activity in a small graph.
+- **Arm thinking** changes the status line to armed. With no recent chat it stays idle. After a real conversation, the next eligible pass writes `FRIDAY_BRAIN/insights/YYYY-MM-DD.md` and leaves `DANNY-PROFILE.md` untouched.
+- `brain_recall` against the vault returns the note that was just written. A "my business is…" line becomes an entity note plus a profile proposal.
+
 ## Getting Started
 
 ### Prerequisites

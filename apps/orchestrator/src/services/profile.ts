@@ -31,6 +31,15 @@ export function loadCoreProfile(): CoreProfile {
   }
 }
 
+/** True when the message shares real words with the pinned profile. */
+export function profileMentioned(query: string, profileText: string): boolean {
+  const words = query.toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 3);
+  if (words.length === 0 || !profileText.trim()) return false;
+  const text = profileText.toLowerCase();
+  const matched = words.filter((word) => text.includes(word)).length;
+  return matched >= Math.min(2, words.length);
+}
+
 export function formatCoreProfile(profile = loadCoreProfile()): string {
   if (!profile.found || !profile.text) {
     return "\n\nCORE PROFILE: FRIDAY_BRAIN/DANNY-PROFILE.md is not in the vault yet. Do not invent Danny's businesses.";

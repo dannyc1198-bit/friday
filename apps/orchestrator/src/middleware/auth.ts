@@ -101,6 +101,7 @@ const LOCALHOST_READ_PREFIXES = [
   "/api/today",
   "/api/integrations",
   "/api/upkeep",
+  "/api/neural",
   "/api/voice/live",
   "/api/voice/elevenlabs",
   "/api/learning/",
@@ -168,7 +169,8 @@ export async function authMiddleware(
     request.method === "POST" &&
     (/^\/api\/upkeep\/repairs\/[^/]+\/(approve|reject)$/.test(path) ||
       path === "/api/voice/realtime/session" ||
-      path === "/api/voice/realtime/tool")
+      path === "/api/voice/realtime/tool" ||
+      path === "/api/neural/thinking")
   ) {
     return;
   }

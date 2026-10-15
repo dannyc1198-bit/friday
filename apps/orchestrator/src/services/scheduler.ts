@@ -7,6 +7,7 @@ import { getMorningBriefing } from "./morning-briefing.js";
 import { runReflection } from "./reflection.js";
 import { DATA_DIR, localDateKey } from "./runtime-paths.js";
 import { runNightlyHealth } from "./upkeep/runtime.js";
+import { maybeRunScheduledThinking } from "./thinking-loop.js";
 
 const STATE_FILE = join(DATA_DIR, "scheduler-state.json");
 const CHECK_INTERVAL_MS = 60_000;
@@ -165,6 +166,12 @@ export async function runSchedulerTick(now = new Date()): Promise<void> {
       } catch (err) {
         console.warn("[Scheduler] Health check failed:", (err as Error).message);
       }
+    }
+
+    try {
+      await maybeRunScheduledThinking(now);
+    } catch (err) {
+      console.warn("[Scheduler] Thinking loop failed:", (err as Error).message);
     }
   } finally {
     tickRunning = false;

@@ -33,6 +33,7 @@ import { todayRoutes } from "./routes/today.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { upkeepRoutes } from "./routes/upkeep.js";
 import { liveVoiceRoutes } from "./routes/live-voice.js";
+import { neuralRoutes } from "./routes/neural.js";
 import { recordIncident } from "./services/upkeep/runtime.js";
 import { isMisfire } from "./services/upkeep/guards.js";
 import { getBootId } from "./services/greeting.js";
@@ -59,7 +60,9 @@ import { dashboardRoutes } from "./routes/dashboard.js";
 import { brainRoutes } from "./routes/brain.js";
 import { skillRoutes } from "./routes/skills.js";
 import proactiveAlertsRoutes from "./routes/proactive-alerts.js";
-import { initBrain, stopBrain, buildBrainContext } from "./services/brain.js";
+import { initBrain, stopBrain, formatBrainContext, recallHits } from "./services/brain.js";
+import { loadCoreProfile, profileMentioned } from "./services/profile.js";
+import { publishThought } from "./services/thought-bus.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
 import { getLLMInfo } from "./services/openai.js";
 import { authMiddleware, initAuth } from "./middleware/auth.js";
@@ -78,6 +81,15 @@ import {
   recordProceduralSkillOutcome,
   type ProceduralOutcome,
 } from "./services/procedural-skills.js";
+
+function toolThoughtDetail(parameters: Record<string, unknown> | undefined): string {
+  if (!parameters) return "ran";
+  for (const key of ["query", "entity", "observation", "title"]) {
+    const value = parameters[key];
+    if (typeof value === "string" && value.trim()) return value.trim().slice(0, 160);
+  }
+  return "ran";
+}
 
 // ─── Conversation transcript persistence ────────────────────────
 // Every chat turn gets appended to a JSONL file under data/conversations/{id}.jsonl
@@ -215,6 +227,7 @@ await app.register(todayRoutes);
 await app.register(integrationRoutes);
 await app.register(upkeepRoutes);
 await app.register(liveVoiceRoutes);
+await app.register(neuralRoutes);
 await app.register(proactiveAlertsRoutes);
 
 initializeTools();
@@ -374,6 +387,20 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       const oldest = lastProceduralSkillsByConversation.keys().next().value;
       if (oldest) lastProceduralSkillsByConversation.delete(oldest);
     }
+    const recalled = recallHits(message, 5);
+    for (const hit of recalled) {
+      publishThought({ kind: "recall", label: hit.noteName, detail: hit.notePath, source: "vault" });
+    }
+    const profile = loadCoreProfile();
+    if (profile.found && profileMentioned(message, profile.text)) {
+      publishThought({
+        kind: "recall",
+        label: "DANNY-PROFILE",
+        detail: profile.relativePath,
+        source: "pinned",
+      });
+    }
+
     const memoryContext =
       "\n\n" + buildFullMemoryContext() +
       "\n" + unifiedMemory.buildContextForPrompt(message) +
@@ -382,7 +409,7 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       (capturedSkillProposal
         ? `\n\nLEARNING NOTICE: A procedural preference proposal (${capturedSkillProposal}) was drafted from Danny's correction. It is not active until he approves it. Briefly mention that it is ready for review.`
         : "") +
-      buildBrainContext(message);
+      formatBrainContext(recalled);
 
     const abortController = new AbortController();
     activeAbortControllers.set(conversation.id, abortController);
@@ -400,6 +427,12 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
           toolCalls.push({
             name: chunk.toolCall.toolName,
             arguments: JSON.stringify(chunk.toolCall.parameters),
+          });
+          publishThought({
+            kind: "tool",
+            label: chunk.toolCall.toolName,
+            detail: toolThoughtDetail(chunk.toolCall.parameters),
+            source: "chat",
           });
           reply.raw.write(
             `data: ${JSON.stringify({
