@@ -1,8 +1,10 @@
 "use client";
 
-// FRIDAY's living brain — 2D canvas force-directed graph.
+// FRIDAY's living brain — 2D canvas neuron web on a settled force layout.
 // Replaces the @react-three/fiber NeuralOrb (broken under React 18).
 // Same export name + prop interface so page.tsx import is unchanged.
+// Layout is computed once at mount (settleNodes) and frozen — only the
+// firing/charge visuals animate per frame, so nodes never drift.
 
 import { useEffect, useRef, useState } from "react";
 
@@ -65,6 +67,55 @@ function generateNodes(width: number, height: number): Node[] {
   return nodes;
 }
 
+// Run the force simulation to equilibrium ONCE, offscreen, then freeze.
+// Repulsion is clamped — the raw 6/d² term explodes when two nodes overlap,
+// which is what made the live version jitter forever.
+function settleNodes(nodes: Node[], dim: number) {
+  const cx = dim / 2;
+  const cy = dim / 2;
+  for (let iter = 0; iter < 300; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+
+      a.vx += (cx - a.x) * 0.0006;
+      a.vy += (cy - a.y) * 0.0006;
+
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > 0 && d2 < 3600) {
+          const f = Math.min(6 / d2, 0.35); // clamp kills the singularity
+          a.vx -= dx * f;
+          a.vy -= dy * f;
+          b.vx += dx * f;
+          b.vy += dy * f;
+        }
+      }
+
+      for (const j of a.edges) {
+        const b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const f = (d - 32) * 0.0012;
+        a.vx += (dx / d) * f;
+        a.vy += (dy / d) * f;
+      }
+
+      a.vx *= 0.86;
+      a.vy *= 0.86;
+      a.x += a.vx;
+      a.y += a.vy;
+    }
+  }
+  for (const n of nodes) {
+    n.vx = 0;
+    n.vy = 0;
+  }
+}
+
 interface NeuralOrbProps {
   isListening: boolean;
   isThinking: boolean;
@@ -117,6 +168,7 @@ export function NeuralOrb({
     ctx.scale(dpr, dpr);
 
     const nodes = generateNodes(dim, dim);
+    settleNodes(nodes, dim); // positions are final after this — no live physics
     let raf = 0;
     let t = 0;
 
@@ -124,49 +176,8 @@ export function NeuralOrb({
       t += 0.016;
       const { isListening, isThinking, isSpeaking, isMuted } = stateRef.current;
 
-      // ── Physics ──────────────────────────────────────────
       const cx = dim / 2;
       const cy = dim / 2;
-
-      for (let i = 0; i < nodes.length; i++) {
-        const a = nodes[i];
-
-        // Center attraction (keeps the brain bounded)
-        a.vx += (cx - a.x) * 0.0006;
-        a.vy += (cy - a.y) * 0.0006;
-
-        // Pairwise repulsion (only nearby — O(n²) but n=200 is cheap)
-        for (let j = i + 1; j < nodes.length; j++) {
-          const b = nodes[j];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 > 0 && d2 < 3600) {
-            const f = 6 / d2;
-            a.vx -= dx * f;
-            a.vy -= dy * f;
-            b.vx += dx * f;
-            b.vy += dy * f;
-          }
-        }
-
-        // Spring on edges (resting length 32px)
-        for (const j of a.edges) {
-          const b = nodes[j];
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const d = Math.hypot(dx, dy) || 1;
-          const f = (d - 32) * 0.0012;
-          a.vx += (dx / d) * f;
-          a.vy += (dy / d) * f;
-        }
-
-        // Damping
-        a.vx *= 0.86;
-        a.vy *= 0.86;
-        a.x += a.vx;
-        a.y += a.vy;
-      }
 
       // ── Charge updates (neuron firing) ───────────────────
       for (const n of nodes) n.charge *= 0.92;

@@ -21,6 +21,7 @@ import { registerObsidianTools } from "./obsidian.js";
 import { registerClaudeCodeTools } from "./claude-code.js";
 import { registerBrainTools } from "./brain-tools.js";
 import { registerAppControlTools } from "./app-control.js";
+import { registerProceduralSkillTools } from "./procedural-skills.js";
 import { toolRegistry } from "./registry.js";
 
 export function initializeTools(): void {
@@ -42,6 +43,7 @@ export function initializeTools(): void {
   console.log("  ✓ Obsidian (second brain — read/write/delete)");
 
   registerBrainTools();
+  registerProceduralSkillTools();
   console.log("  ✓ Brain (recall / remember / reflect — the learning loop)");
 
   registerClaudeCodeTools();

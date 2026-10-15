@@ -9,14 +9,15 @@
 #   - To uninstall: Unregister-ScheduledTask -TaskName "FRIDAY" -Confirm:$false
 
 $TaskName  = "FRIDAY"
-$BatPath   = "C:\Users\12368\jarvis\start-jarvis.bat"
+$BatPath   = Join-Path $PSScriptRoot "start-jarvis.bat"
+$BatPath   = (Resolve-Path -LiteralPath $BatPath).Path
 $User      = $env:USERNAME
 
 # Remove any previous registration
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
 # Build task components
-$action   = New-ScheduledTaskAction -Execute $BatPath
+$action   = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$BatPath`"" -WorkingDirectory $PSScriptRoot
 $trigger  = New-ScheduledTaskTrigger -AtLogon -User $User
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `

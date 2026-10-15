@@ -97,6 +97,12 @@ export default function Deck() {
         </div>
         <WaveformPresence mode={presence} className="h-10 min-w-0 flex-1" />
         <Link
+          href="/learning"
+          className="shrink-0 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber"
+        >
+          Learning Lab
+        </Link>
+        <Link
           href="/brain"
           className="shrink-0 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber"
         >

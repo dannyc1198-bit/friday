@@ -102,6 +102,9 @@ const LOCALHOST_READ_PREFIXES = [
   "/api/memory/stats",
   "/api/tools",
   "/api/conversations",
+  "/api/skills/active",
+  "/api/skills/proposals",
+  "/api/skills/overview",
 ];
 
 function isLocalhost(request: FastifyRequest): boolean {

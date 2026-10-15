@@ -12,15 +12,14 @@
 // tracking all write through this layer.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
-import { join, normalize } from "path";
-import { memoryService } from "./memory/index.js";
+import { join } from "path";
+import { DATA_DIR } from "./runtime-paths.js";
 
 // ─── Paths ──────────────────────────────────────────────────────
 const USER_HOME = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368";
-const FRIDAY_DATA = join(USER_HOME, "jarvis", "apps", "orchestrator", "data");
 const OPENCLAW_WORKSPACE = join(USER_HOME, ".openclaw", "workspace");
 const OPENCLAW_MEMORY = join(USER_HOME, ".openclaw", "memory");
-const UNIFIED_STORE = join(FRIDAY_DATA, "unified-memory.json");
+const UNIFIED_STORE = join(DATA_DIR, "unified-memory.json");
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -376,8 +375,8 @@ class UnifiedMemoryService {
 
   private save(): void {
     try {
-      if (!existsSync(FRIDAY_DATA)) {
-        mkdirSync(FRIDAY_DATA, { recursive: true });
+      if (!existsSync(DATA_DIR)) {
+        mkdirSync(DATA_DIR, { recursive: true });
       }
       writeFileSync(UNIFIED_STORE, JSON.stringify(this.store, null, 2), "utf-8");
       this.dirty = false;

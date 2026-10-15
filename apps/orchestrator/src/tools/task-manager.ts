@@ -6,6 +6,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
+import { DATA_DIR } from "../services/runtime-paths.js";
 
 // ─── Interfaces ──────────────────────────────────────────────
 
@@ -26,10 +27,6 @@ interface TaskStore {
 
 // ─── Storage ─────────────────────────────────────────────────
 
-const DATA_DIR = path.join(
-  process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368",
-  "jarvis", "apps", "orchestrator", "data"
-);
 const TASK_FILE = path.join(DATA_DIR, "tasks.json");
 
 // Max tasks to prevent unbounded growth

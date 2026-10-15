@@ -3,14 +3,10 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
 import { readFile, writeFile, mkdir } from "fs/promises";
-import { join, dirname, basename } from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { join, basename } from "path";
+import { DATA_DIR, REPO_ROOT, localDateKey } from "./runtime-paths.js";
 
 const HOME = process.env.USERPROFILE || process.env.HOME || "";
-const DATA_DIR = join(__dirname, "..", "..", "data");
 
 // ─── OBSIDIAN BRAIN (Danny's living second brain) ────────────
 // Replaces MASTER_MEMORY.md as of 2026-05-04. Source of truth lives in
@@ -77,7 +73,7 @@ function loadProjectState(): string {
     return cachedProjectState;
   }
 
-  const statePath = join(HOME, "jarvis", ".planning", "STATE.md");
+  const statePath = join(REPO_ROOT, ".planning", "STATE.md");
   try {
     if (existsSync(statePath)) {
       const raw = readFileSync(statePath, "utf-8");
@@ -119,7 +115,7 @@ function loadConversationSummaries(): ConversationSummary[] {
 
 export async function saveConversationSummary(summary: string, keyFacts: string[]): Promise<void> {
   const summaries = loadConversationSummaries();
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDateKey();
 
   // Update today's entry if it exists, otherwise add new
   const existing = summaries.findIndex((s) => s.date === today);

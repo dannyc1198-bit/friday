@@ -12,6 +12,7 @@ import { spawn } from "child_process";
 import path from "path";
 import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
+import fs from "fs";
 
 // FRIDAY repo root — default working directory for delegations.
 // Resolved relative to this file: tools/claude-code.ts → ../../../../
@@ -89,7 +90,19 @@ const delegateToClaudeCodeTool: Tool = {
       return { toolCallId: "", success: false, error: "task is required" };
     }
 
-    const cwd = (params.working_directory as string) || FRIDAY_REPO_ROOT;
+    const cwd = path.resolve((params.working_directory as string) || FRIDAY_REPO_ROOT);
+    const allowedRoots = (process.env.FRIDAY_ALLOWED_CODE_ROOTS || FRIDAY_REPO_ROOT)
+      .split(path.delimiter)
+      .map((root) => path.resolve(root).toLowerCase());
+    const cwdLower = cwd.toLowerCase();
+    const allowed = allowedRoots.some((root) => cwdLower === root || cwdLower.startsWith(root + path.sep));
+    if (!allowed || !fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: "working_directory is outside FRIDAY_ALLOWED_CODE_ROOTS or does not exist",
+      };
+    }
     const timeoutSec = Math.min(
       MAX_TIMEOUT_SEC,
       Math.max(MIN_TIMEOUT_SEC, Number(params.timeout_seconds) || DEFAULT_TIMEOUT_SEC)
@@ -98,7 +111,13 @@ const delegateToClaudeCodeTool: Tool = {
     // Resolve friendly model alias → CLI flag. Unknown alias = silently use default.
     const modelAlias = String(params.model ?? "").toLowerCase().trim();
     const modelId = MODEL_ALIASES[modelAlias];
-    const cliArgs = ["--print", "--dangerously-skip-permissions"];
+    const cliArgs = [
+      "--print",
+      "--permission-mode",
+      "acceptEdits",
+      "--disallowedTools",
+      "Bash(git push *),Bash(git reset --hard *),Bash(rm -rf *)",
+    ];
     if (modelId) cliArgs.push("--model", modelId);
 
     return new Promise<ToolResult>((resolve) => {

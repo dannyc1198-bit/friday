@@ -52,7 +52,7 @@ async function deliverLoop(): Promise<void> {
       try {
         const audio = await textToSpeech(alert.message);
         if (audio) {
-          console.log(`[Alert Delivery] Spoke alert (${audio.length} bytes): ${alert.title}`);
+          console.log(`[Alert Delivery] Generated alert audio (${audio.length} bytes): ${alert.title}`);
         } else {
           console.warn(`[Alert Delivery] TTS returned null for: ${alert.title}`);
         }

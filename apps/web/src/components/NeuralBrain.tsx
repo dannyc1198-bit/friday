@@ -212,12 +212,11 @@ export default function NeuralBrain({ intensity = 0.3, className }: NeuralBrainP
       ctx.drawImage(edgeLayer, 0, 0, w, h);
 
       // neurons — square pixels with layered-rect glow (no shadowBlur)
-      const tSec = now / 1000;
+      // Positions are fixed; only activation glow animates.
       for (const n of neurons) {
         n.activation *= Math.exp(-dt * 2.4);
-        const wob = px * 0.8;
-        const x = snap(n.x + Math.sin(tSec * 0.7 + n.phase) * wob);
-        const y = snap(n.y + Math.cos(tSec * 0.55 + n.phase * 1.7) * wob);
+        const x = snap(n.x);
+        const y = snap(n.y);
         const s = px * n.size;
         const a = n.activation;
         if (a > 0.04) {

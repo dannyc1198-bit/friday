@@ -1,37 +1,28 @@
-// Scheduler — tiny cron-less scheduler for FRIDAY's time-based events
-//
-// Checks once per minute:
-//   - 5 AM local time  → fire morning briefing (once per day, even across restarts)
-//   - 9:30 PM local    → nightly brain reflection (distill the day into the vault)
-//
-// Persistence: data/scheduler-state.json holds last-fired dates per job.
-// Quiet hours (23:00–05:00) are respected for everything EXCEPT the 5 AM wake.
+// FRIDAY scheduler: durable local-time jobs with restart catch-up and retries.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "fs";
 import { join } from "path";
 import { proactiveMonitor } from "./proactive-monitor.js";
 import { getMorningBriefing } from "./morning-briefing.js";
 import { textToSpeech, isTTSAvailable } from "./tts.js";
 import { runReflection } from "./reflection.js";
+import { DATA_DIR, localDateKey } from "./runtime-paths.js";
 
-const USER_HOME = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368";
-const DATA_DIR = join(USER_HOME, "jarvis", "apps", "orchestrator", "data");
 const STATE_FILE = join(DATA_DIR, "scheduler-state.json");
-
-const CHECK_INTERVAL_MS = 60 * 1000; // every minute
-const BRIEFING_HOUR = 5;             // 5 AM local time
-const REFLECTION_HOUR = 21;          // 9 PM local
-const REFLECTION_MINUTE = 30;        // ...:30 — after gym, before quiet hours
-
+const CHECK_INTERVAL_MS = 60_000;
+const RETRY_INTERVAL_MS = 15 * 60_000;
+const BRIEFING_HOUR = 5;
+const REFLECTION_HOUR = 21;
+const REFLECTION_MINUTE = 30;
 const QUIET_HOUR_START = 23;
 const QUIET_HOUR_END = 5;
 
-interface SchedulerState {
-  lastBriefingDate: string | null;   // YYYY-MM-DD
-  lastReflectionDate?: string | null; // YYYY-MM-DD
+export interface SchedulerState {
+  lastBriefingDate: string | null;
+  lastReflectionDate?: string | null;
+  lastReflectionAttemptAt?: string | null;
+  lastReflectionError?: string | null;
 }
-
-// ─── State persistence ───────────────────────────────────────────
 
 function loadState(): SchedulerState {
   try {
@@ -39,125 +30,142 @@ function loadState(): SchedulerState {
       return JSON.parse(readFileSync(STATE_FILE, "utf8")) as SchedulerState;
     }
   } catch {
-    // fall through
+    // A corrupt or missing state file is recoverable from the next tick.
   }
-  return { lastBriefingDate: null };
+  return { lastBriefingDate: null, lastReflectionDate: null };
 }
 
 function saveState(state: SchedulerState): void {
   try {
     if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-    writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
+    const temp = `${STATE_FILE}.tmp`;
+    writeFileSync(temp, JSON.stringify(state, null, 2), "utf-8");
+    renameSync(temp, STATE_FILE);
   } catch (err) {
     console.warn("[Scheduler] Failed to persist state:", (err as Error).message);
   }
 }
 
-function todayKey(d = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function previousLocalDate(date: Date): string {
+  const previous = new Date(date);
+  previous.setDate(previous.getDate() - 1);
+  return localDateKey(previous);
+}
+
+/** Pure decision function, exported so catch-up semantics can be tested. */
+export function getDueJobs(now: Date, state: SchedulerState): {
+  briefingDate: string | null;
+  reflectionDate: string | null;
+} {
+  const today = localDateKey(now);
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const afterReflectionTime =
+    hour > REFLECTION_HOUR ||
+    (hour === REFLECTION_HOUR && minute >= REFLECTION_MINUTE);
+  const reflectionDate = afterReflectionTime ? today : previousLocalDate(now);
+  const lastAttemptMs = state.lastReflectionAttemptAt
+    ? new Date(state.lastReflectionAttemptAt).getTime()
+    : 0;
+  const retryCoolingDown = Number.isFinite(lastAttemptMs) &&
+    now.getTime() - lastAttemptMs < RETRY_INTERVAL_MS;
+
+  return {
+    // A restart at 05:01 still delivers; after noon the briefing is stale.
+    briefingDate:
+      hour >= BRIEFING_HOUR && hour < 12 && state.lastBriefingDate !== today
+        ? today
+        : null,
+    // Before tonight's reflection, catch up yesterday. Afterwards process today.
+    reflectionDate:
+      state.lastReflectionDate !== reflectionDate && !retryCoolingDown
+        ? reflectionDate
+        : null,
+  };
 }
 
 export function isQuietHours(date = new Date()): boolean {
-  const h = date.getHours();
-  if (QUIET_HOUR_START <= QUIET_HOUR_END) {
-    return h >= QUIET_HOUR_START && h < QUIET_HOUR_END;
-  }
-  // wraps midnight
-  return h >= QUIET_HOUR_START || h < QUIET_HOUR_END;
+  const hour = date.getHours();
+  return hour >= QUIET_HOUR_START || hour < QUIET_HOUR_END;
 }
-
-// ─── Scheduler ───────────────────────────────────────────────────
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let tickRunning = false;
 
 async function fireMorningBriefing(): Promise<void> {
+  const briefing = await getMorningBriefing();
+  proactiveMonitor.queueAlert({
+    type: "system",
+    priority: "high",
+    title: "Morning Briefing",
+    message: briefing.script,
+  });
+
+  if (!isTTSAvailable()) return;
   try {
-    console.log("[Scheduler] Firing morning briefing…");
-    const briefing = await getMorningBriefing();
-
-    // Queue as high-priority briefing alert (frontend/history)
-    proactiveMonitor.queueAlert({
-      type: "system", // briefing is a system-level event; alert type union doesn't include "briefing"
-      priority: "high",
-      title: "Morning Briefing",
-      message: briefing.script,
-    });
-
-    // Speak immediately if TTS is available — the 5 AM briefing is intentional
-    if (isTTSAvailable()) {
-      try {
-        const audio = await textToSpeech(briefing.script);
-        if (audio) {
-          // We have an audio buffer but no speaker channel from the backend alone.
-          // The frontend will pick up the queued alert and play it; we still
-          // generate here to warm the cache and verify TTS availability.
-          console.log(`[Scheduler] Morning briefing TTS ready (${audio.length} bytes)`);
-        }
-      } catch (err) {
-        console.warn("[Scheduler] TTS for briefing failed:", (err as Error).message);
-      }
-    } else {
-      console.log("[Scheduler] TTS unavailable — briefing queued silently");
-    }
+    const audio = await textToSpeech(briefing.script);
+    if (audio) console.log(`[Scheduler] Morning briefing TTS ready (${audio.length} bytes)`);
   } catch (err) {
-    console.error("[Scheduler] Morning briefing failed:", (err as Error).message);
+    console.warn("[Scheduler] TTS for briefing failed:", (err as Error).message);
   }
 }
 
-async function tick(): Promise<void> {
-  const now = new Date();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  const state = loadState();
-  const today = todayKey(now);
+export async function runSchedulerTick(now = new Date()): Promise<void> {
+  if (tickRunning) return;
+  tickRunning = true;
+  try {
+    const state = loadState();
+    const due = getDueJobs(now, state);
 
-  // 5 AM briefing — fires once per local day
-  if (hour === BRIEFING_HOUR && state.lastBriefingDate !== today) {
-    await fireMorningBriefing();
-    state.lastBriefingDate = today;
-    saveState(state);
-  }
-
-  // 9:30 PM nightly reflection — distill today into the Obsidian brain.
-  // "Once per day" guard persists across restarts; window is >= :30 so a
-  // restart at 9:45 still reflects that night.
-  if (
-    hour === REFLECTION_HOUR &&
-    minute >= REFLECTION_MINUTE &&
-    state.lastReflectionDate !== today
-  ) {
-    state.lastReflectionDate = today; // claim BEFORE the slow LLM call — no double-fire
-    saveState(state);
-    const result = await runReflection(today);
-    if (result.ran) {
-      proactiveMonitor.queueAlert({
-        type: "system",
-        priority: "low",
-        title: "Nightly Reflection",
-        message: `Brain updated: ${result.factsAdded} new fact(s) learned today. ${result.summary || ""}`.trim(),
-      });
-    } else if (result.error) {
-      console.warn(`[Scheduler] Reflection errored (will retry tomorrow): ${result.error}`);
+    if (due.briefingDate) {
+      try {
+        await fireMorningBriefing();
+        state.lastBriefingDate = due.briefingDate;
+        saveState(state);
+      } catch (err) {
+        console.error("[Scheduler] Morning briefing failed:", (err as Error).message);
+      }
     }
+
+    if (due.reflectionDate) {
+      state.lastReflectionAttemptAt = now.toISOString();
+      saveState(state);
+      const result = await runReflection(due.reflectionDate);
+      if (result.ran) {
+        state.lastReflectionDate = due.reflectionDate;
+        state.lastReflectionError = null;
+        proactiveMonitor.queueAlert({
+          type: "system",
+          priority: "low",
+          title: "Nightly Reflection",
+          message: `Brain updated: ${result.factsAdded} new fact(s) learned. ${result.summary || ""}`.trim(),
+        });
+      } else if (result.error) {
+        state.lastReflectionError = result.error;
+        console.warn(`[Scheduler] Reflection errored; retrying in 15 minutes: ${result.error}`);
+      } else {
+        // No substantial material is a successful processing result.
+        state.lastReflectionDate = due.reflectionDate;
+        state.lastReflectionError = null;
+      }
+      saveState(state);
+    }
+  } finally {
+    tickRunning = false;
   }
 }
 
 export function startScheduler(): void {
   if (intervalHandle) return;
-  console.log("[Scheduler] Started — checking every minute (briefing at 5 AM local)");
-  // Run once immediately so a restart right at 5 AM still fires
-  tick().catch((e) => console.warn("[Scheduler] tick error:", e));
+  console.log("[Scheduler] Started - every minute with missed-job catch-up");
+  runSchedulerTick().catch((err) => console.warn("[Scheduler] tick error:", err));
   intervalHandle = setInterval(() => {
-    tick().catch((e) => console.warn("[Scheduler] tick error:", e));
+    runSchedulerTick().catch((err) => console.warn("[Scheduler] tick error:", err));
   }, CHECK_INTERVAL_MS);
 }
 
 export function stopScheduler(): void {
-  if (intervalHandle) {
-    clearInterval(intervalHandle);
-    intervalHandle = null;
-  }
+  if (!intervalHandle) return;
+  clearInterval(intervalHandle);
+  intervalHandle = null;
 }

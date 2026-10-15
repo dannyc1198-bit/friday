@@ -5,9 +5,27 @@ import { promises as fs } from "fs";
 // Read-only. The log stays canonical; this only parses the START HERE box
 // and the TO-DO section.
 
-const LOG_PATH =
-  process.env.MISSION_LOG_PATH ||
-  "C:\\Users\\12368\\Desktop\\WAVELENGTH-CHAMPION-LOG.md";
+// The log lives in two hardlinked places (vault canonical + Desktop mirror) and
+// has moved once already during a home-folder reorg. Resolve at request time
+// against every known home instead of trusting one absolute path, so a future
+// move degrades to "reads the other copy" rather than a dead card.
+const LOG_CANDIDATES = [
+  process.env.MISSION_LOG_PATH,
+  "C:/Users/12368/Obsidian/Wavelength/000 Dashboard/WAVELENGTH-CHAMPION-LOG.md",
+  "C:/Users/12368/Desktop/Notes & Docs/WAVELENGTH-CHAMPION-LOG.md",
+  "C:/Users/12368/Desktop/WAVELENGTH-CHAMPION-LOG.md",
+].filter(Boolean) as string[];
+
+async function readLog(): Promise<{ md: string; source: string }> {
+  for (const p of LOG_CANDIDATES) {
+    try {
+      return { md: await fs.readFile(p, "utf-8"), source: p };
+    } catch {
+      // try the next home
+    }
+  }
+  throw new Error("no candidate readable");
+}
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +40,7 @@ function clean(s: string): string {
 
 export async function GET() {
   try {
-    const md = await fs.readFile(LOG_PATH, "utf-8");
+    const { md, source } = await readLog();
     const grab = (re: RegExp) => {
       const m = md.match(re);
       return m ? clean(m[1]) : null;
@@ -31,7 +49,8 @@ export async function GET() {
     const lastUpdated = grab(/\*\*Last updated:\*\*\s*(.+)/);
     const phase = grab(/\*\*Phase:\*\*\s*(.+)/);
     const spear = grab(/\*\*The Spear[^:]*:\*\*\s*(.+)/);
-    const oneThing = grab(/\*\*🎯 YOUR ONE THING THIS WEEK:\*\*\s*(.+)/);
+    // Label drifts ("THIS WEEK" → "TONIGHT (07-15)") — match the stem, not the suffix.
+    const oneThing = grab(/\*\*🎯 YOUR ONE THING[^:]*:\*\*\s*(.+)/);
 
     // TO-DO section: everything between "## ✅ TO-DO" and the next "---"
     const todos: { done: boolean; text: string }[] = [];
@@ -45,10 +64,10 @@ export async function GET() {
       });
     }
 
-    return Response.json({ ok: true, lastUpdated, phase, spear, oneThing, todos });
+    return Response.json({ ok: true, lastUpdated, phase, spear, oneThing, todos, source });
   } catch {
     return Response.json(
-      { ok: false, error: "Champion Log not found at " + LOG_PATH },
+      { ok: false, error: "Champion Log not found in any known location" },
       { status: 200 } // soft failure — the card renders the message, no 500 noise
     );
   }

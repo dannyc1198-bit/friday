@@ -45,6 +45,8 @@ import { voiceRoutes } from "./routes/voice.js";
 import { vapiLlmRoutes } from "./routes/vapi-llm.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { brainRoutes } from "./routes/brain.js";
+import { skillRoutes } from "./routes/skills.js";
+import proactiveAlertsRoutes from "./routes/proactive-alerts.js";
 import { initBrain, stopBrain, buildBrainContext } from "./services/brain.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
 import { getLLMInfo } from "./services/openai.js";
@@ -56,13 +58,19 @@ import {
 } from "./services/memory-loader.js";
 import { promises as fs } from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import { CONVERSATION_DIR, ensureRuntimeDirs, localTimestamp } from "./services/runtime-paths.js";
+import {
+  buildProceduralSkillContextWithUsage,
+  captureCorrectionProposal,
+  recordProceduralSkillOutcome,
+  type ProceduralOutcome,
+} from "./services/procedural-skills.js";
 
 // ─── Conversation transcript persistence ────────────────────────
 // Every chat turn gets appended to a JSONL file under data/conversations/{id}.jsonl
 // so Danny can scroll back through any past conversation forever, independent of
 // the in-memory conversations Map (which doesn't survive restarts).
-const CONVO_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "conversations");
+const CONVO_DIR = CONVERSATION_DIR;
 
 // Per-conversation write mutex: appends for the same conversation chain onto
 // the previous append's promise so concurrent turns can't interleave partial
@@ -84,7 +92,8 @@ function appendTranscript(
       const line = JSON.stringify({
         role,
         content,
-        timestamp: new Date().toISOString(),
+        timestamp: localTimestamp(),
+        timestampUtc: new Date().toISOString(),
         ...(meta || {}),
       }) + "\n";
       await fs.appendFile(file, line, "utf-8");
@@ -146,6 +155,7 @@ async function readTranscript(conversationId: string): Promise<Array<{ role: str
 
 const MAX_MESSAGE_LENGTH = 4000;
 const activeAbortControllers = new Map<string, AbortController>();
+const lastProceduralSkillsByConversation = new Map<string, string[]>();
 
 const app = Fastify({
   logger: {
@@ -153,6 +163,8 @@ const app = Fastify({
     transport: { target: "pino-pretty", options: { colorize: true } },
   },
 });
+
+ensureRuntimeDirs();
 
 await app.register(cors, {
   origin: [config.corsOrigin, "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:8080"],
@@ -170,6 +182,8 @@ await app.register(voiceRoutes);
 await app.register(vapiLlmRoutes, { prefix: "/vapi/llm" });
 await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
 await app.register(brainRoutes, { prefix: "/api/brain" });
+await app.register(skillRoutes, { prefix: "/api/skills" });
+await app.register(proactiveAlertsRoutes);
 
 initializeTools();
 
@@ -261,6 +275,28 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
     const conversation = getOrCreateConversation(conversationId);
     addUserMessage(conversation.id, message);
 
+    // A direct correction is first-class learning evidence. Attach it to the
+    // prior outcome before generating the next answer so Friday can adapt now.
+    let capturedSkillProposal: string | null = null;
+    const isCorrection = learningEngine.isExplicitFeedback(message);
+    const isPositiveFeedback = /\b(that (?:was|is) (?:perfect|great|good|exactly right)|exactly what i wanted|that worked|nice work)\b/i.test(message);
+    const priorProceduralSkills = lastProceduralSkillsByConversation.get(conversation.id) || [];
+    const isNegativeFeedback = /\b(that(?:'s| is) wrong|not what i asked|you misunderstood|don't do that|stop doing)\b/i.test(message);
+    if (priorProceduralSkills.length && (isNegativeFeedback || isPositiveFeedback)) {
+      recordProceduralSkillOutcome(priorProceduralSkills, isNegativeFeedback ? "failure" : "success");
+    }
+    if (isCorrection || isPositiveFeedback) {
+      learningEngine.processFeedback(message, learningEngine.getMostRecentOutcomeId());
+    }
+    if (isCorrection) {
+      try {
+        const proposal = captureCorrectionProposal(message);
+        if (proposal?.status === "pending") capturedSkillProposal = proposal.id;
+      } catch (err) {
+        app.log.warn({ err }, "skill correction capture failed");
+      }
+    }
+
     const allowedOrigins = [config.corsOrigin, "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:8080"];
     const requestOrigin = request.headers.origin || "";
     const sseOrigin = allowedOrigins.includes(requestOrigin) ? requestOrigin : config.corsOrigin;
@@ -283,9 +319,20 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
 
     // Memory context injection: standing memory + cross-agent memory + the
     // brain's per-message vault recall (local BM25 — free, instant, relevant).
+    const proceduralUsage = buildProceduralSkillContextWithUsage(message);
+    lastProceduralSkillsByConversation.set(conversation.id, proceduralUsage.skills);
+    if (lastProceduralSkillsByConversation.size > 1000) {
+      const oldest = lastProceduralSkillsByConversation.keys().next().value;
+      if (oldest) lastProceduralSkillsByConversation.delete(oldest);
+    }
     const memoryContext =
       "\n\n" + buildFullMemoryContext() +
       "\n" + unifiedMemory.buildContextForPrompt(message) +
+      learningEngine.buildLearningContext() +
+      proceduralUsage.context +
+      (capturedSkillProposal
+        ? `\n\nLEARNING NOTICE: A procedural preference proposal (${capturedSkillProposal}) was drafted from Danny's correction. It is not active until he approves it. Briefly mention that it is ready for review.`
+        : "") +
       buildBrainContext(message);
 
     const abortController = new AbortController();
@@ -360,16 +407,18 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       // patterns accumulate (it persists itself on every record).
       try {
         const failures = toolResults.filter((r) => !r.success).length;
+        const turnOutcome: ProceduralOutcome =
+          toolResults.length === 0 ? "unknown"
+          : failures === 0 ? "success"
+          : failures === toolResults.length ? "failure"
+          : "partial";
         learningEngine.recordOutcome({
           action: `Chat: ${message.slice(0, 60)}`,
           context: message.slice(0, 200),
           toolsUsed: toolCalls.map((t) => t.name),
-          outcome:
-            toolResults.length === 0 ? "success"
-            : failures === 0 ? "success"
-            : failures === toolResults.length ? "failure"
-            : "partial",
+          outcome: turnOutcome,
         });
+        recordProceduralSkillOutcome(proceduralUsage.skills, turnOutcome);
       } catch (err) {
         app.log.warn({ err }, "learning-engine record failed");
       }
@@ -537,6 +586,7 @@ async function gracefulShutdown(): Promise<void> {
   stopScheduler();
   stopBrain();
   stopAlertDelivery();
+  proactiveMonitor.stop();
   await shutdownMCPClients();
   process.exit(0);
 }

@@ -16,19 +16,16 @@
 import { promises as fs } from "fs";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 import { simpleCompletion } from "./openai.js";
 import { rememberFact, getBrainStats, getRecentLearnings } from "./brain.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { DATA_DIR, CONVERSATION_DIR, localDateKey, localTimestamp } from "./runtime-paths.js";
 
 const HOME = process.env.USERPROFILE || process.env.HOME || "";
 const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || path.join(HOME, "Obsidian", "Wavelength");
 const BRAIN_DIR = path.join(VAULT_PATH, "FRIDAY_BRAIN");
 const ENTITIES_DIR = path.join(BRAIN_DIR, "entities");
 const DAILY_DIR = path.join(VAULT_PATH, "Daily");
-const DATA_DIR = path.join(__dirname, "..", "..", "data");
-const CONVO_DIR = path.join(DATA_DIR, "conversations");
+const CONVO_DIR = CONVERSATION_DIR;
 const STATE_FILE = path.join(DATA_DIR, "brain-reflection.json");
 
 const MAX_TRANSCRIPT_CHARS = 9000; // keep the single daily call cheap
@@ -127,7 +124,7 @@ async function vaultActivityToday(date: string): Promise<string[]> {
       else if (e.name.endsWith(".md")) {
         try {
           const stat = await fs.stat(full);
-          if (stat.mtime.toISOString().startsWith(date)) {
+          if (localDateKey(stat.mtime) === date) {
             touched.push(path.relative(VAULT_PATH, full).replace(/\\/g, "/"));
           }
         } catch { /* skip */ }
@@ -247,7 +244,7 @@ async function refreshBrainIndex(): Promise<void> {
 let reflecting = false;
 
 export async function runReflection(dateStr?: string): Promise<ReflectionResult> {
-  const date = dateStr || new Date().toISOString().split("T")[0];
+  const date = dateStr || localDateKey();
   if (reflecting) return { ran: false, date, skippedReason: "Reflection already in progress" };
   reflecting = true;
 
@@ -303,7 +300,7 @@ Distill this day per your instructions. JSON only.`;
       ...(highlights.length > 0 ? ["**Highlights:**", ...highlights.map((h) => `- ${h}`), ""] : []),
       ...(factsAdded > 0 ? [`**Learned:** ${factsAdded} new fact(s) → [[FRIDAY_BRAIN/INDEX|Brain Index]]`, ""] : []),
       ...(openLoops.length > 0 ? ["**Open loops:**", ...openLoops.map((l) => `- [ ] ${l}`), ""] : []),
-      `*Reflected ${new Date().toISOString().slice(0, 16).replace("T", " ")}*`,
+      `*Reflected ${localTimestamp().slice(0, 16).replace("T", " ")}*`,
     ].join("\n");
 
     await appendToDailyNote(date, md);
