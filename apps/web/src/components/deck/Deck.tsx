@@ -42,6 +42,9 @@ export default function Deck() {
     sendMessage,
     stopTask,
     newConversation,
+    loadConversation,
+    approval,
+    decideApproval,
   } = useChat();
 
   const [coreOnline, setCoreOnline] = useState(true);
@@ -50,14 +53,22 @@ export default function Deck() {
   const [agentLive, setAgentLive] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [talkNote, setTalkNote] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<Array<{ id: string; firstUser: string }>>([]);
   const { demo, toggle } = useDemo();
 
   const voice = useVoice({
     messages,
     isLoading,
-    onTranscript: sendMessage,
-    enabled: true,
-    suppressMic: agentLive,
+    onTranscript: (text) => {
+      if (readDemo()) {
+        setTalkNote("Demo mode does not send. Nothing left this browser.");
+        return;
+      }
+      sendMessage(text);
+    },
+    enabled: !demo,
+    suppressMic: agentLive || demo,
   });
 
   function ask(prompt: string) {
@@ -98,7 +109,10 @@ export default function Deck() {
   // Ctrl+Enter (Cmd+Enter on Mac) anywhere on the deck toggles live voice —
   // continuous conversation mode. Works while typing too; DeckInput carves
   // Ctrl+Enter out of its send handler so this is the only owner.
-  const { toggleLiveMode } = voice;
+  const { toggleLiveMode, isLiveMode } = voice;
+  useEffect(() => {
+    if (demo && isLiveMode) toggleLiveMode();
+  }, [demo, isLiveMode, toggleLiveMode]);
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && !e.repeat) {
@@ -219,6 +233,28 @@ export default function Deck() {
             </span>
             <button
               onClick={() => {
+                if (demo) {
+                  setTalkNote("Demo mode shows the sample thread only.");
+                  setHistory([]);
+                  setHistoryOpen(true);
+                  return;
+                }
+                setHistoryOpen((open) => !open);
+                if (!historyOpen) {
+                  fetch("/api/deck/conversations")
+                    .then((res) => res.json())
+                    .then((body: { conversations?: Array<{ id: string; firstUser: string }> }) => {
+                      setHistory(body.conversations || []);
+                    })
+                    .catch(() => setHistory([]));
+                }
+              }}
+              className="flex items-center gap-1.5 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink"
+            >
+              History
+            </button>
+            <button
+              onClick={() => {
                 newConversation();
               }}
               className="flex items-center gap-1.5 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber"
@@ -226,6 +262,46 @@ export default function Deck() {
               {Icons.plus} New
             </button>
           </div>
+          {historyOpen && (
+            <div className="max-h-40 overflow-y-auto border-b border-deck-line px-4 py-2">
+              {demo && <p className="text-sm text-deck-gold">SAMPLE thread only. Saved conversations stay hidden.</p>}
+              {!demo && history.length === 0 && <p className="text-sm text-deck-dim">No saved conversations yet.</p>}
+              {!demo && history.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    fetch(`/api/deck/conversations/${encodeURIComponent(item.id)}`)
+                      .then((res) => res.json())
+                      .then((body: { turns?: Array<{ role: "user" | "assistant"; content: string; timestamp: string }> }) => {
+                        const msgs = (body.turns || [])
+                          .filter((turn) => turn.role === "user" || turn.role === "assistant")
+                          .map((turn, index) => ({
+                            id: `${item.id}-${index}`,
+                            role: turn.role,
+                            content: turn.content,
+                            timestamp: new Date(turn.timestamp),
+                          }));
+                        loadConversation(item.id, msgs);
+                        setHistoryOpen(false);
+                      })
+                      .catch(() => setTalkNote("That conversation could not be opened."));
+                  }}
+                  className="block w-full truncate py-1 text-left text-sm text-deck-dim hover:text-deck-ink"
+                >
+                  {item.firstUser || item.id}
+                </button>
+              ))}
+            </div>
+          )}
+          {approval && !demo && (
+            <div className="border-b border-deck-gold/40 bg-deck-gold/10 px-4 py-2 text-sm text-deck-ink">
+              <p>Approve this browser submission exactly as staged: {approval.detail}</p>
+              <div className="mt-2 flex gap-2">
+                <button onClick={() => decideApproval(true)} className="rounded border border-deck-ok px-2 py-1 text-deck-ok">Approve</button>
+                <button onClick={() => decideApproval(false)} className="rounded border border-deck-line px-2 py-1 text-deck-dim">Reject</button>
+              </div>
+            </div>
+          )}
 
           <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
             <div className="mx-auto w-full max-w-3xl px-5">

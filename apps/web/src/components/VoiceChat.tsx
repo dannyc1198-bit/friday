@@ -219,12 +219,26 @@ export function VoiceChat() {
   // ─── WebSocket lifecycle ────────────────────────────────
 
   const openSocket = useCallback(() => {
+    if (window.localStorage.getItem("friday-demo") === "1") {
+      setErrorMsg("Demo mode keeps live voice off.");
+      setPhase("idle");
+      return;
+    }
     setPhase("connecting");
     setErrorMsg(null);
 
+    void (async () => {
     let ws: WebSocket;
     try {
-      ws = new WebSocket(WS_URL);
+      const tokenRes = await fetch("/api/voice/ws-token", { method: "POST" });
+      const issued = (await tokenRes.json()) as { token?: string; error?: string };
+      if (!tokenRes.ok || !issued.token) {
+        setErrorMsg(issued.error || "Voice session was not authorized.");
+        setPhase("error");
+        return;
+      }
+      const socketUrl = `${WS_URL}${WS_URL.includes("?") ? "&" : "?"}token=${encodeURIComponent(issued.token)}`;
+      ws = new WebSocket(socketUrl);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "WebSocket construction failed");
       setPhase("error");
@@ -337,12 +351,17 @@ export function VoiceChat() {
         setPhase("idle");
       }
     };
+    })();
   }, [playAudioBuffer, speakBrowserFallback, startListening]);
 
   // ─── User actions ───────────────────────────────────────
 
   const start = useCallback(async () => {
     if (active) return;
+    if (window.localStorage.getItem("friday-demo") === "1") {
+      setErrorMsg("Demo mode keeps live voice off.");
+      return;
+    }
     if (!supported) {
       setErrorMsg("Web Speech API not supported. Try Chrome or Edge.");
       setPhase("error");

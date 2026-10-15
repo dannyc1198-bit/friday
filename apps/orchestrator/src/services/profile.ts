@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync } from "fs";
 import path from "path";
+import { EVIDENCE_ORDER } from "./memory-order.js";
 import { getBrainDir } from "./vault-config.js";
 
 export const PROFILE_FILENAME = "DANNY-PROFILE.md";
@@ -45,8 +46,8 @@ export function formatCoreProfile(profile = loadCoreProfile()): string {
     return "\n\nCORE PROFILE: FRIDAY_BRAIN/DANNY-PROFILE.md is not in the vault yet. Do not invent Danny's businesses.";
   }
   return (
-    "\n\nCORE PROFILE (authoritative — who Danny is, his businesses, and his rules. " +
-    "Prefer this over vault recall. Notes under archive/ are historical and lose to this profile):\n" +
+    "\n\nCORE PROFILE (background — who Danny is, his businesses, and his rules. " +
+    `${EVIDENCE_ORDER} Notes under archive/ are historical.):\n` +
     profile.text
   );
 }

@@ -1,3 +1,5 @@
+import { orchestratorAuth } from "@/lib/orchestrator";
+
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://127.0.0.1:3001";
 
 export const dynamic = "force-dynamic";
@@ -6,7 +8,7 @@ export async function POST(request: Request) {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/voice/realtime/tool`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: orchestratorAuth({ "Content-Type": "application/json" }),
       body: await request.text(),
     });
     const data = await res.json().catch(() => ({ output: JSON.stringify({ error: "tool failed" }) }));

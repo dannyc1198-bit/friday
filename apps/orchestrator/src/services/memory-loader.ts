@@ -6,8 +6,9 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, basename } from "path";
 import { DATA_DIR, REPO_ROOT, localDateKey } from "./runtime-paths.js";
 
-import { getBrainDir } from "./vault-config.js";
+import { getBrainDir, getObsidianVaultPath } from "./vault-config.js";
 import { PROFILE_FILENAME, formatCoreProfile } from "./profile.js";
+import { EVIDENCE_ORDER, bootstrapPaths, classifyBrainFile, formatBootstrapSection } from "./memory-order.js";
 
 // ─── OBSIDIAN BRAIN (Danny's living second brain) ────────────
 // Replaces MASTER_MEMORY.md as of 2026-05-04. Source of truth lives in
@@ -35,14 +36,31 @@ function loadObsidianBrain(): string {
       .filter((f) => f.endsWith(".md") && f !== PROFILE_FILENAME)
       .sort();
 
-    const sections: string[] = [];
+    const sections: string[] = [EVIDENCE_ORDER];
+    const seen = new Set<string>();
+    for (const full of bootstrapPaths(getObsidianVaultPath(), getBrainDir())) {
+      if (!existsSync(full) || seen.has(full)) continue;
+      seen.add(full);
+      try {
+        const raw = readFileSync(full, "utf-8").trim();
+        if (!raw) continue;
+        const kind = classifyBrainFile(full);
+        sections.push(formatBootstrapSection(kind === "older" ? "audit" : kind, raw));
+      } catch {
+        continue;
+      }
+    }
+    if (sections.length === 1) {
+      sections.push("SHARED BRAIN ENTRYPOINT and CURRENT AUDIT are not in the vault. Do not invent them.");
+    }
     for (const f of files) {
       const full = join(getBrainDir(), f);
+      if (seen.has(full)) continue;
       try {
         const raw = readFileSync(full, "utf-8").trim();
         if (!raw) continue;
         const title = basename(f, ".md");
-        sections.push(`# ${title}\n\n${raw}`);
+        sections.push(`# OLDER NOTE ${title}\n\n${raw}`);
       } catch {
         continue;
       }

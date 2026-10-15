@@ -16,6 +16,7 @@ import OpenAI from "openai";
 import { FRIDAY_SYSTEM_PROMPT } from "../config/index.js";
 import type { Message, StreamChunk } from "../types/index.js";
 import { toolRegistry } from "../tools/registry.js";
+import { parametersToJsonSchema } from "./tool-schema.js";
 import {
   applyToolCallDelta,
   argumentsForTool,
@@ -51,34 +52,7 @@ type ChatCompletionTool = OpenAI.Chat.Completions.ChatCompletionTool;
 
 function getOpenAITools(): ChatCompletionTool[] {
   return toolRegistry.getAllTools().map((tool) => {
-    const params = tool.parameters as any;
-
-    // FRIDAY tools may store params as a full JSON Schema object OR as a flat
-    // array of ToolParameter descriptors. Normalize either to OpenAI's
-    // function.parameters JSON Schema.
-    let parameters: Record<string, unknown>;
-    if (params && !Array.isArray(params) && params.type === "object") {
-      parameters = params;
-    } else {
-      const paramArray = Array.isArray(params) ? params : [];
-      parameters = {
-        type: "object",
-        properties: paramArray.reduce(
-          (acc: Record<string, unknown>, p: any) => ({
-            ...acc,
-            [p.name]: {
-              type: p.type,
-              description: p.description,
-              ...(p.enum ? { enum: p.enum } : {}),
-              // Strict validators (Gemini) reject array schemas without items.
-              ...(p.type === "array" ? { items: p.items ?? { type: "string" } } : {}),
-            },
-          }),
-          {}
-        ),
-        required: paramArray.filter((p: any) => p.required).map((p: any) => p.name),
-      };
-    }
+    const parameters = parametersToJsonSchema(tool.parameters);
 
     return {
       type: "function" as const,
@@ -199,7 +173,7 @@ export async function* streamChatCompletion(
   let intentSummary: string | null = null;
 
   if (intent.autoRun && intent.tool && knownTools.includes(intent.tool)) {
-    const result = await toolRegistry.execute(intent.tool, intent.args);
+    const result = await toolRegistry.execute(intent.tool, intent.args, signal);
     const data = result.data as { message?: string } | undefined;
     intentSummary = data?.message || result.error || "Done.";
     yield {
@@ -240,14 +214,22 @@ export async function* streamChatCompletion(
 
     let stream;
     try {
-      stream = await active.chat.completions.create({
-        model: endpoint.model,
-        max_tokens: MAX_TOKENS,
-        messages: openaiMessages,
-        ...(tools.length > 0 ? { tools, tool_choice: "auto" as const } : {}),
-        stream: true,
-      });
+      stream = await active.chat.completions.create(
+        {
+          model: endpoint.model,
+          max_tokens: MAX_TOKENS,
+          messages: openaiMessages,
+          ...(tools.length > 0 ? { tools, tool_choice: "auto" as const } : {}),
+          stream: true,
+        },
+        { signal }
+      );
     } catch (err: any) {
+      if (signal?.aborted || err?.name === "AbortError" || err?.name === "APIUserAbortError") {
+        yield { type: "text", content: "\n\n[Task cancelled by user.]" };
+        yield { type: "done" };
+        return;
+      }
       const status = err?.status ?? err?.response?.status;
       const msg = err?.message || "";
       if (!failedOver && chain.fallback?.apiKey && shouldFailover(status, msg)) {
@@ -288,6 +270,7 @@ export async function* streamChatCompletion(
     const partialToolCalls: Record<number, PartialToolCall> = {};
     let finishReason: string | null = null;
 
+    try {
     for await (const chunk of stream) {
       if (signal?.aborted) {
         yield { type: "text", content: "\n\n[Task cancelled by user.]" };
@@ -317,6 +300,14 @@ export async function* streamChatCompletion(
       }
 
       if (choice.finish_reason) finishReason = choice.finish_reason;
+    }
+    } catch (err: any) {
+      if (signal?.aborted || err?.name === "AbortError" || err?.name === "APIUserAbortError") {
+        yield { type: "text", content: "\n\n[Task cancelled by user.]" };
+        yield { type: "done" };
+        return;
+      }
+      throw err;
     }
 
     const completedToolCalls = Object.values(partialToolCalls).filter((tc) => tc.name?.trim() || tc.argumentsJson.trim());
@@ -391,7 +382,7 @@ export async function* streamChatCompletion(
       }
 
       try {
-        const result = await toolRegistry.execute(resolved.name, parsed.value);
+        const result = await toolRegistry.execute(resolved.name, parsed.value, signal);
         yield {
           type: "tool_result",
           toolResult: {

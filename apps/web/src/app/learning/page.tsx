@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDemo } from "@/components/deck/demo";
+import { SAMPLE_PROPOSAL } from "@/lib/demo-boundary";
 import {
   Activity,
   AlertTriangle,
@@ -119,6 +121,7 @@ function ScoreBar({ skill }: { skill: EvaluatedSkill }) {
 }
 
 export default function LearningPage() {
+  const { demo } = useDemo();
   const [overview, setOverview] = useState<LearningOverview | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<Action | null>(null);
@@ -126,6 +129,16 @@ export default function LearningPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (demo) {
+      setOverview({
+        summary: { pending: 1, quarantined: 0, active: 0, retired: 0, averageScore: null },
+        proposals: [SAMPLE_PROPOSAL],
+        skills: [],
+      });
+      setSelectedId(SAMPLE_PROPOSAL.id);
+      setError(null);
+      return;
+    }
     try {
       const response = await fetch("/api/skills/overview", { cache: "no-store" });
       if (!response.ok) throw new Error("Friday's learning service is unavailable.");
@@ -140,7 +153,7 @@ export default function LearningPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Learning data could not be loaded.");
     }
-  }, []);
+  }, [demo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -156,6 +169,10 @@ export default function LearningPage() {
   ) || [];
 
   const mutate = async (action: Action) => {
+    if (demo) {
+      setError("Demo mode does not approve procedures. Nothing changed.");
+      return;
+    }
     if (!selected) return;
     if (confirmAction !== action) {
       setConfirmAction(action);
@@ -216,6 +233,11 @@ export default function LearningPage() {
                 <h2 className="text-balance font-deckdisplay text-2xl font-semibold leading-tight tracking-[-0.02em] text-deck-ink md:text-[28px]">
                   Review what Friday wants to learn before it changes how she works.
                 </h2>
+                {demo && (
+                  <p className="mt-2 font-deckmono text-[11px] uppercase tracking-[0.16em] text-deck-gold">
+                    SAMPLE · no personal notes · approvals stay on this screen
+                  </p>
+                )}
                 <p className="mt-2 max-w-xl text-pretty text-[13px] leading-relaxed text-deck-dim">
                   Every procedure keeps its evidence, safety state, measured outcomes, and a rollback path.
                 </p>

@@ -1,3 +1,5 @@
+import { orchestratorAuth } from "@/lib/orchestrator";
+
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://127.0.0.1:3001";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +16,7 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const res = await fetch(`${ORCHESTRATOR_URL}/api/greeting`, { method: "POST" });
+    const res = await fetch(`${ORCHESTRATOR_URL}/api/greeting`, { method: "POST", headers: orchestratorAuth() });
     if (res.status === 204) return new Response(null, { status: 204 });
     const type = res.headers.get("content-type") || "";
     if (type.includes("audio")) {

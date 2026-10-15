@@ -75,10 +75,36 @@ test("a repair cannot push or merge until approval, and a bad health check rolls
 
   const merged = await service.approve(repair.id);
   assert.equal(merged.status, "rolled_back");
+  assert.match(merged.detail, /was not reset/);
   assert.ok(git.calls.includes("push"));
-  assert.ok(git.calls.includes("merge"));
-  assert.ok(git.calls.includes("reset"));
-  assert.ok(git.calls.indexOf("push") < git.calls.indexOf("merge"));
+  assert.ok(git.calls.includes("worktree-add"));
+  assert.ok(git.calls.includes("merge-in"));
+  assert.ok(git.calls.includes("worktree-remove"));
+  assert.equal(git.calls.includes("merge"), false);
+  assert.equal(git.calls.includes("reset"), false);
+});
+
+test("a base branch that moves during health is left unmerged", async () => {
+  const git = fakeGit();
+  let heads = 0;
+  git.headSha = async () => {
+    heads += 1;
+    return heads >= 3 ? "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" : "abc1234def5678";
+  };
+  const service = createRepairService({
+    storeFile: path.join(mkdtempSync(path.join(tmpdir(), "friday-repairs-")), "moved.json"),
+    git,
+    listAgents: async () => [{ id: "claude-code", canDispatch: true }],
+    dispatch: async () => ({ ok: true, summary: "edited brain.ts" }),
+    runTests: async () => ({ ok: true, summary: "tests passed" }),
+    runHealth: async () => ({ ok: true, summary: "ok" }),
+  });
+  const repair = await service.start("brain recall returns 400");
+  const result = await service.approve(repair.id);
+  assert.equal(result.status, "failed");
+  assert.match(result.detail, /moved/);
+  assert.equal(git.calls.includes("merge"), false);
+  assert.equal(git.calls.includes("reset"), false);
 });
 
 test("approval never merges into main, and a secret diff aborts before commit", async () => {
@@ -163,6 +189,14 @@ function fakeGit(branch = "cursor/friday", changed: string[] = ["src/services/br
       calls.push("push");
       if (!name.startsWith("friday/fix-")) throw new Error("pushed the wrong branch");
     },
+    isAncestor: async (ancestor, descendant) => ancestor === descendant || ancestor === "abc1234def5678",
+    worktreeAdd: async () => {
+      calls.push("worktree-add");
+      return "/tmp/friday-repair-test";
+    },
+    worktreeRemove: async () => { calls.push("worktree-remove"); },
+    mergeIn: async () => { calls.push("merge-in"); },
+    revertMerge: async () => { calls.push("revert"); },
   };
   return git;
 }

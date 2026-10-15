@@ -3,6 +3,7 @@
 import { Message } from "@/types";
 import { formatTime } from "@/lib/utils";
 import { toolLabel } from "./deck-lib";
+import { messageSegments, obsidianOpenHref } from "@/lib/message-segments";
 
 // Transcript entries, not chat bubbles. A flight deck keeps a log:
 // speaker tag, timestamp, cognition chips, then the words.
@@ -59,7 +60,23 @@ export function DeckMessage({ message }: { message: Message }) {
           isUser ? "text-deck-dim" : "text-deck-ink"
         }`}
       >
-        {message.content}
+        {messageSegments(message.content || "").map((segment, index) => {
+          if (segment.type === "link") {
+            return (
+              <a key={index} href={segment.href} target="_blank" rel="noreferrer" className="underline decoration-deck-line-bright underline-offset-2">
+                {segment.label}
+              </a>
+            );
+          }
+          if (segment.type === "note") {
+            return (
+              <a key={index} href={obsidianOpenHref(segment.note)} className="mx-0.5 inline-flex rounded border border-deck-line px-1.5 py-0.5 font-deckmono text-[10px] uppercase tracking-wider text-deck-hot">
+                {segment.label}
+              </a>
+            );
+          }
+          return <span key={index}>{segment.text}</span>;
+        })}
         {message.isStreaming && (
           <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse bg-deck-amber align-middle" />
         )}

@@ -4,6 +4,9 @@
 import type { FastifyInstance } from "fastify";
 import { toolRegistry } from "../tools/registry.js";
 import { selectLiveVoice } from "../services/voice-plan.js";
+import { parametersToJsonSchema } from "../services/tool-schema.js";
+import { issueScopedToken } from "../services/access-gate.js";
+import { getApiKey } from "../middleware/auth.js";
 
 const BUTLER = [
   "You are Friday, Daniel's assistant.",
@@ -33,23 +36,22 @@ export function realtimeClientSecretBody(input: {
   };
 }
 
-function realtimeTools() {
-  return toolRegistry.getAllTools().map((tool) => {
-    const params = tool.parameters as { type?: string } | unknown[] | undefined;
-    const parameters =
-      params && !Array.isArray(params) && params.type === "object"
-        ? (params as Record<string, unknown>)
-        : { type: "object", properties: {} };
-    return {
-      name: tool.name,
-      description: tool.description,
-      parameters,
-    };
-  });
+export function realtimeTools() {
+  return toolRegistry.getAllTools().map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: parametersToJsonSchema(tool.parameters),
+  }));
 }
 
 export async function liveVoiceRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/voice/live", async () => selectLiveVoice(process.env));
+
+  app.post("/api/voice/session-token", async () => {
+    const now = Date.now();
+    const token = issueScopedToken({ scope: "voice", secret: getApiKey(), now, ttlMs: 5 * 60_000 });
+    return { token, expiresAt: new Date(now + 5 * 60_000).toISOString() };
+  });
 
   app.get("/api/voice/elevenlabs/token", async (_request, reply) => {
     const plan = selectLiveVoice(process.env);

@@ -22,6 +22,7 @@ import { rememberFact, getBrainStats, getRecentLearnings } from "./brain.js";
 import { isUnsafeToAct, recordLearningLine } from "./learning-writeback.js";
 import { DATA_DIR, CONVERSATION_DIR, localDateKey, localTimestamp } from "./runtime-paths.js";
 import { getBrainDir, getDailyDir, getEntitiesDir, getObsidianVaultPath } from "./vault-config.js";
+import { selectReflectionWindow, type ReflectionTurn } from "./reflection-window.js";
 
 function vaultPath(): string {
   return getObsidianVaultPath();
@@ -37,6 +38,7 @@ export interface ReflectionState {
   lastSummary: string;
   lastFactsAdded: number;
   lastError: string | null;
+  watermark?: string | null;
 }
 
 export interface ReflectionResult {
@@ -46,6 +48,7 @@ export interface ReflectionResult {
   factsAdded?: number;
   skippedReason?: string;
   error?: string;
+  complete?: boolean;
 }
 
 // ─── State ──────────────────────────────────────────────────────
@@ -68,15 +71,15 @@ function saveReflectionState(state: ReflectionState): void {
 
 // ─── Gather the day's raw material ──────────────────────────────
 
-async function gatherTranscripts(date: string): Promise<string> {
+async function gatherTurns(date: string): Promise<ReflectionTurn[]> {
   let files: string[] = [];
   try {
     files = (await fs.readdir(CONVO_DIR)).filter((f) => f.endsWith(".jsonl"));
   } catch {
-    return "";
+    return [];
   }
 
-  const turns: { time: string; role: string; content: string }[] = [];
+  const turns: ReflectionTurn[] = [];
   for (const f of files) {
     let raw: string;
     try {
@@ -84,28 +87,23 @@ async function gatherTranscripts(date: string): Promise<string> {
     } catch {
       continue;
     }
-    for (const line of raw.split("\n")) {
-      if (!line.trim()) continue;
+    const lines = raw.split("\n");
+    lines.forEach((line, index) => {
+      if (!line.trim()) return;
       try {
         const t = JSON.parse(line);
         if (typeof t.timestamp === "string" && t.timestamp.startsWith(date) && t.content) {
-          turns.push({ time: t.timestamp.slice(11, 16), role: t.role, content: String(t.content) });
+          turns.push({
+            iso: t.timestamp,
+            role: t.role === "user" ? "Danny" : "FRIDAY",
+            content: String(t.content),
+            source: `${f}#${index}`,
+          });
         }
       } catch { /* skip malformed line */ }
-    }
+    });
   }
-
-  turns.sort((a, b) => a.time.localeCompare(b.time));
-  let out = "";
-  for (const t of turns) {
-    const line = `[${t.time}] ${t.role === "user" ? "Danny" : "FRIDAY"}: ${t.content.slice(0, 500)}\n`;
-    if (out.length + line.length > MAX_TRANSCRIPT_CHARS) {
-      out += `\n[... ${turns.length} total turns, truncated for budget ...]\n`;
-      break;
-    }
-    out += line;
-  }
-  return out;
+  return turns;
 }
 
 async function vaultActivityToday(date: string): Promise<string[]> {
@@ -254,11 +252,13 @@ export async function runReflection(dateStr?: string): Promise<ReflectionResult>
 
   const state = loadReflectionState();
   try {
-    const transcript = await gatherTranscripts(date);
+    const window = selectReflectionWindow(await gatherTurns(date), state.watermark || null, MAX_TRANSCRIPT_CHARS);
+    const transcript = window.text;
     const touched = await vaultActivityToday(date);
+    const sourceLine = window.selected.map((turn) => turn.source).join(", ");
 
-    if (transcript.length < 200 && touched.length === 0) {
-      return { ran: false, date, skippedReason: "Nothing substantial to reflect on today" };
+    if (window.complete && transcript.length < 200 && touched.length === 0) {
+      return { ran: false, date, complete: true, skippedReason: "Nothing substantial to reflect on today" };
     }
 
     const userPrompt = `DATE: ${date}
@@ -290,9 +290,10 @@ Distill this day per your instructions. JSON only.`;
       if (!f || typeof f.entity !== "string" || typeof f.observation !== "string") continue;
       if (isUnsafeToAct(f.observation)) continue;
       try {
+        const sourced = sourceLine ? `${f.observation} (source turns: ${sourceLine})` : f.observation;
         const res = await rememberFact({
           entity: f.entity,
-          observation: f.observation,
+          observation: sourced,
           type: f.type,
           category: f.category,
           source: "reflection",
@@ -313,14 +314,16 @@ Distill this day per your instructions. JSON only.`;
       "",
       ...(highlights.length > 0 ? ["**Highlights:**", ...highlights.map((h) => `- ${h}`), ""] : []),
       ...(factsAdded > 0 ? [`**Learned:** ${factsAdded} new fact(s) → [[FRIDAY_BRAIN/INDEX|Brain Index]]`, ""] : []),
-      ...(openLoops.length > 0 ? ["**Open loops:**", ...openLoops.map((l) => `- [ ] ${l}`), ""] : []),
+      ...(openLoops.length > 0 ? ["**Open loops:**", ...openLoops.map((l) => `- [ ] ${l}${sourceLine ? ` (source turns: ${sourceLine})` : ""}`), ""] : []),
+      ...(sourceLine ? ["**Source turns:**", sourceLine, ""] : []),
       ...(improvements.length > 0 ? ["**Improve:**", ...improvements.map((item) => `- ${item}`), ""] : []),
       `*Reflected ${localTimestamp().slice(0, 16).replace("T", " ")}*`,
     ].join("\n");
 
     await appendToDailyNote(date, md);
 
-    state.lastReflectionDate = date;
+    state.watermark = window.complete ? null : window.nextWatermark;
+    if (window.complete) state.lastReflectionDate = date;
     state.lastRunAt = new Date().toISOString();
     state.lastSummary = summary;
     state.lastFactsAdded = factsAdded;
@@ -330,7 +333,7 @@ Distill this day per your instructions. JSON only.`;
     await refreshBrainIndex();
 
     console.log(`[Reflection] ${date}: ${factsAdded} fact(s) learned. ${getBrainStats().entities} entities total.`);
-    return { ran: true, date, summary, factsAdded };
+    return { ran: true, date, summary, factsAdded, complete: window.complete };
   } catch (err) {
     const msg = (err as Error).message;
     console.error("[Reflection] failed:", msg);

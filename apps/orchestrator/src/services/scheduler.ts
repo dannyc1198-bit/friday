@@ -139,13 +139,16 @@ export async function runSchedulerTick(now = new Date()): Promise<void> {
       saveState(state);
       const result = await runReflection(due.reflectionDate);
       if (result.ran) {
-        state.lastReflectionDate = due.reflectionDate;
+        if (result.complete !== false) state.lastReflectionDate = due.reflectionDate;
         state.lastReflectionError = null;
         proactiveMonitor.queueAlert({
           type: "system",
           priority: "low",
           title: "Nightly Reflection",
-          message: `Brain updated: ${result.factsAdded} new fact(s) learned. ${result.summary || ""}`.trim(),
+          message: (result.complete === false
+            ? `Reflected the first part of the day (${result.factsAdded} fact(s)). Later conversations are still queued.`
+            : `Brain updated: ${result.factsAdded} new fact(s) learned. ${result.summary || ""}`
+          ).trim(),
         });
       } else if (result.error) {
         state.lastReflectionError = result.error;

@@ -185,24 +185,51 @@ function RealtimeSession({
 
   useEffect(() => {
     if (!active) return;
-    let closed = false;
+    const session = { disposed: false };
+    const abort = new AbortController();
     let pc: RTCPeerConnection | null = null;
     let local: MediaStream | null = null;
     const audio = new Audio();
     audio.autoplay = true;
     audioRef.current = audio;
 
+    const release = () => {
+      session.disposed = true;
+      abort.abort();
+      local?.getTracks().forEach((track) => track.stop());
+      local = null;
+      pc?.close();
+      pc = null;
+      audio.srcObject = null;
+      onAgentRef.current(false);
+    };
+
     (async () => {
-      const sessionRes = await fetch("/api/voice/realtime/session", { method: "POST" });
-      const session = (await sessionRes.json()) as { token?: string; error?: string };
-      if (!sessionRes.ok || !session.token) throw new Error(session.error || "no session");
+      const sessionRes = await fetch("/api/voice/realtime/session", { method: "POST", signal: abort.signal });
+      if (session.disposed) return;
+      const body = (await sessionRes.json()) as { token?: string; error?: string };
+      if (session.disposed) return;
+      if (!sessionRes.ok || !body.token) throw new Error(body.error || "no session");
       pc = new RTCPeerConnection();
+      if (session.disposed) {
+        pc.close();
+        pc = null;
+        return;
+      }
       pc.ontrack = (event) => {
+        if (session.disposed) return;
         audio.srcObject = event.streams[0];
         void audio.play().catch(() => undefined);
         onAgentRef.current(true);
       };
       local = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (session.disposed) {
+        local.getTracks().forEach((track) => track.stop());
+        local = null;
+        pc?.close();
+        pc = null;
+        return;
+      }
       pc.addTrack(local.getTracks()[0], local);
       const channel = pc.createDataChannel("oai-events");
       channel.onmessage = (event) => {
@@ -221,6 +248,7 @@ function RealtimeSession({
             })
               .then((res) => res.json())
               .then((body: { output?: string }) => {
+                if (session.disposed || channel.readyState !== "open") return;
                 channel.send(JSON.stringify({
                   type: "conversation.item.create",
                   item: {
@@ -238,30 +266,35 @@ function RealtimeSession({
         }
       };
       const offer = await pc.createOffer();
+      if (session.disposed) return;
       await pc.setLocalDescription(offer);
+      if (session.disposed) return;
       const sdp = await fetch("https://api.openai.com/v1/realtime/calls", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session.token}`,
+          Authorization: `Bearer ${body.token}`,
           "Content-Type": "application/sdp",
         },
         body: offer.sdp,
+        signal: abort.signal,
       });
+      if (session.disposed) return;
       if (!sdp.ok) throw new Error("realtime call failed");
       const answer = await sdp.text();
-      if (closed || !pc) return;
+      if (session.disposed || !pc) {
+        local?.getTracks().forEach((track) => track.stop());
+        local = null;
+        pc?.close();
+        pc = null;
+        return;
+      }
       await pc.setRemoteDescription({ type: "answer", sdp: answer });
-    })().catch(() => {
-      if (!closed) onFailRef.current();
+    })().catch((err: unknown) => {
+      if (session.disposed || (err instanceof DOMException && err.name === "AbortError")) return;
+      onFailRef.current();
     });
 
-    return () => {
-      closed = true;
-      local?.getTracks().forEach((track) => track.stop());
-      pc?.close();
-      audio.srcObject = null;
-      onAgentRef.current(false);
-    };
+    return release;
   }, [active]);
 
   return null;

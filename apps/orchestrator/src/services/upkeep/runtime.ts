@@ -67,9 +67,16 @@ function repairService() {
         return { ok: result.ok, summary: result.summary };
       },
       runTests: () => runCommand(ORCHESTRATOR_ROOT, ["npm", "test"]),
-      runHealth: async () => {
+      runHealth: async (cwd?: string) => {
         const ping = await pingHealth();
         if (!ping.ok) return ping;
+        if (cwd && process.env.FRIDAY_HEALTHCHECK === "1") {
+          const results = [];
+          for (const command of healthCommands()) {
+            results.push(await runCommand(cwd, command));
+          }
+          return summarizeChecks(results);
+        }
         return runHealthCheck();
       },
     });

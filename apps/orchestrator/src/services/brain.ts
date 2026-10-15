@@ -52,6 +52,8 @@ export interface BrainChunk {
   noteName: string;
   heading: string;   // nearest heading above the chunk ("" for preamble)
   text: string;
+  asOf?: string | null;
+  status?: string | null;
 }
 
 export interface BrainHit {
@@ -60,6 +62,8 @@ export interface BrainHit {
   heading: string;
   snippet: string;
   score: number;
+  asOf?: string | null;
+  status?: string | null;
 }
 
 export interface JournalEntry {
@@ -90,7 +94,7 @@ let rescanHandle: ReturnType<typeof setInterval> | null = null;
 function newIndex(): MiniSearch<BrainChunk> {
   return new MiniSearch<BrainChunk>({
     fields: ["noteName", "heading", "text"],
-    storeFields: ["notePath", "noteName", "heading", "text"],
+    storeFields: ["notePath", "noteName", "heading", "text", "asOf", "status"],
     searchOptions: {
       boost: { noteName: 3, heading: 2 },
       fuzzy: 0.2,
@@ -136,9 +140,27 @@ export function isArchivePath(notePath: string): boolean {
   return /(^|\/)archive\//i.test(notePath.replace(/\\/g, "/"));
 }
 
+export function isPendingKnowledgePath(notePath: string): boolean {
+  const note = notePath.replace(/\\/g, "/");
+  return /(^|\/)(proposals|drafts)\//i.test(note) || /pending-approval\.md$/i.test(note);
+}
+
+export function parseEvidence(raw: string): { asOf: string | null; status: string | null } {
+  const front = raw.match(/^---\n([\s\S]*?)\n---/);
+  const block = front?.[1] || "";
+  const dated = block.match(/^(?:date|updated|as_of):\s*["']?(\d{4}-\d{2}-\d{2})/m);
+  const status = block.match(/^status:\s*["']?([A-Za-z0-9_-]+)/m);
+  const inline = raw.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+  return {
+    asOf: dated?.[1] || inline?.[1] || null,
+    status: status?.[1] || null,
+  };
+}
+
 /** Split a note into heading-scoped chunks (smart-connections style). */
 export function chunkNote(rel: string, raw: string): BrainChunk[] {
   const noteName = path.basename(rel, ".md");
+  const evidence = parseEvidence(raw);
   // Strip frontmatter — metadata isn't prose worth ranking on.
   const body = raw.replace(/^---\n[\s\S]*?\n---\n?/, "");
   const lines = body.split("\n");
@@ -184,6 +206,8 @@ export function chunkNote(rel: string, raw: string): BrainChunk[] {
     noteName,
     heading: s.heading,
     text: s.text,
+    asOf: evidence.asOf,
+    status: evidence.status,
   }));
 }
 
@@ -282,10 +306,13 @@ export function stopBrain(): void {
 
 export function rankBrainHits(hits: BrainHit[], query: string, limit = 6): BrainHit[] {
   const wantArchive = /\b(archive|history|historical|used to|old notes?)\b/i.test(query);
-  const ranked = hits.map((hit) => {
+  const wantPending = /\b(proposal|proposals|draft|drafts|pending approval)\b/i.test(query);
+  const visible = hits.filter((hit) => wantPending || !isPendingKnowledgePath(hit.notePath));
+  const ranked = visible.map((hit) => {
     let score = hit.score;
     if (isArchivePath(hit.notePath)) score *= wantArchive ? 1.1 : 0.15;
     else score *= 1.25;
+    if (hit.asOf) score *= 1.05;
     const notePath = hit.notePath.replace(/\\/g, "/");
     if (notePath.startsWith("FRIDAY_BRAIN/entities/")) score *= 1.15;
     return { ...hit, score: Math.round(score * 100) / 100 };
@@ -306,6 +333,8 @@ export function searchBrain(query: string, limit = 6): BrainHit[] {
     heading: (r.heading as string) || "",
     snippet: ((r.text as string) || "").slice(0, 400),
     score: Math.round(r.score * 100) / 100,
+    asOf: (r.asOf as string) || null,
+    status: (r.status as string) || null,
   }));
   return rankBrainHits(hits, q, limit);
 }
@@ -322,7 +351,9 @@ export function formatBrainContext(hits: BrainHit[], maxChars = 1600): string {
   const parts: string[] = [];
   let used = 0;
   for (const h of hits) {
-    const block = `[${h.notePath}${h.heading ? ` › ${h.heading}` : ""}]\n${h.snippet}`;
+    const when = h.asOf ? `as of ${h.asOf}` : "undated — older than dated evidence";
+    const status = h.status ? ` status ${h.status}` : "";
+    const block = `[${h.notePath}${h.heading ? ` › ${h.heading}` : ""} | ${when}${status}]\n${h.snippet}`;
     if (used + block.length > maxChars) break;
     parts.push(block);
     used += block.length;

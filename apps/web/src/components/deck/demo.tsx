@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { DEMO_COOKIE, DEMO_STORAGE_KEY, demoCookieValue } from "@/lib/demo-boundary";
 
-const KEY = "friday-demo";
+const KEY = DEMO_STORAGE_KEY;
 const EVENT = "friday-demo";
 
 export function readDemo(): boolean {
@@ -12,8 +13,11 @@ export function readDemo(): boolean {
 
 export function writeDemo(on: boolean): void {
   window.localStorage.setItem(KEY, on ? "1" : "0");
+  document.cookie = demoCookieValue(on);
   window.dispatchEvent(new Event(EVENT));
 }
+
+export { DEMO_COOKIE };
 
 export function useDemo() {
   const [demo, setDemo] = useState(false);

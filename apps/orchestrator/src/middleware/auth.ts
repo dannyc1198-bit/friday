@@ -8,6 +8,7 @@ import { randomBytes, timingSafeEqual, createHash } from "crypto";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { FastifyRequest, FastifyReply } from "fastify";
+import { originAllowed, voiceUpgradeDecision } from "../services/access-gate.js";
 
 // ─── Config ─────────────────────────────────────────────────────
 const ENV_PATH = join(
@@ -121,6 +122,16 @@ function isLocalhost(request: FastifyRequest): boolean {
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 }
 
+function headerValue(request: FastifyRequest, name: string): string {
+  const value = request.headers[name];
+  return Array.isArray(value) ? value[0] || "" : value || "";
+}
+
+function queryToken(request: FastifyRequest): string {
+  const query = request.query as { token?: unknown } | undefined;
+  return typeof query?.token === "string" ? query.token : "";
+}
+
 export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply
@@ -151,38 +162,45 @@ export async function authMiddleware(
     return;
   }
 
-  // Live voice WebSocket upgrade — browsers can't attach Authorization headers
-  // to `new WebSocket()` calls. Orchestrator binds to 127.0.0.1 by default, so
-  // the local-loopback origin is the trust boundary (same as the HUD GET reads
-  // below). If you ever bind to a public interface, gate this on isLocalhost().
-  if (path === "/v1/voice" && isLocalhost(request)) {
+  // Voice websocket: a loopback TCP connection is not a session. The browser
+  // must present an allowed Origin and Host plus a short-lived voice token.
+  if (path === "/v1/voice") {
+    const decision = voiceUpgradeDecision({
+      origin: headerValue(request, "origin"),
+      host: headerValue(request, "host"),
+      token: queryToken(request),
+      secret: getApiKey(),
+      now: Date.now(),
+    });
+    if (!decision.ok) {
+      reply.code(401).send({ error: "Unauthorized", message: decision.reason });
+      return;
+    }
     return;
   }
 
-  // The HUD claims the boot greeting and marks it heard from localhost.
-  if (isLocalhost(request) && (path === "/api/greeting" || path === "/api/greeting/heard")) {
-    return;
-  }
-
-  // Approve / Reject a repair, and mint a short-lived voice token, from this machine.
-  if (
-    isLocalhost(request) &&
-    request.method === "POST" &&
-    (/^\/api\/upkeep\/repairs\/[^/]+\/(approve|reject)$/.test(path) ||
-      path === "/api/voice/realtime/session" ||
-      path === "/api/voice/realtime/tool" ||
-      path === "/api/neural/thinking")
-  ) {
-    return;
-  }
+  // Credential-minting voice routes always require the bearer key, even from
+  // loopback. The HUD proxy attaches that key only after its own session check.
+  const voiceCredential =
+    path === "/api/voice/elevenlabs/token" ||
+    path === "/api/voice/realtime/session" ||
+    path === "/api/voice/realtime/tool" ||
+    path === "/api/voice/session-token";
 
   // Allow same-machine HUD reads on whitelisted prefixes.
   // Method must be GET (no mutations); IP must be local loopback.
+  // A browser Origin, when present, must be on the allowlist.
   if (
+    !voiceCredential &&
     request.method === "GET" &&
     isLocalhost(request) &&
     (path === "/api/agents" || path === "/api/greeting" || LOCALHOST_READ_PREFIXES.some((p) => path.startsWith(p)))
   ) {
+    const origin = headerValue(request, "origin");
+    if (origin && !originAllowed(origin)) {
+      reply.code(403).send({ error: "Forbidden", message: "Origin is not allowed." });
+      return;
+    }
     return;
   }
 

@@ -15,7 +15,7 @@ import { config } from "./config/index.js";
 import { initializeTools, toolRegistry } from "./tools/index.js";
 import {
   createConversation,
-  getOrCreateConversation,
+  ensureConversation,
   addUserMessage,
   addAssistantMessage,
   getMessages,
@@ -67,6 +67,8 @@ import { publishThought } from "./services/thought-bus.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
 import { getLLMInfo } from "./services/openai.js";
 import { authMiddleware, initAuth } from "./middleware/auth.js";
+import { stopTargets } from "./services/run-control.js";
+import { grantEffect, takeStagedEffect } from "./services/effect-gate.js";
 import { unifiedMemory } from "./services/unified-memory.js";
 import {
   buildFullMemoryContext,
@@ -336,7 +338,8 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       });
     }
 
-    const conversation = getOrCreateConversation(conversationId);
+    const priorTurns = conversationId ? await readTranscript(conversationId) : [];
+    const conversation = ensureConversation(conversationId, priorTurns);
     addUserMessage(conversation.id, message);
 
     // A direct correction is first-class learning evidence. Attach it to the
@@ -404,7 +407,8 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
     }
 
     const memoryContext =
-      "\n\n" + buildFullMemoryContext() +
+      "\n\nCHANNEL: text HUD. Structured answers, lists, and markdown links are appropriate. Cite vault notes as [[path]].\n\n" +
+      buildFullMemoryContext() +
       "\n" + unifiedMemory.buildContextForPrompt(message) +
       learningEngine.buildLearningContext() +
       proceduralUsage.context +
@@ -415,6 +419,11 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
 
     const abortController = new AbortController();
     activeAbortControllers.set(conversation.id, abortController);
+    let settled = false;
+    const onClose = () => {
+      if (!settled) abortController.abort();
+    };
+    reply.raw.on("close", onClose);
 
     let fullContent = "";
     const toolCalls: { name: string; arguments: string }[] = [];
@@ -539,6 +548,8 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       });
       reply.raw.write(`data: ${JSON.stringify({ type: "error", content: "Something went wrong. Please try again." })}\n\n`);
     } finally {
+      settled = true;
+      reply.raw.removeListener("close", onClose);
       activeAbortControllers.delete(conversation.id);
       reply.raw.end();
     }
@@ -562,19 +573,34 @@ app.get<{ Params: { id: string } }>("/api/conversations/:id", async (request, re
 });
 
 app.post<{ Body: { conversationId?: string } }>("/api/stop", async (request) => {
-  const { conversationId } = request.body || {};
-  if (conversationId && activeAbortControllers.has(conversationId)) {
-    activeAbortControllers.get(conversationId)!.abort();
-    activeAbortControllers.delete(conversationId);
-    return { stopped: true, conversationId };
+  const decision = stopTargets(request.body?.conversationId, [...activeAbortControllers.keys()]);
+  if (decision.error) {
+    return {
+      stopped: false,
+      error: decision.error,
+      note: "Nothing else was cancelled. A tool that already started may still finish and is reported as uninterruptible.",
+    };
   }
-  let stopped = 0;
-  for (const [id, controller] of activeAbortControllers) {
-    controller.abort();
+  for (const id of decision.ids) {
+    activeAbortControllers.get(id)?.abort();
     activeAbortControllers.delete(id);
-    stopped++;
   }
-  return { stopped: stopped > 0, count: stopped };
+  return {
+    stopped: true,
+    conversationId: decision.ids[0],
+    note: "The model stream was cancelled. A tool that already started may finish; that result is marked uninterruptible.",
+  };
+});
+
+app.post<{ Params: { token: string } }>("/api/effects/:token/approve", async (request, reply) => {
+  const staged = takeStagedEffect(request.params.token);
+  if (!staged) {
+    reply.code(404);
+    return { ok: false, error: "That approval expired or does not match a pending browser submission." };
+  }
+  grantEffect(staged.binding);
+  const result = await toolRegistry.execute(staged.tool, staged.parameters);
+  return { ok: result.success, binding: staged.binding, result };
 });
 
 app.post<{ Body: { tool: string; parameters: Record<string, unknown> } }>(

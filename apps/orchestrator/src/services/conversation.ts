@@ -12,10 +12,12 @@ import { memoryService } from "./memory/index.js";
 // In-memory conversation store (replace with DB in production)
 const conversations = new Map<string, Conversation>();
 
+const ID_PATTERN = /^[a-zA-Z0-9-]{8,64}$/;
+
 // Create a new conversation
-export function createConversation(): Conversation {
+export function createConversation(id?: string): Conversation {
   const conversation: Conversation = {
-    id: uuidv4(),
+    id: id && ID_PATTERN.test(id) ? id : uuidv4(),
     messages: [],
     context: {
       userName: config.userName,
@@ -37,11 +39,37 @@ export function getConversation(id: string): Conversation | undefined {
 
 // Get or create a conversation
 export function getOrCreateConversation(id?: string): Conversation {
-  if (id) {
+  if (id && ID_PATTERN.test(id)) {
     const existing = conversations.get(id);
     if (existing) {
       return existing;
     }
+  }
+  return createConversation(id);
+}
+
+export interface TranscriptTurn {
+  role: string;
+  content: string;
+  timestamp?: string;
+}
+
+/** Rebuild model context from a persisted transcript when memory was empty. */
+export function ensureConversation(id: string | undefined, prior: TranscriptTurn[] = []): Conversation {
+  if (id && ID_PATTERN.test(id)) {
+    const existing = conversations.get(id);
+    if (existing) return existing;
+    const conversation = createConversation(id);
+    for (const turn of prior) {
+      if ((turn.role !== "user" && turn.role !== "assistant") || !turn.content?.trim()) continue;
+      conversation.messages.push({
+        id: uuidv4(),
+        role: turn.role,
+        content: turn.content,
+        timestamp: turn.timestamp ? new Date(turn.timestamp) : new Date(),
+      });
+    }
+    return conversation;
   }
   return createConversation();
 }
