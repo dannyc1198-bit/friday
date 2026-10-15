@@ -6,6 +6,7 @@ import { proactiveMonitor } from "./proactive-monitor.js";
 import { getMorningBriefing } from "./morning-briefing.js";
 import { runReflection } from "./reflection.js";
 import { DATA_DIR, localDateKey } from "./runtime-paths.js";
+import { runNightlyHealth } from "./upkeep/runtime.js";
 
 const STATE_FILE = join(DATA_DIR, "scheduler-state.json");
 const CHECK_INTERVAL_MS = 60_000;
@@ -21,6 +22,7 @@ export interface SchedulerState {
   lastReflectionDate?: string | null;
   lastReflectionAttemptAt?: string | null;
   lastReflectionError?: string | null;
+  lastHealthDate?: string | null;
 }
 
 function loadState(): SchedulerState {
@@ -83,6 +85,16 @@ export function getDueJobs(now: Date, state: SchedulerState): {
   };
 }
 
+/** Once per local day, after the reflection window. Kept out of getDueJobs. */
+export function isHealthDue(now: Date, lastHealthDate: string | null | undefined): boolean {
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  const afterReflection =
+    hour > REFLECTION_HOUR || (hour === REFLECTION_HOUR && minute >= REFLECTION_MINUTE);
+  if (!afterReflection) return false;
+  return (lastHealthDate || null) !== localDateKey(now);
+}
+
 export function isQuietHours(date = new Date()): boolean {
   const hour = date.getHours();
   return hour >= QUIET_HOUR_START || hour < QUIET_HOUR_END;
@@ -143,6 +155,16 @@ export async function runSchedulerTick(now = new Date()): Promise<void> {
         state.lastReflectionError = null;
       }
       saveState(state);
+    }
+
+    if (isHealthDue(now, state.lastHealthDate)) {
+      state.lastHealthDate = localDateKey(now);
+      saveState(state);
+      try {
+        await runNightlyHealth();
+      } catch (err) {
+        console.warn("[Scheduler] Health check failed:", (err as Error).message);
+      }
     }
   } finally {
     tickRunning = false;

@@ -1,7 +1,7 @@
 import type { AgentAdapter, AgentDeps, AgentStatus, DispatchResult } from "./types.js";
 import { redactSecrets } from "../redact.js";
 
-const DEFAULT_MODEL = "grok-4";
+const DEFAULT_MODEL = "grok-4.7";
 const DEFAULT_BASE = "https://api.x.ai/v1/chat/completions";
 
 export function createXaiAdapter(deps: AgentDeps): AgentAdapter {

@@ -16,6 +16,8 @@ interface UseVoiceOptions {
   onTranscript: (text: string) => void;
   /** Whether voice features are enabled */
   enabled?: boolean;
+  /** ElevenLabs or Realtime already owns the microphone. */
+  suppressMic?: boolean;
 }
 
 interface UseVoiceReturn {
@@ -73,6 +75,7 @@ export function useVoice({
   isLoading,
   onTranscript,
   enabled = true,
+  suppressMic = false,
 }: UseVoiceOptions): UseVoiceReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -210,15 +213,17 @@ export function useVoice({
 
     setError(null);
 
-    // Try ElevenLabs first
     if (ttsAvailable) {
       const success = await speakWithElevenLabs(text);
       if (success) return;
     }
 
-    // Fallback to browser speechSynthesis
+    // Live mode must not stop at text. The browser voice is the last speaker.
     speakWithBrowser(text);
-  }, [ttsAvailable, speakWithElevenLabs, speakWithBrowser]);
+    if (isLiveMode && !("speechSynthesis" in window)) {
+      setError("Live voice has no speaker on this browser.");
+    }
+  }, [ttsAvailable, speakWithElevenLabs, speakWithBrowser, isLiveMode]);
 
   const stopSpeaking = useCallback(() => {
     // Stop HTML5 audio
@@ -321,7 +326,15 @@ export function useVoice({
   // Mute state is intentionally NOT a guard — mute means "don't speak to me",
   // not "don't listen to me". Mic stays on so the user can resume by speaking.
   useEffect(() => {
-    if (!isLiveMode || !enabled) return;
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.getVoices();
+    const load = () => window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+
+  useEffect(() => {
+    if (!isLiveMode || !enabled || suppressMic) return;
     if (ptt.isListening || isSpeaking || isLoading) return;
 
     if (rearmTimerRef.current) clearTimeout(rearmTimerRef.current);
@@ -338,7 +351,7 @@ export function useVoice({
         pttRef.current.startListening();
       }
     }, LIVE_REARM_DELAY_MS);
-  }, [isLiveMode, enabled, ptt.isListening, isSpeaking, isLoading]);
+  }, [isLiveMode, enabled, suppressMic, ptt.isListening, isSpeaking, isLoading]);
 
   // ─── Cleanup pending rearm timer on unmount ─────────────
   useEffect(() => {
@@ -378,7 +391,10 @@ export function useVoice({
     interimTranscript: ptt.interimTranscript,
     toggleMute,
     toggleLiveMode,
-    startListening: ptt.startListening,
+    startListening: () => {
+      if (suppressMic) return;
+      pttRef.current.startListening();
+    },
     stopListening: ptt.stopListening,
     stopSpeaking,
   };

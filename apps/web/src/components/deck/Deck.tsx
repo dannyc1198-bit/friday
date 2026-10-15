@@ -22,7 +22,9 @@ import {
   TodayBoard,
   WavelengthBoard,
   IntegrationList,
+  LearnBoard,
 } from "./Workspaces";
+import { LiveTalk } from "./LiveTalk";
 
 // FRIDAY — Flight Deck.
 // One screen: the conversation in the middle, truth on both sides.
@@ -39,16 +41,18 @@ export default function Deck() {
     newConversation,
   } = useChat();
 
+  const [coreOnline, setCoreOnline] = useState(true);
+  const [focus, setFocus] = useState<FocusId>("today");
+  const [focusSignal, setFocusSignal] = useState(0);
+  const [agentLive, setAgentLive] = useState(false);
+
   const voice = useVoice({
     messages,
     isLoading,
     onTranscript: sendMessage,
     enabled: true,
+    suppressMic: agentLive,
   });
-
-  const [coreOnline, setCoreOnline] = useState(true);
-  const [focus, setFocus] = useState<FocusId>("today");
-  const [focusSignal, setFocusSignal] = useState(0);
 
   function ask(prompt: string) {
     setFocus("talk");
@@ -139,6 +143,7 @@ export default function Deck() {
         {focus === "wavelength" && <WavelengthBoard onAct={ask} />}
         {focus === "content" && <ContentBoard onAct={ask} />}
         {focus === "ally" && <AllyBoard onAct={ask} />}
+        {focus === "learn" && <LearnBoard />}
         {focus === "agents" && (
           <div className="mx-auto grid w-full max-w-3xl gap-4 px-5 py-6">
             <AgentsCard />
@@ -147,6 +152,11 @@ export default function Deck() {
         )}
         {focus === "talk" && (
         <main className="flex h-full min-h-0 flex-col">
+          <LiveTalk
+            active={voice.isLiveMode}
+            muted={voice.isMuted}
+            onAgent={setAgentLive}
+          />
           <div className="flex items-center justify-between border-b border-deck-line px-4 py-1.5">
             <span className="font-deckmono text-[10px] uppercase tracking-[0.2em] text-deck-faint">
               {presence === "offline"

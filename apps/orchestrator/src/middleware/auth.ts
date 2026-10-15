@@ -100,6 +100,9 @@ const LOCALHOST_READ_PREFIXES = [
   "/api/greeting",
   "/api/today",
   "/api/integrations",
+  "/api/upkeep",
+  "/api/voice/live",
+  "/api/voice/elevenlabs",
   "/api/learning/",
   "/api/proactive/",
   "/api/market/",
@@ -156,6 +159,17 @@ export async function authMiddleware(
 
   // The HUD claims the boot greeting and marks it heard from localhost.
   if (isLocalhost(request) && (path === "/api/greeting" || path === "/api/greeting/heard")) {
+    return;
+  }
+
+  // Approve / Reject a repair, and mint a short-lived voice token, from this machine.
+  if (
+    isLocalhost(request) &&
+    request.method === "POST" &&
+    (/^\/api\/upkeep\/repairs\/[^/]+\/(approve|reject)$/.test(path) ||
+      path === "/api/voice/realtime/session" ||
+      path === "/api/voice/realtime/tool")
+  ) {
     return;
   }
 

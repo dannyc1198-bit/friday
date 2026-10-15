@@ -31,6 +31,10 @@ import { mediaRoutes } from "./routes/media.js";
 import { greetingRoutes } from "./routes/greeting.js";
 import { todayRoutes } from "./routes/today.js";
 import { integrationRoutes } from "./routes/integrations.js";
+import { upkeepRoutes } from "./routes/upkeep.js";
+import { liveVoiceRoutes } from "./routes/live-voice.js";
+import { recordIncident } from "./services/upkeep/runtime.js";
+import { isMisfire } from "./services/upkeep/guards.js";
 import { getBootId } from "./services/greeting.js";
 import { writeLearningsFromTurn } from "./services/learning-writeback.js";
 import {
@@ -209,6 +213,8 @@ await app.register(mediaRoutes);
 await app.register(greetingRoutes);
 await app.register(todayRoutes);
 await app.register(integrationRoutes);
+await app.register(upkeepRoutes);
+await app.register(liveVoiceRoutes);
 await app.register(proactiveAlertsRoutes);
 
 initializeTools();
@@ -260,7 +266,13 @@ app.get("/api/health", async () => {
     service: "FRIDAY-orchestrator",
     version: "2.2.0-brain",
     bootId: getBootId(),
-    llm: { provider: llm.provider, model: llm.model, configured: llm.hasKey },
+    llm: {
+      provider: llm.provider,
+      model: llm.model,
+      configured: llm.hasKey,
+      failover: llm.failover,
+      failoverReady: llm.failoverReady,
+    },
     tools: toolRegistry.getToolCount(),
     tts: isTTSAvailable(),
   };
@@ -298,6 +310,15 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
     if (message.length > MAX_MESSAGE_LENGTH) {
       reply.code(400);
       return { error: `Message too long. Maximum ${MAX_MESSAGE_LENGTH} characters.` };
+    }
+
+    if (isMisfire(message)) {
+      recordIncident({
+        kind: "misfire",
+        signature: "user-misfire",
+        summary: "Danny reported a misfire",
+        detail: message.slice(0, 240),
+      });
     }
 
     const conversation = getOrCreateConversation(conversationId);
@@ -396,6 +417,14 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
             data: chunk.toolResult.data,
             error: chunk.toolResult.error,
           });
+          if (!chunk.toolResult.success) {
+            recordIncident({
+              kind: "tool",
+              signature: `tool:${toolName}`,
+              summary: `${toolName} failed`,
+              detail: chunk.toolResult.error || "tool failed",
+            });
+          }
           reply.raw.write(
             `data: ${JSON.stringify({
               type: "tool_result",
@@ -406,6 +435,12 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
             })}\n\n`
           );
         } else if (chunk.type === "error") {
+          recordIncident({
+            kind: "runtime",
+            signature: "llm-error",
+            summary: "Model stream error",
+            detail: chunk.content || "stream error",
+          });
           reply.raw.write(`data: ${JSON.stringify({ type: "error", content: chunk.content })}\n\n`);
         }
       }
@@ -461,6 +496,12 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       reply.raw.write(`data: ${JSON.stringify({ type: "done", conversationId: conversation.id })}\n\n`);
     } catch (error) {
       app.log.error({ error }, "Chat error");
+      recordIncident({
+        kind: "runtime",
+        signature: "chat-exception",
+        summary: "Chat request failed",
+        detail: (error as Error).message || "chat exception",
+      });
       reply.raw.write(`data: ${JSON.stringify({ type: "error", content: "Something went wrong. Please try again." })}\n\n`);
     } finally {
       activeAbortControllers.delete(conversation.id);

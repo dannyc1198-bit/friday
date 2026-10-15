@@ -25,45 +25,25 @@ import {
   type PartialToolCall,
 } from "./intent-router.js";
 import { redactSecrets } from "./redact.js";
+import {
+  activeEndpoint,
+  describeChain,
+  endpointClient,
+  resolveLlmChain,
+  shouldFailover,
+  type LlmEndpoint,
+} from "./llm-chain.js";
 
-// ─── Provider selection ─────────────────────────────────────────────
-// Order of resolution:
-// 1. Explicit FRIDAY_LLM_BASE_URL / FRIDAY_LLM_API_KEY / FRIDAY_LLM_MODEL
-// 2. FRIDAY_LLM_PROVIDER hint → built-in preset
-// 3. Default: Gemini if GEMINI_API_KEY present, else Anthropic, else OpenAI
+// Tool-argument assembly below is the reviewer's Gemini 400 fix.
+// Provider choice sits outside that loop. A 400 does not fail over.
 
-type ProviderPreset = { baseURL: string; apiKeyEnv: string; defaultModel: string; label: string };
-
-const PROVIDERS: Record<string, ProviderPreset> = {
-  gemini:    { baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/", apiKeyEnv: "GEMINI_API_KEY",    defaultModel: "gemini-2.5-flash", label: "Gemini" },
-  groq:      { baseURL: "https://api.groq.com/openai/v1",                           apiKeyEnv: "GROQ_API_KEY",      defaultModel: "llama-3.3-70b-versatile", label: "Groq" },
-  openai:    { baseURL: "https://api.openai.com/v1",                                apiKeyEnv: "OPENAI_API_KEY",    defaultModel: "gpt-4o-mini",            label: "OpenAI" },
-  anthropic: { baseURL: "https://api.anthropic.com/v1/",                            apiKeyEnv: "ANTHROPIC_API_KEY", defaultModel: "claude-haiku-4-5-20251001", label: "Anthropic" },
-};
-
-function resolveProvider() {
-  const hint = (process.env.FRIDAY_LLM_PROVIDER || "").toLowerCase();
-  const fromHint = PROVIDERS[hint];
-  const fallback = process.env.GEMINI_API_KEY ? PROVIDERS.gemini
-                 : process.env.ANTHROPIC_API_KEY ? PROVIDERS.anthropic
-                 : PROVIDERS.openai;
-  const p = fromHint ?? fallback;
-
-  const baseURL = process.env.FRIDAY_LLM_BASE_URL || p.baseURL;
-  const apiKey  = process.env.FRIDAY_LLM_API_KEY  || process.env[p.apiKeyEnv] || "";
-  const model   = process.env.FRIDAY_LLM_MODEL    || p.defaultModel;
-  return { baseURL, apiKey, model, label: p.label };
-}
-
-const { baseURL, apiKey, model: MODEL, label: PROVIDER_LABEL } = resolveProvider();
 const MAX_TOKENS = 4096;
-const MAX_TOOL_ROUNDS = 5; // was 10 — fewer tool rounds = less burst risk on free-tier rate limits
+const MAX_TOOL_ROUNDS = 5;
 
-console.log(`[FRIDAY LLM] provider=${PROVIDER_LABEL} model=${MODEL}`);
-
-// 90s hard timeout per request — a hung free-tier endpoint must never
-// dead-air the chat path (the old FRIDAY hid a 400 behind a 126s hang).
-const client = new OpenAI({ apiKey, baseURL, timeout: 90_000, maxRetries: 1 });
+const bootChain = resolveLlmChain(process.env);
+console.log(
+  `[FRIDAY LLM] provider=${bootChain.primary.label} model=${bootChain.primary.model} failover=${bootChain.fallback ? `${bootChain.fallback.label}:${bootChain.fallback.model}` : "none"}`
+);
 
 // ─── Tool schema conversion (FRIDAY registry → OpenAI function tools) ─
 
@@ -236,12 +216,18 @@ export async function* streamChatCompletion(
     });
   }
 
-  if (!apiKey) {
+  const chain = resolveLlmChain(process.env);
+  const picked = activeEndpoint(chain);
+  let endpoint: LlmEndpoint = picked?.endpoint ?? chain.primary;
+  let failedOver = picked?.failedOver ?? false;
+  let active = picked ? endpointClient(endpoint) : null;
+
+  if (!active) {
     yield {
       type: "text",
       content: intentSummary
-        ? `${intentSummary.replace(/\.$/, "")}. The language model is offline until an API key is in apps/orchestrator/.env.`
-        : "I'm offline at the moment, boss — no API key set. Add one to apps/orchestrator/.env.",
+        ? `${intentSummary.replace(/\.$/, "")}. The language model is offline until OPENAI_API_KEY is in apps/orchestrator/.env.`
+        : "I'm offline at the moment, boss — set OPENAI_API_KEY. xAI is the fallback once XAI_API_KEY is set.",
     };
     return;
   }
@@ -254,22 +240,28 @@ export async function* streamChatCompletion(
 
     let stream;
     try {
-      stream = await client.chat.completions.create({
-        model: MODEL,
+      stream = await active.chat.completions.create({
+        model: endpoint.model,
         max_tokens: MAX_TOKENS,
         messages: openaiMessages,
         ...(tools.length > 0 ? { tools, tool_choice: "auto" as const } : {}),
         stream: true,
       });
     } catch (err: any) {
-      // Graceful degradation: don't dead-air on rate limits or auth errors.
-      // The user hears Lily speak an excuse instead of silence.
       const status = err?.status ?? err?.response?.status;
       const msg = err?.message || "";
+      if (!failedOver && chain.fallback?.apiKey && shouldFailover(status, msg)) {
+        failedOver = true;
+        endpoint = chain.fallback;
+        active = endpointClient(endpoint);
+        console.warn(`[FRIDAY LLM] ${chain.primary.label} unavailable (${status || "network"}). Using ${endpoint.label}.`);
+        round -= 1;
+        continue;
+      }
       if (status === 429 || /rate.?limit|quota/i.test(msg)) {
         yield { type: "text", content: "Hang on a tick, boss — I'm being rate-limited. Try me again in a few seconds." };
       } else if (status === 401 || status === 403 || /credit|billing|insufficient/i.test(msg)) {
-        yield { type: "text", content: `My ${PROVIDER_LABEL} key's out of credits, boss. Top it up and I'm back.` };
+        yield { type: "text", content: `My ${endpoint.label} key's out of credits, boss. Top it up and I'm back.` };
       } else {
         if ((status === 400 || status === 422) && round > 0) {
           const spoken = speechFromToolMessages(openaiMessages);
@@ -436,8 +428,8 @@ export async function* streamChatCompletion(
   // speaks a conclusion.
   if (endedWantingTools && !signal?.aborted) {
     try {
-      const wrapUp = await client.chat.completions.create({
-        model: MODEL,
+      const wrapUp = await active.chat.completions.create({
+        model: endpoint.model,
         max_tokens: MAX_TOKENS,
         messages: [
           ...openaiMessages,
@@ -466,14 +458,15 @@ export async function* streamChatCompletion(
 // No tools, no streaming, no FRIDAY persona — callers supply the full
 // system prompt. Used by the brain's nightly reflection.
 
-export async function simpleCompletion(
+async function completeOnce(
+  client: OpenAI,
+  endpoint: LlmEndpoint,
   systemPrompt: string,
   userPrompt: string,
-  maxTokens = 2048
+  maxTokens: number
 ): Promise<string> {
-  if (!apiKey) throw new Error("No LLM API key configured");
   const res = await client.chat.completions.create({
-    model: MODEL,
+    model: endpoint.model,
     max_tokens: maxTokens,
     messages: [
       { role: "system", content: systemPrompt },
@@ -483,17 +476,42 @@ export async function simpleCompletion(
   return res.choices[0]?.message?.content ?? "";
 }
 
-export function getLLMInfo(): { provider: string; model: string; hasKey: boolean } {
-  return { provider: PROVIDER_LABEL, model: MODEL, hasKey: Boolean(apiKey) };
+export async function simpleCompletion(
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens = 2048
+): Promise<string> {
+  const chain = resolveLlmChain(process.env);
+  const picked = activeEndpoint(chain);
+  if (!picked) throw new Error("No LLM API key configured");
+  try {
+    return await completeOnce(endpointClient(picked.endpoint), picked.endpoint, systemPrompt, userPrompt, maxTokens);
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    const message = (err as Error).message || "";
+    if (!picked.failedOver && chain.fallback?.apiKey && shouldFailover(status, message)) {
+      return completeOnce(endpointClient(chain.fallback), chain.fallback, systemPrompt, userPrompt, maxTokens);
+    }
+    throw err;
+  }
 }
 
-// ─── Health check ─
+export function getLLMInfo(): {
+  provider: string;
+  model: string;
+  hasKey: boolean;
+  failover: string | null;
+  failoverReady: boolean;
+} {
+  return describeChain(process.env);
+}
 
 export async function checkOpenAI(): Promise<boolean> {
-  if (!apiKey) return false;
+  const picked = activeEndpoint(resolveLlmChain(process.env));
+  if (!picked) return false;
   try {
-    await client.chat.completions.create({
-      model: MODEL,
+    await endpointClient(picked.endpoint).chat.completions.create({
+      model: picked.endpoint.model,
       max_tokens: 1,
       messages: [{ role: "user", content: "ping" }],
     });

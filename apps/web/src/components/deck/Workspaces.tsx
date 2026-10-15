@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePoll, Dot } from "./deck-lib";
 
-export type FocusId = "today" | "wavelength" | "content" | "ally" | "talk" | "agents";
+export type FocusId = "today" | "wavelength" | "content" | "ally" | "talk" | "agents" | "learn";
 
 export const FOCUS: { id: FocusId; label: string }[] = [
   { id: "today", label: "Today" },
@@ -12,6 +12,7 @@ export const FOCUS: { id: FocusId; label: string }[] = [
   { id: "ally", label: "Ally" },
   { id: "talk", label: "Talk" },
   { id: "agents", label: "Agents" },
+  { id: "learn", label: "Learn" },
 ];
 
 interface Integration {
@@ -251,6 +252,89 @@ export function ContentBoard({ onAct }: { onAct: (prompt: string) => void }) {
                   )
                 )}
               </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Shell>
+  );
+}
+
+interface RepairRow {
+  id: string;
+  status: string;
+  summary: string;
+  detail: string;
+  branch: string;
+  testSummary: string;
+}
+
+export function LearnBoard() {
+  const [busy, setBusy] = useState("");
+  const { data, refresh } = usePoll<{ learning: string[]; repairs: RepairRow[] }>(
+    async () => {
+      const res = await fetch("/api/upkeep", { cache: "no-store" });
+      return res.json();
+    },
+    8_000
+  );
+  const learning = data?.learning || [];
+  const repairs = data?.repairs || [];
+
+  async function decide(id: string, action: "approve" | "reject") {
+    setBusy(id);
+    try {
+      await fetch(`/api/upkeep/repairs/${encodeURIComponent(id)}/${action}`, { method: "POST" });
+      await refresh();
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <Shell
+      kicker="Memory and maintenance"
+      title="Learn"
+      note="Facts land in the vault. A fix waits here until you approve it. Main is never merged from this screen."
+    >
+      <div>
+        <p className="mb-2 font-deckmono text-xs uppercase tracking-wider text-deck-hot">Learning</p>
+        {learning.length === 0 && <p className="text-sm text-deck-dim">Nothing new yet.</p>}
+        <ul className="grid gap-2">
+          {learning.map((line) => (
+            <li key={line} className="text-sm leading-relaxed text-deck-ink">{line.replace(/^\-\s*/, "")}</li>
+          ))}
+        </ul>
+      </div>
+      <div>
+        <p className="mb-2 font-deckmono text-xs uppercase tracking-wider text-deck-hot">Self-repair</p>
+        {repairs.length === 0 && <p className="text-sm text-deck-dim">No repairs waiting.</p>}
+        <ul className="grid gap-3">
+          {repairs.map((repair) => (
+            <li key={repair.id} className="rounded border border-deck-line p-3">
+              <p className="text-base text-deck-ink">{repair.summary}</p>
+              <p className="mt-1 text-sm text-deck-dim">{repair.status} · {repair.branch}</p>
+              <p className="mt-1 text-sm text-deck-dim">{repair.detail}</p>
+              {repair.status === "needs_approval" && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={busy === repair.id}
+                    onClick={() => decide(repair.id, "approve")}
+                    className="min-h-12 flex-1 rounded border border-deck-hot bg-deck-raised px-3 font-deckdisplay text-lg text-deck-ink"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === repair.id}
+                    onClick={() => decide(repair.id, "reject")}
+                    className="min-h-12 flex-1 rounded border border-deck-line px-3 font-deckdisplay text-lg text-deck-dim"
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>

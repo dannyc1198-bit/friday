@@ -18,7 +18,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import path from "path";
 import { simpleCompletion } from "./openai.js";
 import { rememberFact, getBrainStats, getRecentLearnings } from "./brain.js";
-import { isUnsafeToAct } from "./learning-writeback.js";
+import { isUnsafeToAct, recordLearningLine } from "./learning-writeback.js";
 import { DATA_DIR, CONVERSATION_DIR, localDateKey, localTimestamp } from "./runtime-paths.js";
 import { getBrainDir, getDailyDir, getEntitiesDir, getObsidianVaultPath } from "./vault-config.js";
 
@@ -146,7 +146,8 @@ Respond with ONLY a JSON object, no markdown fences, in exactly this shape:
   "facts": [
     {"entity": "Name of person/project/client/topic", "type": "person|client|project|preference|place|tool|fact", "observation": "one durable, self-contained fact worth remembering long-term", "category": "fact|decision|preference|insight|event"}
   ],
-  "open_loops": ["unfinished things Danny said he'd do or asked FRIDAY to follow up on"]
+  "open_loops": ["unfinished things Danny said he'd do or asked FRIDAY to follow up on"],
+  "improvements": ["what Friday should do better next time"]
 }
 
 Rules for facts:
@@ -155,7 +156,8 @@ Rules for facts:
 - Skip chit-chat, weather, one-off commands ("open chrome"), anything already obvious.
 - Each observation must stand alone — readable a year from now with no other context.
 - Entity names should be short and reusable (e.g. "Abe", "Wavelength Solutions", "Dan Martell Goal"), not sentences.
-- If the day had nothing durable, return "facts": [].`;
+- If the day had nothing durable, return "facts": [].
+- "improvements" is what Friday should change about her own behavior. Max 5. Do not edit DANNY-PROFILE.md. Profile changes stay proposals.`;
 
 function extractJson(raw: string): any {
   const cleaned = raw.replace(/```(?:json)?/g, "").trim();
@@ -275,6 +277,9 @@ Distill this day per your instructions. JSON only.`;
     const highlights: string[] = Array.isArray(parsed.highlights) ? parsed.highlights.filter((h: unknown) => typeof h === "string") : [];
     const facts: any[] = Array.isArray(parsed.facts) ? parsed.facts.slice(0, 8) : [];
     const openLoops: string[] = Array.isArray(parsed.open_loops) ? parsed.open_loops.filter((l: unknown) => typeof l === "string") : [];
+    const improvements: string[] = Array.isArray(parsed.improvements)
+      ? parsed.improvements.filter((item: unknown) => typeof item === "string").slice(0, 5)
+      : [];
 
     let factsAdded = 0;
     for (const f of facts) {
@@ -288,7 +293,10 @@ Distill this day per your instructions. JSON only.`;
           category: f.category,
           source: "reflection",
         });
-        if (!res.duplicate) factsAdded++;
+        if (!res.duplicate) {
+          factsAdded++;
+          recordLearningLine(typeof f.category === "string" ? f.category : "fact", f.entity, f.observation, "reflection");
+        }
       } catch (err) {
         console.warn(`[Reflection] fact write failed for "${f.entity}":`, (err as Error).message);
       }
@@ -302,6 +310,7 @@ Distill this day per your instructions. JSON only.`;
       ...(highlights.length > 0 ? ["**Highlights:**", ...highlights.map((h) => `- ${h}`), ""] : []),
       ...(factsAdded > 0 ? [`**Learned:** ${factsAdded} new fact(s) → [[FRIDAY_BRAIN/INDEX|Brain Index]]`, ""] : []),
       ...(openLoops.length > 0 ? ["**Open loops:**", ...openLoops.map((l) => `- [ ] ${l}`), ""] : []),
+      ...(improvements.length > 0 ? ["**Improve:**", ...improvements.map((item) => `- ${item}`), ""] : []),
       `*Reflected ${localTimestamp().slice(0, 16).replace("T", " ")}*`,
     ].join("\n");
 

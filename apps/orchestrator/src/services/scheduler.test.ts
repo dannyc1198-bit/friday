@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getDueJobs, type SchedulerState } from "./scheduler.js";
+import { getDueJobs, isHealthDue, type SchedulerState } from "./scheduler.js";
 import { localDateKey } from "./runtime-paths.js";
 
 const blank: SchedulerState = { lastBriefingDate: null, lastReflectionDate: null };
@@ -29,4 +29,11 @@ test("scheduler processes today after 21:30 and respects retry cooldown", () => 
     getDueJobs(now, { ...blank, lastReflectionAttemptAt: new Date(now.getTime() - 5 * 60_000).toISOString() }).reflectionDate,
     null
   );
+});
+
+test("the nightly health check is due once after 21:30", () => {
+  const now = new Date(2026, 7, 10, 21, 45);
+  assert.equal(isHealthDue(now, null), true);
+  assert.equal(isHealthDue(now, localDateKey(now)), false);
+  assert.equal(isHealthDue(new Date(2026, 7, 10, 10, 0), null), false);
 });

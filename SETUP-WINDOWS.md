@@ -31,9 +31,9 @@ Secrets live only in gitignored env files.
 | `EDGE_TTS_VOICE` | No | Default `en-GB-RyanNeural` |
 | `GROK_BOTS` | No | See the exact format below. Dots on the Agents tab |
 | `GROK_BOT_TOKEN` | No | Optional bearer sent to those bot URLs |
-| `OPENAI_API_KEY` | No | Codex CLI can use its own `codex` login instead |
+| `OPENAI_API_KEY` | Brain and Realtime voice | Codex CLI can use its own `codex` login instead. Brain model override: `OPENAI_MODEL` (default `gpt-6-astra`) |
 | `ANTHROPIC_API_KEY` | No | Claude Code CLI can use its own `claude` login instead |
-| `XAI_API_KEY` | No | xAI Grok API. Model override: `XAI_MODEL` (default `grok-4`) |
+| `XAI_API_KEY` | Fallback brain | xAI Grok API. Model override: `XAI_MODEL` (default `grok-4.7`). Needs key until set |
 | `MESHY_API_KEY` | No | Text-to-3D and image-to-3D. HUD shows needs key until set |
 | `HF_API_KEY_ID` and `HF_API_KEY_SECRET` | No | Higgsfield. Or one line `HIGGSFIELD_API_KEY=id:secret` |
 | `BLENDER_PATH` | No | Default `C:\Program Files\Blender Foundation\Blender 5.0\blender.exe` |
@@ -94,16 +94,36 @@ The **Agents** tab lists Grok bots as dots plus Codex, Claude Code, and xAI. Int
 
 Default persona is JARVIS: measured British male. The boot line uses the same voice.
 
-- With `ELEVENLABS_API_KEY`, speech uses ElevenLabs. `ELEVENLABS_VOICE_ID` overrides the voice. The default is premade Daniel (`onwK4e9ZLuTAKqWW03F9`).
-- Without a key, or if ElevenLabs fails, the server uses Microsoft Edge `en-GB-RyanNeural`.
-- If that request fails, the browser speaks with an en-GB male voice (Windows: Ryan or George).
-- After the greeting, the mic listens when it is available. Otherwise the chat box is focused.
+Typed chat still speaks with ElevenLabs TTS, then Edge `en-GB-RyanNeural`, then the browser. `ELEVENLABS_VOICE_ID` overrides the voice. The default is premade Daniel (`onwK4e9ZLuTAKqWW03F9`).
+
+**Talk → Hands-free** is a live conversation, not a text reply.
+
+- The voice layer is ElevenLabs Agents (ElevenAgents): TTS model `eleven_v3_conversational` with Expressive Mode, Scribe v2 Realtime for speech-to-text (the Agents API name is `scribe_realtime`), and the built-in `turn_v3` turn-taking, which includes barge-in. Checked against the agent update and expressive-mode docs on elevenlabs.io/docs.
+- The brain stays Friday. The agent is pointed at Friday's OpenAI-compatible endpoint, which uses OpenAI (`gpt-6-astra` unless `OPENAI_MODEL` is set) and fails over to xAI Grok (`grok-4.7` unless `XAI_MODEL` is set) on quota, billing, or outage. A 400 is not failed over. Gemini and Claude are used only when `FRIDAY_LLM_PROVIDER` names them.
+- Friday's tools, the Obsidian brain, and the send/spend/trade block run inside that endpoint. The browser never sees `ELEVENLABS_API_KEY` or `OPENAI_API_KEY`.
+- A transcript is shown beside the audio. If ElevenLabs cannot connect, Talk uses OpenAI Realtime (`gpt-realtime`, voice `cedar`, override with `FRIDAY_REALTIME_MODEL` and `FRIDAY_REALTIME_VOICE`). If that cannot connect, the browser voice speaks the chat reply. Live mode does not stop at text.
+- `FRIDAY_VOICE_MODE=realtime` selects the Realtime fallback directly. `FRIDAY_VOICE_MODE=browser` selects the browser voice.
+
+ElevenLabs' servers have to reach Friday. Set `ELEVENLABS_AGENT_ID` (same value as `NEXT_PUBLIC_ELEVENLABS_AGENT_ID` on the web app) and a public `FRIDAY_PUBLIC_URL`, then update the existing agent:
+
+```bat
+cd /d C:\Users\12368\Projects\friday
+set ELEVENLABS_API_KEY=your-key
+set ELEVENLABS_AGENT_ID=your-agent-id
+set FRIDAY_PUBLIC_URL=https://your-tunnel.example
+set ELEVENLABS_SECRET_ID=the-workspace-secret-id
+npx tsx scripts/configure-elevenlabs-agent.ts
+```
+
+Create the ElevenLabs workspace secret in the dashboard first. Its value is `FRIDAY_API_KEY`. The script sends the secret id, not the key. The custom LLM URL becomes `https://your-tunnel.example/v1/chat/completions`. Publish the agent in the ElevenLabs dashboard if the PATCH response is a draft. Hold to talk is the other big button. Ctrl+Enter still toggles hands-free.
 
 Do not commit commercial music. Startup no longer plays the old boot voice clip.
 
 ## 5. Obsidian
 
-The vault is the memory. `FRIDAY_BRAIN/DANNY-PROFILE.md` is pinned into every prompt (who Danny is, businesses, rules). Other `FRIDAY_BRAIN/` root notes are loaded too. Search prefers current notes over `archive/`. `brain_remember` writes entity notes under `FRIDAY_BRAIN/entities/`. After a conversation, stated goals and decisions are written back, dated and deduped. Anything that would send, spend, or trade is appended to `FRIDAY_BRAIN/drafts/pending-approval.md` and not executed. Nightly reflection still runs at 21:30.
+The vault is the memory. `FRIDAY_BRAIN/DANNY-PROFILE.md` is pinned into every prompt (who Danny is, businesses, rules). Other `FRIDAY_BRAIN/` root notes are loaded too. Search prefers current notes over `archive/`. `brain_remember` writes entity notes under `FRIDAY_BRAIN/entities/`. After a conversation, stated goals, preferences, and decisions are written back, dated and deduped. Identity lines such as a business or a name are proposed in `FRIDAY_BRAIN/proposals/DANNY-PROFILE.md` and are not copied into the profile. Anything that would send, spend, or trade is appended to `FRIDAY_BRAIN/drafts/pending-approval.md` and not executed. Nightly reflection at 21:30 writes what was learned and what Friday should improve.
+
+The **Learn** tab shows that feed and the self-repair queue. Runtime errors, failed tools, and reported misfires are journaled in `FRIDAY_BRAIN/health/`. The third identical failure asks Claude Code or Codex for a fix on a new `friday/fix-` branch. Tests have to pass. Approve or Reject is on that tab. Friday does not merge into `main` or `master`, does not push before approval, and does not commit `.env` or other secrets. A failed health check after a merge resets that branch tip back to the recorded commit. At most three repair attempts per day. Set `FRIDAY_HEALTHCHECK=1` before the nightly check will run `npx tsc --noEmit`. `FRIDAY_HEALTHCHECK_TESTS=1` adds `npm test`.
 
 Chat memory does not need Chroma. Leave `CHROMA_ENABLED` empty. A file under `apps\orchestrator\data\memory` holds chat snippets. The boot log says which backend is in use.
 
@@ -119,7 +139,7 @@ Content tab buttons call Meshy, Higgsfield, and Blender through the intent route
 
 ## 7. Still needs you
 
-- LLM key in `apps\orchestrator\.env` (`GEMINI_API_KEY` or `GROQ_API_KEY`).
+- `OPENAI_API_KEY` in `apps\orchestrator\.env` for the brain. `XAI_API_KEY` is the quota and outage fallback and shows "needs key" until set.
 - Copy `FRIDAY_API_KEY` into `apps\web\.env.local` after the first orchestrator boot.
 - ElevenLabs key only if you want that voice instead of Edge.
 - `claude` and `codex` installed and logged in on this PC if those rows should go online.
