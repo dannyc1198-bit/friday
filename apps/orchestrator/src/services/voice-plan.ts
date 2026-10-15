@@ -3,6 +3,7 @@
 // The browser voice is the last resort so a live turn is never text-only.
 
 import { DANIEL_VOICE_ID } from "./elevenlabs-agent.js";
+import { resolveModelRoles } from "./model-roles.js";
 
 export type LiveVoiceMode = "elevenlabs" | "realtime" | "browser";
 
@@ -19,7 +20,7 @@ export function selectLiveVoice(env: NodeJS.ProcessEnv = process.env): LiveVoice
   const requested = (env.FRIDAY_VOICE_MODE || "elevenlabs").trim().toLowerCase();
   const agentId = (env.ELEVENLABS_AGENT_ID || env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID || "").trim();
   const voiceId = (env.ELEVENLABS_VOICE_ID || env.FRIDAY_VOICE_ID_JARVIS || DANIEL_VOICE_ID).trim();
-  const realtimeModel = (env.FRIDAY_REALTIME_MODEL || "gpt-realtime").trim();
+  const realtimeModel = resolveModelRoles(env).realtime;
   const realtimeVoice = (env.FRIDAY_REALTIME_VOICE || "cedar").trim();
   const hasAgent = Boolean(env.ELEVENLABS_API_KEY && agentId);
   const hasOpenAI = Boolean(env.OPENAI_API_KEY);

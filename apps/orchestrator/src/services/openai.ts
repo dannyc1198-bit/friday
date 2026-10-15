@@ -479,17 +479,20 @@ async function completeOnce(
 export async function simpleCompletion(
   systemPrompt: string,
   userPrompt: string,
-  maxTokens = 2048
+  maxTokens = 2048,
+  options?: { model?: string; allowFailover?: boolean }
 ): Promise<string> {
   const chain = resolveLlmChain(process.env);
   const picked = activeEndpoint(chain);
   if (!picked) throw new Error("No LLM API key configured");
+  const endpoint = options?.model ? { ...picked.endpoint, model: options.model } : picked.endpoint;
   try {
-    return await completeOnce(endpointClient(picked.endpoint), picked.endpoint, systemPrompt, userPrompt, maxTokens);
+    return await completeOnce(endpointClient(endpoint), endpoint, systemPrompt, userPrompt, maxTokens);
   } catch (err) {
     const status = (err as { status?: number }).status;
     const message = (err as Error).message || "";
-    if (!picked.failedOver && chain.fallback?.apiKey && shouldFailover(status, message)) {
+    const allowFailover = options?.allowFailover !== false && !options?.model;
+    if (allowFailover && !picked.failedOver && chain.fallback?.apiKey && shouldFailover(status, message)) {
       return completeOnce(endpointClient(chain.fallback), chain.fallback, systemPrompt, userPrompt, maxTokens);
     }
     throw err;

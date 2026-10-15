@@ -50,8 +50,8 @@ const config: Config = {
           panel: "#071422",       // instrument panel surface
           raised: "#0d2240",      // hover / raised surface
           ink: "#e0f0ff",         // ice-white text
-          dim: "#5a8aaa",         // steel-blue secondary text
-          faint: "#2e4e68",       // structure text, deep dim
+          dim: "#9ec3d6",         // secondary text, AA on void
+          faint: "#7f9eb4",       // structure text, still readable on void
           amber: "#00b4ff",       // electric cyan — the accent (name is legacy)
           hot: "#00dcff",         // cyan, lit
           gold: "#ffb020",        // amber — the one thing that matters

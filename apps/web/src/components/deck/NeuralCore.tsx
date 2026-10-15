@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePoll } from "./deck-lib";
+import { SAMPLE_INSIGHTS, SAMPLE_THOUGHTS, useDemo } from "./demo";
 
 export type ThoughtKind = "recall" | "tool" | "learning" | "repair" | "insight";
 
@@ -37,20 +38,24 @@ function mergeThoughts(current: Thought[], incoming: Thought[]): Thought[] {
 }
 
 export function useThoughts() {
+  const { demo } = useDemo();
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const snapshot = usePoll<{ thoughts: Thought[] }>(
     async () => {
       const res = await fetch("/api/neural/thoughts", { cache: "no-store" });
       return res.json();
     },
-    8_000
+    8_000,
+    !demo
   );
 
   useEffect(() => {
+    if (demo) return;
     if (snapshot.data?.thoughts) setThoughts((current) => mergeThoughts(current, snapshot.data?.thoughts || []));
-  }, [snapshot.data]);
+  }, [demo, snapshot.data]);
 
   useEffect(() => {
+    if (demo) return;
     const source = new EventSource("/api/neural/stream");
     source.onmessage = (event) => {
       try {
@@ -62,9 +67,9 @@ export function useThoughts() {
       }
     };
     return () => source.close();
-  }, []);
+  }, [demo]);
 
-  return thoughts;
+  return demo ? SAMPLE_THOUGHTS : thoughts;
 }
 
 export function ThoughtGraph({ thoughts, compact = false }: { thoughts: Thought[]; compact?: boolean }) {
@@ -123,6 +128,7 @@ export function NeuralMini() {
 }
 
 export function NeuralCoreBoard() {
+  const { demo } = useDemo();
   const thoughts = useThoughts();
   const feed = [...thoughts].reverse().slice(0, 12);
   const thinking = usePoll<ThinkingStatus>(
@@ -130,12 +136,18 @@ export function NeuralCoreBoard() {
       const res = await fetch("/api/neural/thinking", { cache: "no-store" });
       return res.json();
     },
-    8_000
+    8_000,
+    !demo
   );
   const [busy, setBusy] = useState(false);
+  const [demoNote, setDemoNote] = useState("");
   const status = thinking.data;
 
   async function toggle() {
+    if (demo) {
+      setDemoNote("Demo keeps the thinking loop off. Nothing was started.");
+      return;
+    }
     setBusy(true);
     try {
       await fetch("/api/neural/thinking", {
@@ -150,12 +162,13 @@ export function NeuralCoreBoard() {
   }
 
   return (
-    <section className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-6">
-      <p className="font-deckmono text-xs uppercase tracking-[0.28em] text-deck-hot">Live activity</p>
+    <section className="deck-rise mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-6">
+      <p className="font-deckmono text-xs uppercase tracking-[0.28em] text-deck-hot">{demo ? "SAMPLE · Live activity" : "Live activity"}</p>
       <h2 className="font-deckdisplay text-4xl text-deck-ink">Neural Core</h2>
       <p className="max-w-xl text-base leading-relaxed text-deck-dim">
-        This graph reads Friday&apos;s real activity: notes recalled, tools fired, facts written, and repairs.
-        Reasoning stays with the language model and the Obsidian vault.
+        {demo
+          ? "Sample graph for a screen share. These nodes are not from the vault."
+          : "This graph reads Friday's real activity: notes recalled, tools fired, facts written, and repairs. Reasoning stays with the language model and the Obsidian vault."}
       </p>
       <div className="rounded border border-deck-line bg-deck-panel p-3">
         <ThoughtGraph thoughts={thoughts} />
@@ -180,19 +193,20 @@ export function NeuralCoreBoard() {
           Insights land in FRIDAY_BRAIN/insights/. Profile lines are proposals. You edit DANNY-PROFILE.md yourself.
           The loop does not send, spend, or trade.
         </p>
-        <p className="mt-2 text-sm text-deck-ink">{status?.reason || "Thinking loop is off."}</p>
-        <p className="mt-1 text-sm text-deck-dim">Passes today: {status?.runsToday ?? 0}</p>
+        <p className="mt-2 text-sm text-deck-ink">{demo ? "SAMPLE · thinking stays off." : status?.reason || "Thinking loop is off."}</p>
+        <p className="mt-1 text-sm text-deck-dim">Passes today: {demo ? 0 : status?.runsToday ?? 0}</p>
         <button
           type="button"
           disabled={busy}
           onClick={toggle}
           className="mt-3 min-h-12 w-full rounded border border-deck-hot bg-deck-raised px-4 font-deckdisplay text-lg text-deck-ink"
         >
-          {status?.enabled ? "Stop thinking" : "Arm thinking"}
+          {demo ? "Arm thinking" : status?.enabled ? "Stop thinking" : "Arm thinking"}
         </button>
-        {(status?.insights || []).length > 0 && (
+        {demoNote && <p className="mt-2 text-sm text-deck-gold">{demoNote}</p>}
+        {(demo ? SAMPLE_INSIGHTS : status?.insights || []).length > 0 && (
           <ul className="mt-3 grid gap-1">
-            {status?.insights.map((line) => (
+            {(demo ? SAMPLE_INSIGHTS : status?.insights || []).map((line) => (
               <li key={line} className="text-sm text-deck-ink">{line}</li>
             ))}
           </ul>

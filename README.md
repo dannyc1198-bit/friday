@@ -1,5 +1,7 @@
 # FRIDAY — A Personal AI Operating System
 
+> Current brain, checked 2026-10-15: OpenAI `gpt-5.4` with xAI `grok-4.7` fallback. Reflection and the thinking loop use `gpt-5.4-mini`. Choices and prices are in `docs/MODELS.md`. A ranked review is in `docs/AUDIT.md`. The sections below still describe an older Claude and Gemini layout.
+
 > *Iron Man-inspired. Claude-powered. Actually does things.*
 
 FRIDAY is a local-first personal AI assistant built on **Anthropic Claude**. It listens, reasons, and acts across your desktop, browser, smart home, and the web — orchestrating **120+ tools across 23 categories** from a single conversation.

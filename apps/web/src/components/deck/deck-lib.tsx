@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 // ─── Shared plumbing for the flight-deck instruments ─────────────────────────
 
 /** Poll a JSON endpoint on an interval; refetch on window focus. */
-export function usePoll<T>(fetcher: () => Promise<T>, intervalMs: number) {
+export function usePoll<T>(fetcher: () => Promise<T>, intervalMs: number, enabled = true) {
   const [data, setData] = useState<T | null>(null);
   const [stale, setStale] = useState(false);
   const fetcherRef = useRef(fetcher);
@@ -22,6 +22,7 @@ export function usePoll<T>(fetcher: () => Promise<T>, intervalMs: number) {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     tick();
     const id = setInterval(tick, intervalMs);
     const onFocus = () => tick();
@@ -30,7 +31,7 @@ export function usePoll<T>(fetcher: () => Promise<T>, intervalMs: number) {
       clearInterval(id);
       window.removeEventListener("focus", onFocus);
     };
-  }, [intervalMs, tick]);
+  }, [enabled, intervalMs, tick]);
 
   return { data, stale, refresh: tick };
 }

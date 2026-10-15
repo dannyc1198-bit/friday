@@ -4,6 +4,7 @@
 // They are not in the default chain.
 
 import OpenAI from "openai";
+import { resolveModelRoles } from "./model-roles.js";
 
 export interface LlmEndpoint {
   id: "openai" | "xai" | "gemini" | "anthropic" | "groq";
@@ -70,7 +71,7 @@ export function resolveLlmChain(env: NodeJS.ProcessEnv = process.env): {
     label: "OpenAI",
     baseURL: env.FRIDAY_LLM_BASE_URL || "https://api.openai.com/v1",
     apiKey: env.FRIDAY_LLM_API_KEY || env.OPENAI_API_KEY || "",
-    model: env.FRIDAY_LLM_MODEL || env.OPENAI_MODEL || "gpt-6-astra",
+    model: resolveModelRoles(env).chat,
   };
   const failoverOff = (env.FRIDAY_LLM_FAILOVER || "").trim().toLowerCase() === "off";
   const fallback: LlmEndpoint | null = failoverOff
@@ -80,7 +81,7 @@ export function resolveLlmChain(env: NodeJS.ProcessEnv = process.env): {
         label: "xAI",
         baseURL: xaiBaseUrl(env),
         apiKey: env.XAI_API_KEY || "",
-        model: env.XAI_MODEL || "grok-4.7",
+        model: resolveModelRoles(env).fallback,
       };
   return { primary, fallback };
 }

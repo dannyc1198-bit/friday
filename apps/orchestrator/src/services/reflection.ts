@@ -17,6 +17,7 @@ import { promises as fs } from "fs";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
 import path from "path";
 import { simpleCompletion } from "./openai.js";
+import { resolveModelRoles } from "./model-roles.js";
 import { rememberFact, getBrainStats, getRecentLearnings } from "./brain.js";
 import { isUnsafeToAct, recordLearningLine } from "./learning-writeback.js";
 import { DATA_DIR, CONVERSATION_DIR, localDateKey, localTimestamp } from "./runtime-paths.js";
@@ -270,7 +271,10 @@ ${touched.length > 0 ? touched.map((t) => `- ${t}`).join("\n") : "(none)"}
 
 Distill this day per your instructions. JSON only.`;
 
-    const raw = await simpleCompletion(REFLECTION_SYSTEM, userPrompt, 1500);
+    const raw = await simpleCompletion(REFLECTION_SYSTEM, userPrompt, 1500, {
+      model: resolveModelRoles().reflect,
+      allowFailover: false,
+    });
     const parsed = extractJson(raw);
 
     const summary: string = typeof parsed.summary === "string" ? parsed.summary : "";

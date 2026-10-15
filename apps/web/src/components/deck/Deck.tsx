@@ -26,6 +26,8 @@ import {
 } from "./Workspaces";
 import { LiveTalk } from "./LiveTalk";
 import { NeuralCoreBoard } from "./NeuralCore";
+import { CommandPalette, focusItems } from "./CommandPalette";
+import { readDemo, useDemo } from "./demo";
 
 // FRIDAY — Flight Deck.
 // One screen: the conversation in the middle, truth on both sides.
@@ -46,6 +48,9 @@ export default function Deck() {
   const [focus, setFocus] = useState<FocusId>("today");
   const [focusSignal, setFocusSignal] = useState(0);
   const [agentLive, setAgentLive] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [talkNote, setTalkNote] = useState("");
+  const { demo, toggle } = useDemo();
 
   const voice = useVoice({
     messages,
@@ -56,11 +61,19 @@ export default function Deck() {
   });
 
   function ask(prompt: string) {
+    if (demo) {
+      setTalkNote("Demo mode does not send. Nothing left this browser.");
+      return;
+    }
     setFocus("talk");
     sendMessage(prompt);
   }
 
   function afterGreeting() {
+    if (readDemo()) {
+      setFocus("today");
+      return;
+    }
     const muted = window.localStorage.getItem("JARVIS-voice-muted") === "true";
     const mic = "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
     setFocus("talk");
@@ -88,8 +101,17 @@ export default function Deck() {
   const { toggleLiveMode } = voice;
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && !e.repeat) {
+        e.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.repeat) {
         e.preventDefault();
+        if (readDemo()) {
+          setTalkNote("Demo mode keeps live voice off.");
+          return;
+        }
         toggleLiveMode();
       }
     };
@@ -112,7 +134,7 @@ export default function Deck() {
       </div>
 
       {/* ── Top bar: wordmark · presence · truth chips ── */}
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b border-deck-line px-4">
+      <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-deck-line px-4 py-2 sm:gap-4">
         <ArcReactor />
         <div className="shrink-0">
           <h1 className="font-deckdisplay text-lg font-bold uppercase tracking-[0.34em] text-deck-ink">
@@ -133,10 +155,33 @@ export default function Deck() {
         >
           Neural Core
         </button>
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          className="shrink-0 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink"
+        >
+          Commands
+        </button>
+        <button
+          type="button"
+          onClick={toggle}
+          aria-pressed={demo}
+          className={`shrink-0 rounded border px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider ${
+            demo ? "border-deck-gold text-deck-gold" : "border-deck-line text-deck-dim"
+          }`}
+        >
+          {demo ? "Demo on" : "Demo off"}
+        </button>
         <div className="hidden shrink-0 md:block">
           <HealthChips onStatus={setCoreOnline} />
         </div>
       </header>
+
+      {demo && (
+        <p className="border-b border-deck-gold/70 bg-deck-panel px-4 py-2 text-center font-deckmono text-xs uppercase tracking-[0.18em] text-deck-gold">
+          Demo · sample data · no personal notes · no keys
+        </p>
+      )}
 
       <FocusBar value={focus} onChange={setFocus} />
 
@@ -156,7 +201,7 @@ export default function Deck() {
         {focus === "talk" && (
         <main className="flex h-full min-h-0 flex-col">
           <LiveTalk
-            active={voice.isLiveMode}
+            active={voice.isLiveMode && !demo}
             muted={voice.isMuted}
             onAgent={setAgentLive}
           />
@@ -187,16 +232,25 @@ export default function Deck() {
               {messages.length === 0 ? (
                 <div className="flex h-full min-h-[40vh] flex-col items-center justify-center gap-5 pt-24 text-center">
                   <p className="font-deckdisplay text-xl font-medium text-deck-ink">
-                    {getGreeting()}, boss.
+                    {demo ? "Sample deck." : `${getGreeting()}, boss.`}
                   </p>
                   <p className="max-w-sm text-[13px] leading-relaxed text-deck-dim">
-                    Everything on this deck is a live reading. Where do we start?
+                    {demo
+                      ? "This is labelled sample data. Turn demo off to talk to Friday."
+                      : "Everything on this deck is a live reading. Where do we start?"}
                   </p>
+                  {talkNote && <p className="max-w-sm text-sm text-deck-gold">{talkNote}</p>}
                   <div className="flex flex-wrap justify-center gap-2">
                     {suggestions.map((s) => (
                       <button
                         key={s}
-                        onClick={() => sendMessage(s)}
+                        onClick={() => {
+                          if (demo) {
+                            setTalkNote("Demo mode does not send. Nothing left this browser.");
+                            return;
+                          }
+                          sendMessage(s);
+                        }}
                         className="rounded border border-deck-line px-3 py-1.5 font-deckmono text-[11px] text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink"
                       >
                         {s}
@@ -219,7 +273,13 @@ export default function Deck() {
 
           <div className="mx-auto w-full max-w-3xl px-5 pb-4 pt-2">
             <DeckInput
-              onSend={sendMessage}
+              onSend={(text) => {
+                if (demo) {
+                  setTalkNote("Demo mode does not send. Nothing left this browser.");
+                  return;
+                }
+                sendMessage(text);
+              }}
               isLoading={isLoading}
               onStop={() => {
                 stopTask();
@@ -235,6 +295,27 @@ export default function Deck() {
 
       {/* Boot overlay — once per browser session (sessionStorage.fridayBooted) */}
       <BootSequence onFinished={afterGreeting} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        items={focusItems(setFocus, [
+          {
+            id: "demo",
+            label: demo ? "Turn demo off" : "Turn demo on",
+            hint: "Sample",
+            run: toggle,
+          },
+          {
+            id: "setup",
+            label: "Show setup",
+            hint: "Checklist",
+            run: () => {
+              setFocus("today");
+              window.dispatchEvent(new Event("friday-setup"));
+            },
+          },
+        ])}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import path from "path";
 import { isUnsafeToAct, proposeProfileChange, recordLearningLine } from "./learning-writeback.js";
 import { publishThought } from "./thought-bus.js";
 import { simpleCompletion } from "./openai.js";
+import { resolveModelRoles } from "./model-roles.js";
 import { DATA_DIR, CONVERSATION_DIR, localDateKey } from "./runtime-paths.js";
 import { getBrainDir, getObsidianVaultPath } from "./vault-config.js";
 
@@ -332,7 +333,10 @@ export async function maybeRunScheduledThinking(now = new Date()): Promise<void>
     state,
     brainDir: getBrainDir(),
     gather: gatherDefault,
-    complete: (system, user) => simpleCompletion(system, user, 800),
+    complete: (system, user) => simpleCompletion(system, user, 800, {
+      model: resolveModelRoles().reflect,
+      allowFailover: false,
+    }),
   });
   saveThinkingState(file, result.state);
 }

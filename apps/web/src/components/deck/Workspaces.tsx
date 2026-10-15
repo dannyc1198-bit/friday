@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { usePoll, Dot } from "./deck-lib";
 import { NeuralMini } from "./NeuralCore";
+import { Onboarding } from "./Onboarding";
+import { SAMPLE_INTEGRATIONS, SAMPLE_LEARNING, SAMPLE_TASK, useDemo } from "./demo";
 
 export type FocusId = "today" | "wavelength" | "content" | "ally" | "talk" | "agents" | "learn" | "neural";
 
@@ -110,7 +112,7 @@ function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-6">
+    <section className="deck-rise mx-auto flex w-full max-w-3xl flex-col gap-4 px-5 py-6">
       <p className="font-deckmono text-xs uppercase tracking-[0.28em] text-deck-hot">{kicker}</p>
       <h2 className="font-deckdisplay text-4xl text-deck-ink">{title}</h2>
       {note && <p className="max-w-xl text-base leading-relaxed text-deck-dim">{note}</p>}
@@ -119,16 +121,24 @@ function Shell({
   );
 }
 
+function DemoNote({ text }: { text: string }) {
+  if (!text) return null;
+  return <p className="rounded border border-deck-gold/70 px-3 py-2 text-sm text-deck-gold">{text}</p>;
+}
+
 export function IntegrationList() {
-  const { data } = usePoll<{ integrations: Integration[] }>(
+  const { demo } = useDemo();
+  const { data, stale } = usePoll<{ integrations: Integration[] }>(
     async () => {
       const res = await fetch("/api/integrations", { cache: "no-store" });
       return res.json();
     },
-    20_000
+    20_000,
+    !demo
   );
-  const rows = data?.integrations || [];
-  if (rows.length === 0) return null;
+  const rows = demo ? SAMPLE_INTEGRATIONS : data?.integrations || [];
+  if (!demo && stale && rows.length === 0) return <p className="text-sm text-deck-alert">Could not read integrations.</p>;
+  if (rows.length === 0) return <p className="text-sm text-deck-dim">Checking integrations…</p>;
   return (
     <ul className="grid gap-2">
       {rows.map((row) => (
@@ -138,7 +148,7 @@ export function IntegrationList() {
           </span>
           <span>
             <span className="text-deck-ink">{row.name}</span>
-            <span className="block text-deck-dim">{row.state === "needs_key" ? "needs key" : row.detail}</span>
+            <span className="block text-deck-dim">{row.detail}</span>
           </span>
         </li>
       ))}
@@ -147,40 +157,65 @@ export function IntegrationList() {
 }
 
 export function TodayBoard({ onAct }: { onAct: (prompt: string) => void }) {
-  const { data } = usePoll<{ task: { id: string; text: string; priority: string; due?: string } | null }>(
+  const { demo } = useDemo();
+  const [demoNote, setDemoNote] = useState("");
+  const { data, stale } = usePoll<{ task: { id: string; text: string; priority: string; due?: string } | null }>(
     async () => {
       const res = await fetch("/api/today", { cache: "no-store" });
       return res.json();
     },
-    20_000
+    20_000,
+    !demo
   );
-  const task = data?.task;
+  const task = demo ? { id: "sample", text: SAMPLE_TASK, priority: "normal", due: "sample" } : data?.task;
   return (
-    <Shell kicker="One thing" title="Today" note="One task. Finish it or hand it to Friday. The neural reading under it is live activity.">
+    <Shell
+      kicker={demo ? "SAMPLE · One thing" : "One thing"}
+      title="Today"
+      note={demo ? "Sample task for a screen share. It is not from the vault." : "One task. Finish it or hand it to Friday. The neural reading under it is live activity."}
+    >
+      <Onboarding />
       <div className="rounded border border-deck-gold/70 bg-deck-panel p-5">
         <p className="font-deckmono text-xs uppercase tracking-wider text-deck-gold">Next</p>
         <p className="mt-2 font-deckdisplay text-3xl leading-tight text-deck-ink">
-          {task?.text || "Nothing queued."}
+          {!demo && !data && !stale ? "Checking today's task…" : task?.text || "Nothing queued."}
         </p>
+        {!demo && stale && !data && <p className="mt-2 text-sm text-deck-alert">Could not read today's task.</p>}
         {task?.due && <p className="mt-2 text-sm text-deck-dim">Due {task.due}</p>}
       </div>
       <Action
         label={task ? "Work this" : "Ask what matters"}
-        hint="Opens Talk with one request. Drafts only."
-        onClick={() =>
+        hint={demo ? "Stays on this screen. Nothing is sent." : "Opens Talk with one request. Drafts only."}
+        onClick={() => {
+          if (demo) {
+            setDemoNote("Sample task stays on this screen. Nothing was sent.");
+            return;
+          }
           onAct(
             task
               ? `Help me do this one task and nothing else: ${task.text}. Drafts only. Do not send, spend, or trade.`
               : "What is the single most useful thing for me to do today? One task."
-          )
-        }
+          );
+        }}
       />
+      <DemoNote text={demoNote} />
       <NeuralMini />
     </Shell>
   );
 }
 
 export function WavelengthBoard({ onAct }: { onAct: (prompt: string) => void }) {
+  const { demo } = useDemo();
+  const [demoNote, setDemoNote] = useState("");
+  if (demo) {
+    return (
+      <Shell kicker="SAMPLE" title="Agency" note="Fictional studio. These buttons do not call Friday.">
+        <Action label="Sample lead list" hint="Shows a label. Nothing is sent." onClick={() => setDemoNote("Sample lead list. Nothing was sent.")} />
+        <Action label="Sample outreach" hint="A draft you can describe out loud." onClick={() => setDemoNote("Sample outreach stays on this screen.")} />
+        <DemoNote text={demoNote} />
+      </Shell>
+    );
+  }
   return (
     <Shell
       kicker="Wavelength Solutions"
@@ -207,15 +242,31 @@ export function WavelengthBoard({ onAct }: { onAct: (prompt: string) => void }) 
 }
 
 export function ContentBoard({ onAct }: { onAct: (prompt: string) => void }) {
+  const { demo } = useDemo();
+  const [demoNote, setDemoNote] = useState("");
   const [prompt, setPrompt] = useState("");
   const { data } = usePoll<{ jobs: MediaJob[] }>(
     async () => {
       const res = await fetch("/api/media", { cache: "no-store" });
       return res.json();
     },
-    4_000
+    4_000,
+    !demo
   );
   const subject = prompt.trim() || "a calm brass arc reactor on a dark bench";
+  if (demo) {
+    return (
+      <Shell kicker="SAMPLE" title="Make something" note="Fictional gallery. These buttons do not call Friday or a media API.">
+        <Action label="Sample image" hint="Shows a label. Nothing is generated." onClick={() => setDemoNote("Sample image. Nothing was sent.")} />
+        <Action label="Sample video" hint="Stays on this screen." onClick={() => setDemoNote("Sample video. Nothing was sent.")} />
+        <DemoNote text={demoNote} />
+        <div className="rounded border border-deck-line p-3">
+          <p className="text-base text-deck-ink">SAMPLE · brass arc on a bench</p>
+          <p className="text-sm text-deck-dim">ready · SAMPLE file. Nothing was generated.</p>
+        </div>
+      </Shell>
+    );
+  }
   return (
     <Shell kicker="Content" title="Make something" note="One prompt, then one button. Progress stays in the gallery.">
       <label className="block text-sm text-deck-dim">
@@ -273,13 +324,16 @@ interface RepairRow {
 }
 
 export function LearnBoard() {
+  const { demo } = useDemo();
   const [busy, setBusy] = useState("");
+  const [demoNote, setDemoNote] = useState("");
   const { data, refresh } = usePoll<{ learning: string[]; repairs: RepairRow[] }>(
     async () => {
       const res = await fetch("/api/upkeep", { cache: "no-store" });
       return res.json();
     },
-    8_000
+    8_000,
+    !demo
   );
   const learning = data?.learning || [];
   const repairs = data?.repairs || [];
@@ -292,6 +346,30 @@ export function LearnBoard() {
     } finally {
       setBusy("");
     }
+  }
+
+  if (demo) {
+    return (
+      <Shell kicker="SAMPLE" title="Learn" note="Sample memory. Approve does not touch a branch.">
+        <ul className="grid gap-2">
+          {SAMPLE_LEARNING.map((line) => (
+            <li key={line} className="text-sm leading-relaxed text-deck-ink">{line}</li>
+          ))}
+        </ul>
+        <div className="rounded border border-deck-line p-3">
+          <p className="text-base text-deck-ink">SAMPLE repair waiting</p>
+          <p className="mt-1 text-sm text-deck-dim">needs_approval · nothing was merged</p>
+          <button
+            type="button"
+            onClick={() => setDemoNote("Demo does not approve repairs. Nothing was merged.")}
+            className="mt-3 min-h-12 w-full rounded border border-deck-hot bg-deck-raised px-3 font-deckdisplay text-lg text-deck-ink"
+          >
+            Approve sample
+          </button>
+        </div>
+        <DemoNote text={demoNote} />
+      </Shell>
+    );
   }
 
   return (
@@ -347,6 +425,17 @@ export function LearnBoard() {
 }
 
 export function AllyBoard({ onAct }: { onAct: (prompt: string) => void }) {
+  const { demo } = useDemo();
+  const [demoNote, setDemoNote] = useState("");
+  if (demo) {
+    return (
+      <Shell kicker="SAMPLE" title="Northwind Studio" note="Fictional follow-ups. These buttons do not call Friday.">
+        <Action label="Sample prospects" hint="A labelled list. Nothing is sent." onClick={() => setDemoNote("Sample prospects. Nothing was sent.")} />
+        <Action label="Sample follow-up" hint="Stays on this screen." onClick={() => setDemoNote("Sample follow-up. Nothing was sent.")} />
+        <DemoNote text={demoNote} />
+      </Shell>
+    );
+  }
   return (
     <Shell
       kicker="Ally Wellness Group"

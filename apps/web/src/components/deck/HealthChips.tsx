@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { HealthResponse } from "@/types";
 import { Dot, usePoll } from "./deck-lib";
+import { useDemo } from "./demo";
 
 // Top-bar truth strip: what brain, how many hands, does she have a voice.
 // Every chip is a live reading from /api/health — nothing invented.
@@ -11,6 +13,7 @@ export function HealthChips({
 }: {
   onStatus?: (online: boolean) => void;
 }) {
+  const { demo } = useDemo();
   const { data, stale } = usePoll<HealthResponse & { _latency: number }>(
     async () => {
       const t0 = performance.now();
@@ -20,13 +23,30 @@ export function HealthChips({
       onStatus?.(Boolean(json?.ok));
       return h;
     },
-    30_000
+    30_000,
+    !demo
   );
 
-  const online = Boolean(data?.ok) && !stale;
+  useEffect(() => {
+    if (demo) onStatus?.(true);
+  }, [demo, onStatus]);
+
+  const online = demo || (Boolean(data?.ok) && !stale);
 
   const chip =
     "flex items-center gap-1.5 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim";
+
+  if (demo) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className={chip}>
+          <Dot tone="ok" />
+          <span className="text-deck-ink">SAMPLE</span>
+        </span>
+        <span className={chip}>demo deck</span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2">

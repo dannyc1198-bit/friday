@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { resolveLlmChain, shouldFailover, xaiBaseUrl } from "./llm-chain.js";
+import { resolveModelRoles } from "./model-roles.js";
+import { buildSetupChecks } from "./setup-status.js";
 import { buildElevenLabsAgentPatch, CONVERSATIONAL_TTS_MODEL, SCRIBE_V2_REALTIME_PROVIDER } from "./elevenlabs-agent.js";
 import { selectLiveVoice } from "./voice-plan.js";
 import { realtimeClientSecretBody } from "../routes/live-voice.js";
@@ -9,7 +11,7 @@ import { noticesFromRealtimeEvent } from "./realtime-events.js";
 test("the default brain is OpenAI with an xAI fallback, and a 400 stays put", () => {
   const chain = resolveLlmChain({ OPENAI_API_KEY: "sk-test", XAI_API_KEY: "xai-test" });
   assert.equal(chain.primary.id, "openai");
-  assert.equal(chain.primary.model, "gpt-6-astra");
+  assert.equal(chain.primary.model, "gpt-5.4");
   assert.equal(chain.fallback?.id, "xai");
   assert.equal(chain.fallback?.model, "grok-4.7");
   assert.equal(chain.fallback?.baseURL, "https://api.x.ai/v1");
@@ -60,7 +62,7 @@ test("live voice prefers ElevenLabs and falls back to realtime, then the browser
 
   const realtime = selectLiveVoice({ FRIDAY_VOICE_MODE: "realtime", OPENAI_API_KEY: "sk" });
   assert.equal(realtime.mode, "realtime");
-  assert.equal(realtime.realtimeModel, "gpt-realtime");
+  assert.equal(realtime.realtimeModel, "gpt-realtime-2.1");
   assert.equal(realtime.realtimeVoice, "cedar");
 
   const browser = selectLiveVoice({});
@@ -94,4 +96,35 @@ test("realtime notices keep the transcript and the tool call, and the session as
   assert.equal(body.session.type, "realtime");
   assert.equal(body.session.model, "gpt-realtime");
   assert.equal(body.session.audio.output.voice, "cedar");
+});
+
+test("roles stay configurable and the setup checklist never echoes a key", () => {
+  const roles = resolveModelRoles({
+    OPENAI_MODEL: "gpt-5.4",
+    FRIDAY_REFLECT_MODEL: "gpt-5.4-mini",
+    EMBEDDING_MODEL: "text-embedding-3-small",
+    FRIDAY_REALTIME_MODEL: "gpt-realtime-2.1",
+    XAI_MODEL: "grok-4.7",
+  });
+  assert.equal(roles.chat, "gpt-5.4");
+  assert.equal(roles.reflect, "gpt-5.4-mini");
+  assert.equal(roles.embed, "text-embedding-3-small");
+  assert.equal(resolveModelRoles({}).chat, "gpt-5.4");
+  assert.equal(resolveModelRoles({}).reflect, "gpt-5.4-mini");
+
+  const checks = buildSetupChecks({
+    hasOpenAI: false,
+    hasXai: false,
+    vaultFound: false,
+    hasElevenKey: false,
+    hasElevenAgent: false,
+  });
+  const packed = JSON.stringify(checks);
+  assert.match(packed, /OPENAI_API_KEY/);
+  assert.match(packed, /XAI_API_KEY/);
+  assert.match(packed, /OBSIDIAN_VAULT_PATH/);
+  assert.match(packed, /ELEVENLABS_API_KEY/);
+  assert.equal(packed.includes("sk-"), false);
+  assert.equal(checks.find((check) => check.id === "openai")?.ok, false);
+  assert.equal(checks.find((check) => check.id === "xai")?.optional, true);
 });

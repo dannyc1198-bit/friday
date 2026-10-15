@@ -31,7 +31,7 @@ Secrets live only in gitignored env files.
 | `EDGE_TTS_VOICE` | No | Default `en-GB-RyanNeural` |
 | `GROK_BOTS` | No | See the exact format below. Dots on the Agents tab |
 | `GROK_BOT_TOKEN` | No | Optional bearer sent to those bot URLs |
-| `OPENAI_API_KEY` | Brain and Realtime voice | Codex CLI can use its own `codex` login instead. Brain model override: `OPENAI_MODEL` (default `gpt-6-astra`) |
+| `OPENAI_API_KEY` | Brain and Realtime voice | Codex CLI can use its own `codex` login instead. Brain model override: `OPENAI_MODEL` (default `gpt-5.4`). Reflection override: `FRIDAY_REFLECT_MODEL` (default `gpt-5.4-mini`). See `docs/MODELS.md` |
 | `ANTHROPIC_API_KEY` | No | Claude Code CLI can use its own `claude` login instead |
 | `XAI_API_KEY` | Fallback brain | xAI Grok API. Model override: `XAI_MODEL` (default `grok-4.7`). Needs key until set |
 | `MESHY_API_KEY` | No | Text-to-3D and image-to-3D. HUD shows needs key until set |
@@ -99,9 +99,9 @@ Typed chat still speaks with ElevenLabs TTS, then Edge `en-GB-RyanNeural`, then 
 **Talk → Hands-free** is a live conversation, not a text reply.
 
 - The voice layer is ElevenLabs Agents (ElevenAgents): TTS model `eleven_v3_conversational` with Expressive Mode, Scribe v2 Realtime for speech-to-text (the Agents API name is `scribe_realtime`), and the built-in `turn_v3` turn-taking, which includes barge-in. Checked against the agent update and expressive-mode docs on elevenlabs.io/docs.
-- The brain stays Friday. The agent is pointed at Friday's OpenAI-compatible endpoint, which uses OpenAI (`gpt-6-astra` unless `OPENAI_MODEL` is set) and fails over to xAI Grok (`grok-4.7` unless `XAI_MODEL` is set) on quota, billing, or outage. A 400 is not failed over. Gemini and Claude are used only when `FRIDAY_LLM_PROVIDER` names them.
+- The brain stays Friday. The agent is pointed at Friday's OpenAI-compatible endpoint, which uses OpenAI (`gpt-5.4` unless `OPENAI_MODEL` is set) and fails over to xAI Grok (`grok-4.7` unless `XAI_MODEL` is set) on quota, billing, or outage. A 400 is not failed over. Nightly reflection and the thinking loop use `gpt-5.4-mini` (`FRIDAY_REFLECT_MODEL`) and do not fail over. Gemini and Claude are used only when `FRIDAY_LLM_PROVIDER` names them.
 - Friday's tools, the Obsidian brain, and the send/spend/trade block run inside that endpoint. The browser never sees `ELEVENLABS_API_KEY` or `OPENAI_API_KEY`.
-- A transcript is shown beside the audio. If ElevenLabs cannot connect, Talk uses OpenAI Realtime (`gpt-realtime`, voice `cedar`, override with `FRIDAY_REALTIME_MODEL` and `FRIDAY_REALTIME_VOICE`). If that cannot connect, the browser voice speaks the chat reply. Live mode does not stop at text.
+- A transcript is shown beside the audio. If ElevenLabs cannot connect, Talk uses OpenAI Realtime (`gpt-realtime-2.1`, voice `cedar`, override with `FRIDAY_REALTIME_MODEL` and `FRIDAY_REALTIME_VOICE`). If that cannot connect, the browser voice speaks the chat reply. Live mode does not stop at text.
 - `FRIDAY_VOICE_MODE=realtime` selects the Realtime fallback directly. `FRIDAY_VOICE_MODE=browser` selects the browser voice.
 
 ElevenLabs' servers have to reach Friday. Set `ELEVENLABS_AGENT_ID` (same value as `NEXT_PUBLIC_ELEVENLABS_AGENT_ID` on the web app) and a public `FRIDAY_PUBLIC_URL`, then update the existing agent:

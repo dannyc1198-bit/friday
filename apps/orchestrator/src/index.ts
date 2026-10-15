@@ -34,6 +34,7 @@ import { integrationRoutes } from "./routes/integrations.js";
 import { upkeepRoutes } from "./routes/upkeep.js";
 import { liveVoiceRoutes } from "./routes/live-voice.js";
 import { neuralRoutes } from "./routes/neural.js";
+import { setupRoutes } from "./routes/setup.js";
 import { recordIncident } from "./services/upkeep/runtime.js";
 import { isMisfire } from "./services/upkeep/guards.js";
 import { getBootId } from "./services/greeting.js";
@@ -228,6 +229,7 @@ await app.register(integrationRoutes);
 await app.register(upkeepRoutes);
 await app.register(liveVoiceRoutes);
 await app.register(neuralRoutes);
+await app.register(setupRoutes);
 await app.register(proactiveAlertsRoutes);
 
 initializeTools();
