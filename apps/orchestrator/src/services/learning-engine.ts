@@ -13,13 +13,11 @@
 // The intelligence comes from pattern recognition over accumulated data.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join } from "path";
 import { unifiedMemory } from "./unified-memory.js";
+import { DATA_DIR } from "./runtime-paths.js";
 
 // ─── Paths ──────────────────────────────────────────────────────
-const USER_HOME = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368";
-const DATA_DIR = join(USER_HOME, "jarvis", "apps", "orchestrator", "data");
-const LEARNING_FILE = join(DATA_DIR, "learning-engine.json");
+const LEARNING_FILE = `${DATA_DIR}/learning-engine.json`;
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -110,6 +108,7 @@ class LearningEngine {
 
     // Update session stats
     this.store.sessionStats.totalInteractions++;
+    this.store.sessionStats.totalToolCalls += params.toolsUsed.length;
     for (const tool of params.toolsUsed) {
       this.store.sessionStats.mostUsedTools[tool] =
         (this.store.sessionStats.mostUsedTools[tool] || 0) + 1;
@@ -340,6 +339,15 @@ class LearningEngine {
     const isNegative = lower.includes("wrong") || lower.includes("bad") ||
       lower.includes("no") || lower.includes("don't") || lower.includes("stop");
 
+    if (relatedOutcomeId) {
+      const outcome = this.store.outcomes.find(o => o.id === relatedOutcomeId);
+      if (outcome && isNegative) outcome.outcome = "failure";
+      else if (outcome && isPositive) outcome.outcome = "success";
+      const recent = this.store.outcomes.slice(-100);
+      const successes = recent.filter(o => o.outcome === "success").length;
+      this.store.sessionStats.successRate = recent.length ? successes / recent.length : 1;
+    }
+
     // Store as preference in unified memory
     unifiedMemory.store_entry({
       source: "learning",
@@ -351,6 +359,17 @@ class LearningEngine {
     });
 
     this.save();
+  }
+
+  /** Conservative detector for direct corrections and durable behavior requests. */
+  isExplicitFeedback(message: string): boolean {
+    return /\b(that(?:'s| is) wrong|not what i asked|you misunderstood|don't do that|stop doing|next time|from now on|i prefer|please always|please never)\b/i.test(
+      message
+    );
+  }
+
+  getMostRecentOutcomeId(): string | undefined {
+    return this.store.outcomes.at(-1)?.id;
   }
 
   // ─── Stats ────────────────────────────────────────────────────

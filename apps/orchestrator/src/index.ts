@@ -25,6 +25,18 @@ import { streamChatCompletion } from "./services/openai.js";
 import { memoryService } from "./services/memory/index.js";
 import { textToSpeech, isTTSAvailable } from "./services/tts.js";
 import { getActiveVoice } from "./services/voice-registry.js";
+import { resolveSpeechPlan } from "./services/speech-plan.js";
+import { agentRoutes } from "./routes/agents.js";
+import { mediaRoutes } from "./routes/media.js";
+import { greetingRoutes } from "./routes/greeting.js";
+import { todayRoutes } from "./routes/today.js";
+import { integrationRoutes } from "./routes/integrations.js";
+import { upkeepRoutes } from "./routes/upkeep.js";
+import { liveVoiceRoutes } from "./routes/live-voice.js";
+import { recordIncident } from "./services/upkeep/runtime.js";
+import { isMisfire } from "./services/upkeep/guards.js";
+import { getBootId } from "./services/greeting.js";
+import { writeLearningsFromTurn } from "./services/learning-writeback.js";
 import {
   initializeMCPClients,
   shutdownMCPClients,
@@ -45,6 +57,8 @@ import { voiceRoutes } from "./routes/voice.js";
 import { vapiLlmRoutes } from "./routes/vapi-llm.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { brainRoutes } from "./routes/brain.js";
+import { skillRoutes } from "./routes/skills.js";
+import proactiveAlertsRoutes from "./routes/proactive-alerts.js";
 import { initBrain, stopBrain, buildBrainContext } from "./services/brain.js";
 import { startScheduler, stopScheduler } from "./services/scheduler.js";
 import { getLLMInfo } from "./services/openai.js";
@@ -56,13 +70,20 @@ import {
 } from "./services/memory-loader.js";
 import { promises as fs } from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import { CONVERSATION_DIR, ensureRuntimeDirs, localTimestamp } from "./services/runtime-paths.js";
+import { conversationTranscriptPath } from "./services/safe-path.js";
+import {
+  buildProceduralSkillContextWithUsage,
+  captureCorrectionProposal,
+  recordProceduralSkillOutcome,
+  type ProceduralOutcome,
+} from "./services/procedural-skills.js";
 
 // ─── Conversation transcript persistence ────────────────────────
 // Every chat turn gets appended to a JSONL file under data/conversations/{id}.jsonl
 // so Danny can scroll back through any past conversation forever, independent of
 // the in-memory conversations Map (which doesn't survive restarts).
-const CONVO_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "conversations");
+const CONVO_DIR = CONVERSATION_DIR;
 
 // Per-conversation write mutex: appends for the same conversation chain onto
 // the previous append's promise so concurrent turns can't interleave partial
@@ -80,11 +101,13 @@ function appendTranscript(
   const next = prev.then(async () => {
     try {
       await fs.mkdir(CONVO_DIR, { recursive: true });
-      const file = path.join(CONVO_DIR, `${conversationId}.jsonl`);
+      const file = conversationTranscriptPath(CONVO_DIR, conversationId);
+      if (!file) return;
       const line = JSON.stringify({
         role,
         content,
-        timestamp: new Date().toISOString(),
+        timestamp: localTimestamp(),
+        timestampUtc: new Date().toISOString(),
         ...(meta || {}),
       }) + "\n";
       await fs.appendFile(file, line, "utf-8");
@@ -134,7 +157,8 @@ async function listTranscripts(): Promise<Array<{ id: string; turns: number; fir
 
 async function readTranscript(conversationId: string): Promise<Array<{ role: string; content: string; timestamp: string }>> {
   try {
-    const file = path.join(CONVO_DIR, `${conversationId}.jsonl`);
+    const file = conversationTranscriptPath(CONVO_DIR, conversationId);
+    if (!file) return [];
     const raw = await fs.readFile(file, "utf-8");
     return raw.split("\n").filter(Boolean).map((l) => {
       try { return JSON.parse(l); } catch { return null; }
@@ -145,7 +169,18 @@ async function readTranscript(conversationId: string): Promise<Array<{ role: str
 }
 
 const MAX_MESSAGE_LENGTH = 4000;
+
+function storedParameters(raw: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  } catch {
+    // Tool arguments are canonicalized before they are logged. A bad line must not drop the reply.
+  }
+  return {};
+}
 const activeAbortControllers = new Map<string, AbortController>();
+const lastProceduralSkillsByConversation = new Map<string, string[]>();
 
 const app = Fastify({
   logger: {
@@ -153,6 +188,8 @@ const app = Fastify({
     transport: { target: "pino-pretty", options: { colorize: true } },
   },
 });
+
+ensureRuntimeDirs();
 
 await app.register(cors, {
   origin: [config.corsOrigin, "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:8080"],
@@ -170,6 +207,15 @@ await app.register(voiceRoutes);
 await app.register(vapiLlmRoutes, { prefix: "/vapi/llm" });
 await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
 await app.register(brainRoutes, { prefix: "/api/brain" });
+await app.register(skillRoutes, { prefix: "/api/skills" });
+await app.register(agentRoutes);
+await app.register(mediaRoutes);
+await app.register(greetingRoutes);
+await app.register(todayRoutes);
+await app.register(integrationRoutes);
+await app.register(upkeepRoutes);
+await app.register(liveVoiceRoutes);
+await app.register(proactiveAlertsRoutes);
 
 initializeTools();
 
@@ -194,7 +240,8 @@ void permissionManager;
 void marketMonitor;
 
 memoryService.initialize().then((connected) => {
-  console.log(connected ? "  ✓ Long-term memory (ChromaDB) connected" : "  ⚠ Running without long-term memory");
+  const report = memoryService.getMemoryReport();
+  console.log(connected ? `  ✓ Chat memory: ${report.detail}` : `  ⚠ Chat memory unavailable. ${report.detail}`);
 });
 
 // OpenClaw sync is opt-in (OPENCLAW_SYNC=true). Default = local-only memory.
@@ -218,7 +265,14 @@ app.get("/api/health", async () => {
     timestamp: new Date().toISOString(),
     service: "FRIDAY-orchestrator",
     version: "2.2.0-brain",
-    llm: { provider: llm.provider, model: llm.model, configured: llm.hasKey },
+    bootId: getBootId(),
+    llm: {
+      provider: llm.provider,
+      model: llm.model,
+      configured: llm.hasKey,
+      failover: llm.failover,
+      failoverReady: llm.failoverReady,
+    },
     tools: toolRegistry.getToolCount(),
     tts: isTTSAvailable(),
   };
@@ -258,8 +312,39 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       return { error: `Message too long. Maximum ${MAX_MESSAGE_LENGTH} characters.` };
     }
 
+    if (isMisfire(message)) {
+      recordIncident({
+        kind: "misfire",
+        signature: "user-misfire",
+        summary: "Danny reported a misfire",
+        detail: message.slice(0, 240),
+      });
+    }
+
     const conversation = getOrCreateConversation(conversationId);
     addUserMessage(conversation.id, message);
+
+    // A direct correction is first-class learning evidence. Attach it to the
+    // prior outcome before generating the next answer so Friday can adapt now.
+    let capturedSkillProposal: string | null = null;
+    const isCorrection = learningEngine.isExplicitFeedback(message);
+    const isPositiveFeedback = /\b(that (?:was|is) (?:perfect|great|good|exactly right)|exactly what i wanted|that worked|nice work)\b/i.test(message);
+    const priorProceduralSkills = lastProceduralSkillsByConversation.get(conversation.id) || [];
+    const isNegativeFeedback = /\b(that(?:'s| is) wrong|not what i asked|you misunderstood|don't do that|stop doing)\b/i.test(message);
+    if (priorProceduralSkills.length && (isNegativeFeedback || isPositiveFeedback)) {
+      recordProceduralSkillOutcome(priorProceduralSkills, isNegativeFeedback ? "failure" : "success");
+    }
+    if (isCorrection || isPositiveFeedback) {
+      learningEngine.processFeedback(message, learningEngine.getMostRecentOutcomeId());
+    }
+    if (isCorrection) {
+      try {
+        const proposal = captureCorrectionProposal(message);
+        if (proposal?.status === "pending") capturedSkillProposal = proposal.id;
+      } catch (err) {
+        app.log.warn({ err }, "skill correction capture failed");
+      }
+    }
 
     const allowedOrigins = [config.corsOrigin, "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:8080"];
     const requestOrigin = request.headers.origin || "";
@@ -283,9 +368,20 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
 
     // Memory context injection: standing memory + cross-agent memory + the
     // brain's per-message vault recall (local BM25 — free, instant, relevant).
+    const proceduralUsage = buildProceduralSkillContextWithUsage(message);
+    lastProceduralSkillsByConversation.set(conversation.id, proceduralUsage.skills);
+    if (lastProceduralSkillsByConversation.size > 1000) {
+      const oldest = lastProceduralSkillsByConversation.keys().next().value;
+      if (oldest) lastProceduralSkillsByConversation.delete(oldest);
+    }
     const memoryContext =
       "\n\n" + buildFullMemoryContext() +
       "\n" + unifiedMemory.buildContextForPrompt(message) +
+      learningEngine.buildLearningContext() +
+      proceduralUsage.context +
+      (capturedSkillProposal
+        ? `\n\nLEARNING NOTICE: A procedural preference proposal (${capturedSkillProposal}) was drafted from Danny's correction. It is not active until he approves it. Briefly mention that it is ready for review.`
+        : "") +
       buildBrainContext(message);
 
     const abortController = new AbortController();
@@ -310,24 +406,41 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
               type: "tool_call",
               tool: chunk.toolCall.toolName,
               parameters: chunk.toolCall.parameters,
+              error: undefined,
             })}\n\n`
           );
         } else if (chunk.type === "tool_result" && chunk.toolResult) {
+          const toolName = toolCalls[toolCalls.length - 1]?.name || "unnamed";
           toolResults.push({
             toolCallId: chunk.toolResult.toolCallId,
             success: chunk.toolResult.success,
             data: chunk.toolResult.data,
             error: chunk.toolResult.error,
           });
+          if (!chunk.toolResult.success) {
+            recordIncident({
+              kind: "tool",
+              signature: `tool:${toolName}`,
+              summary: `${toolName} failed`,
+              detail: chunk.toolResult.error || "tool failed",
+            });
+          }
           reply.raw.write(
             `data: ${JSON.stringify({
               type: "tool_result",
-              tool: toolCalls[toolCalls.length - 1]?.name || "unknown",
+              tool: toolName,
               result: chunk.toolResult.data,
               success: chunk.toolResult.success,
+              error: chunk.toolResult.error,
             })}\n\n`
           );
         } else if (chunk.type === "error") {
+          recordIncident({
+            kind: "runtime",
+            signature: "llm-error",
+            summary: "Model stream error",
+            detail: chunk.content || "stream error",
+          });
           reply.raw.write(`data: ${JSON.stringify({ type: "error", content: chunk.content })}\n\n`);
         }
       }
@@ -339,7 +452,7 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
           ? toolCalls.map((tc, i) => ({
               id: `call-${i}`,
               toolName: tc.name,
-              parameters: JSON.parse(tc.arguments),
+              parameters: storedParameters(tc.arguments),
             }))
           : undefined,
         toolResults.length > 0 ? toolResults : undefined
@@ -360,23 +473,35 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       // patterns accumulate (it persists itself on every record).
       try {
         const failures = toolResults.filter((r) => !r.success).length;
+        const turnOutcome: ProceduralOutcome =
+          toolResults.length === 0 ? "unknown"
+          : failures === 0 ? "success"
+          : failures === toolResults.length ? "failure"
+          : "partial";
         learningEngine.recordOutcome({
           action: `Chat: ${message.slice(0, 60)}`,
           context: message.slice(0, 200),
           toolsUsed: toolCalls.map((t) => t.name),
-          outcome:
-            toolResults.length === 0 ? "success"
-            : failures === 0 ? "success"
-            : failures === toolResults.length ? "failure"
-            : "partial",
+          outcome: turnOutcome,
         });
+        recordProceduralSkillOutcome(proceduralUsage.skills, turnOutcome);
       } catch (err) {
         app.log.warn({ err }, "learning-engine record failed");
       }
 
+      writeLearningsFromTurn(message).catch((err) => {
+        app.log.warn({ err }, "brain write-back failed");
+      });
+
       reply.raw.write(`data: ${JSON.stringify({ type: "done", conversationId: conversation.id })}\n\n`);
     } catch (error) {
       app.log.error({ error }, "Chat error");
+      recordIncident({
+        kind: "runtime",
+        signature: "chat-exception",
+        summary: "Chat request failed",
+        detail: (error as Error).message || "chat exception",
+      });
       reply.raw.write(`data: ${JSON.stringify({ type: "error", content: "Something went wrong. Please try again." })}\n\n`);
     } finally {
       activeAbortControllers.delete(conversation.id);
@@ -483,10 +608,14 @@ app.post<{ Body: { text: string } }>(
 app.get("/api/tts/status", async () => {
   // Resolved per request from the voice registry — reflects switch_voice live.
   const activeVoice = getActiveVoice();
+  const plan = resolveSpeechPlan(process.env, activeVoice.edgeVoice);
   return {
     available: isTTSAvailable(),
-    provider: "elevenlabs",
-    voice: activeVoice.voiceId,
+    provider: plan.provider,
+    fallback: plan.provider === "elevenlabs" && plan.fallbackEdge ? "edge" : "browser",
+    voice: plan.provider === "edge" ? plan.edgeVoice : activeVoice.voiceId,
+    edgeVoice: plan.edgeVoice,
+    elevenLabsConfigured: plan.elevenLabsConfigured,
     persona: activeVoice.persona,
     personaName: activeVoice.displayName,
   };
@@ -537,6 +666,7 @@ async function gracefulShutdown(): Promise<void> {
   stopScheduler();
   stopBrain();
   stopAlertDelivery();
+  proactiveMonitor.stop();
   await shutdownMCPClients();
   process.exit(0);
 }

@@ -10,13 +10,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import type { DayData } from "./daily-score.js";
+import { DATA_DIR, localDateKey } from "./runtime-paths.js";
 
 // Same data dir as health-tracking.ts so all personal data lives together,
 // regardless of whether we run from src (tsx) or a compiled dist.
-const DATA_DIR = join(
-  process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368",
-  "jarvis", "apps", "orchestrator", "data",
-);
 const STORE_FILE = join(DATA_DIR, "dashboard.json");
 const MAX_DAYS = 400;
 
@@ -27,11 +24,7 @@ interface DayStore {
 /** Local-date key. The server runs on Danny's PC (his timezone), so "today"
  *  flips at LOCAL midnight, not UTC. */
 export function todayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return localDateKey();
 }
 
 function loadStore(): DayStore {

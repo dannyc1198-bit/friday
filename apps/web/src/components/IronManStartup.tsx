@@ -294,15 +294,13 @@ export function IronManStartup({ onComplete, voicePackId = "JARVIS-classic" }: I
       setShowHUD(true);
       setHexCodes(generateHexCodes());
 
-      // Start music from playlist
+      // Optional local track only. No bundled commercial music.
       const track = getRandomStartupTrack();
-      audioRef.current = new Audio(track.src);
-      audioRef.current.volume = 0.3;
-      audioRef.current.play().catch(() => {
-        audioRef.current = new Audio("/sounds/shoot-to-thrill.mp3");
+      if (track) {
+        audioRef.current = new Audio(track.src);
         audioRef.current.volume = 0.3;
         audioRef.current.play().catch(() => {});
-      });
+      }
 
       bootMessages.forEach((msg) => {
         timers.push(setTimeout(() => {

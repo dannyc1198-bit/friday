@@ -36,7 +36,17 @@ export async function POST(request: NextRequest) {
     });
 
     if (!orchestratorResponse.ok || !orchestratorResponse.body) {
-      throw new Error(`Orchestrator returned ${orchestratorResponse.status}`);
+      const status = orchestratorResponse.status;
+      const content =
+        status === 401 || status === 403
+          ? "The web app is missing FRIDAY_API_KEY. Put the same key in apps/web/.env.local and restart the window."
+          : "I can't reach my core systems, boss — the orchestrator on port 3001 looks down. Start it and try me again.";
+      const payload =
+        `data: ${JSON.stringify({ type: "error", content })}\n\n` +
+        `data: ${JSON.stringify({ type: "done" })}\n\n`;
+      return new Response(payload, {
+        headers: { "Content-Type": "text/event-stream" },
+      });
     }
 
     // Pass the SSE body through untouched — parsing happens client-side in

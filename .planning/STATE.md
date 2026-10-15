@@ -1,8 +1,49 @@
 # Project State
 
 **Current branch:** `simple-friday`
-**Last updated:** 2026-07-09
+**Last updated:** 2026-08-31
 **Master:** untouched pre-amputation — safe fallback
+
+## Current position — RELOCATED + BACK ONLINE (2026-08-31)
+
+The repo now lives at `C:\Users\12368\Personal-Projects\jarvis\` (moved from `~\jarvis\`
+in the Aug-2026 home reorg). Everything survived the move — `node_modules` intact, no
+reinstall needed.
+
+**Boot:** double-click `start-unified.bat` (orchestrator + sidecar + web) or
+`start-jarvis.bat` (orchestrator + web + Electron shell). Both resolve their own folder
+via `%~dp0`, so the relocation did NOT break them. Manual equivalent: `npm run dev` in
+`apps\orchestrator` (:3001) and `apps\web` (:3000); `apps\sidecar` (Python/vision)
+stays off unless needed.
+
+**Verified live this session:** health 200 (v2.2.0-brain, Gemini 2.5-flash, 58 tools, TTS
+on) · brain reindexed to **174 notes / 1185 chunks / 12 entities** (was 102/312 in July)
+· web 200 · chat round-trip in the JARVIS persona · `/api/deck/conversations` and the
+read-only tool proxy both answering · Flight Deck renders through TAP-TO-INITIALIZE.
+
+**Fixed:** `apps/web/src/app/api/mission/route.ts` — the MissionCard (THE ONE THING) was
+dead in two ways. It hardcoded the Champion Log at `Desktop\` root, which the reorg moved;
+it now resolves a `LOG_CANDIDATES` list in order (`MISSION_LOG_PATH` env → vault
+`000 Dashboard\` → `Desktop\Notes & Docs\` → legacy root) and returns `source` in the
+payload. Its ONE-THING regex also demanded the literal label `THIS WEEK:` while the log
+had drifted to `TONIGHT (07-15):` — now matched on the stem. Typecheck clean.
+
+Note for future edits here: write Windows paths with **forward slashes** in TS. Node
+accepts them and it avoids `\U` / `\1` being read as escapes.
+
+**Known, not faults:** ChromaDB fails 3 connection attempts at boot then falls back to
+file-based memory — designed behaviour. FleetCard reports agent-os :7777 offline because
+the cockpit is started separately (`Wavelength\agent-os`).
+
+## NEXT (resume here)
+
+1. Decide FRIDAY's fate: ARC Deck (`Personal-Projects\arc-deck\`, :3010/:3011) was built
+   in July to replace her, gated on Danny's boot test. Until that gate clears, FRIDAY is
+   the working deck — Phase 5 retirement should NOT run.
+2. The deck's uncommitted work (deck UI, brain 2.0, voice registry, this mission fix) is
+   still uncommitted on `simple-friday` by design. Commit when Danny asks.
+4. Older July items below still stand: 21:30 reflection confirmation, Electron eyeball,
+   optional duplex voice + mobile rails.
 
 ## Current position — FLIGHT DECK LIVE (2026-07-09)
 

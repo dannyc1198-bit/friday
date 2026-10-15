@@ -16,19 +16,16 @@
 import { promises as fs } from "fs";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 import { simpleCompletion } from "./openai.js";
 import { rememberFact, getBrainStats, getRecentLearnings } from "./brain.js";
+import { isUnsafeToAct, recordLearningLine } from "./learning-writeback.js";
+import { DATA_DIR, CONVERSATION_DIR, localDateKey, localTimestamp } from "./runtime-paths.js";
+import { getBrainDir, getDailyDir, getEntitiesDir, getObsidianVaultPath } from "./vault-config.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const HOME = process.env.USERPROFILE || process.env.HOME || "";
-const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || path.join(HOME, "Obsidian", "Wavelength");
-const BRAIN_DIR = path.join(VAULT_PATH, "FRIDAY_BRAIN");
-const ENTITIES_DIR = path.join(BRAIN_DIR, "entities");
-const DAILY_DIR = path.join(VAULT_PATH, "Daily");
-const DATA_DIR = path.join(__dirname, "..", "..", "data");
-const CONVO_DIR = path.join(DATA_DIR, "conversations");
+function vaultPath(): string {
+  return getObsidianVaultPath();
+}
+const CONVO_DIR = CONVERSATION_DIR;
 const STATE_FILE = path.join(DATA_DIR, "brain-reflection.json");
 
 const MAX_TRANSCRIPT_CHARS = 9000; // keep the single daily call cheap
@@ -127,14 +124,14 @@ async function vaultActivityToday(date: string): Promise<string[]> {
       else if (e.name.endsWith(".md")) {
         try {
           const stat = await fs.stat(full);
-          if (stat.mtime.toISOString().startsWith(date)) {
-            touched.push(path.relative(VAULT_PATH, full).replace(/\\/g, "/"));
+          if (localDateKey(stat.mtime) === date) {
+            touched.push(path.relative(vaultPath(), full).replace(/\\/g, "/"));
           }
         } catch { /* skip */ }
       }
     }
   }
-  await walk(VAULT_PATH);
+  await walk(vaultPath());
   return touched.slice(0, 15);
 }
 
@@ -149,15 +146,18 @@ Respond with ONLY a JSON object, no markdown fences, in exactly this shape:
   "facts": [
     {"entity": "Name of person/project/client/topic", "type": "person|client|project|preference|place|tool|fact", "observation": "one durable, self-contained fact worth remembering long-term", "category": "fact|decision|preference|insight|event"}
   ],
-  "open_loops": ["unfinished things Danny said he'd do or asked FRIDAY to follow up on"]
+  "open_loops": ["unfinished things Danny said he'd do or asked FRIDAY to follow up on"],
+  "improvements": ["what Friday should do better next time"]
 }
 
 Rules for facts:
 - Only DURABLE knowledge: decisions made, preferences stated, people/clients/projects described, commitments, lessons. Max 8 facts.
+- Never instruct yourself to send a message, spend money, or place a live trade. Those stay drafts until Danny approves them in the moment.
 - Skip chit-chat, weather, one-off commands ("open chrome"), anything already obvious.
 - Each observation must stand alone — readable a year from now with no other context.
 - Entity names should be short and reusable (e.g. "Abe", "Wavelength Solutions", "Dan Martell Goal"), not sentences.
-- If the day had nothing durable, return "facts": [].`;
+- If the day had nothing durable, return "facts": [].
+- "improvements" is what Friday should change about her own behavior. Max 5. Do not edit DANNY-PROFILE.md. Profile changes stay proposals.`;
 
 function extractJson(raw: string): any {
   const cleaned = raw.replace(/```(?:json)?/g, "").trim();
@@ -170,8 +170,8 @@ function extractJson(raw: string): any {
 // ─── Vault write-backs ──────────────────────────────────────────
 
 async function appendToDailyNote(date: string, md: string): Promise<void> {
-  if (!existsSync(DAILY_DIR)) mkdirSync(DAILY_DIR, { recursive: true });
-  const file = path.join(DAILY_DIR, `${date}.md`);
+  if (!existsSync(getDailyDir())) mkdirSync(getDailyDir(), { recursive: true });
+  const file = path.join(getDailyDir(), `${date}.md`);
   let content = "";
   try {
     content = await fs.readFile(file, "utf-8");
@@ -190,14 +190,14 @@ async function appendToDailyNote(date: string, md: string): Promise<void> {
 }
 
 async function refreshBrainIndex(): Promise<void> {
-  if (!existsSync(ENTITIES_DIR)) return;
-  const files = readdirSync(ENTITIES_DIR).filter((f) => f.endsWith(".md"));
+  if (!existsSync(getEntitiesDir())) return;
+  const files = readdirSync(getEntitiesDir()).filter((f) => f.endsWith(".md"));
   const byType = new Map<string, string[]>();
 
   for (const f of files) {
     let type = "fact";
     try {
-      const raw = readFileSync(path.join(ENTITIES_DIR, f), "utf-8");
+      const raw = readFileSync(path.join(getEntitiesDir(), f), "utf-8");
       const m = raw.match(/^type:\s*(\w+)/m);
       if (m) type = m[1];
     } catch { /* default */ }
@@ -239,7 +239,7 @@ async function refreshBrainIndex(): Promise<void> {
     lines.push("");
   }
 
-  await fs.writeFile(path.join(BRAIN_DIR, "INDEX.md"), lines.join("\n"), "utf-8");
+  await fs.writeFile(path.join(getBrainDir(), "INDEX.md"), lines.join("\n"), "utf-8");
 }
 
 // ─── Main entry ─────────────────────────────────────────────────
@@ -247,7 +247,7 @@ async function refreshBrainIndex(): Promise<void> {
 let reflecting = false;
 
 export async function runReflection(dateStr?: string): Promise<ReflectionResult> {
-  const date = dateStr || new Date().toISOString().split("T")[0];
+  const date = dateStr || localDateKey();
   if (reflecting) return { ran: false, date, skippedReason: "Reflection already in progress" };
   reflecting = true;
 
@@ -277,10 +277,14 @@ Distill this day per your instructions. JSON only.`;
     const highlights: string[] = Array.isArray(parsed.highlights) ? parsed.highlights.filter((h: unknown) => typeof h === "string") : [];
     const facts: any[] = Array.isArray(parsed.facts) ? parsed.facts.slice(0, 8) : [];
     const openLoops: string[] = Array.isArray(parsed.open_loops) ? parsed.open_loops.filter((l: unknown) => typeof l === "string") : [];
+    const improvements: string[] = Array.isArray(parsed.improvements)
+      ? parsed.improvements.filter((item: unknown) => typeof item === "string").slice(0, 5)
+      : [];
 
     let factsAdded = 0;
     for (const f of facts) {
       if (!f || typeof f.entity !== "string" || typeof f.observation !== "string") continue;
+      if (isUnsafeToAct(f.observation)) continue;
       try {
         const res = await rememberFact({
           entity: f.entity,
@@ -289,7 +293,10 @@ Distill this day per your instructions. JSON only.`;
           category: f.category,
           source: "reflection",
         });
-        if (!res.duplicate) factsAdded++;
+        if (!res.duplicate) {
+          factsAdded++;
+          recordLearningLine(typeof f.category === "string" ? f.category : "fact", f.entity, f.observation, "reflection");
+        }
       } catch (err) {
         console.warn(`[Reflection] fact write failed for "${f.entity}":`, (err as Error).message);
       }
@@ -303,7 +310,8 @@ Distill this day per your instructions. JSON only.`;
       ...(highlights.length > 0 ? ["**Highlights:**", ...highlights.map((h) => `- ${h}`), ""] : []),
       ...(factsAdded > 0 ? [`**Learned:** ${factsAdded} new fact(s) → [[FRIDAY_BRAIN/INDEX|Brain Index]]`, ""] : []),
       ...(openLoops.length > 0 ? ["**Open loops:**", ...openLoops.map((l) => `- [ ] ${l}`), ""] : []),
-      `*Reflected ${new Date().toISOString().slice(0, 16).replace("T", " ")}*`,
+      ...(improvements.length > 0 ? ["**Improve:**", ...improvements.map((item) => `- ${item}`), ""] : []),
+      `*Reflected ${localTimestamp().slice(0, 16).replace("T", " ")}*`,
     ].join("\n");
 
     await appendToDailyNote(date, md);

@@ -9,9 +9,10 @@
 //   - Each check has a cooldown — same alert won't fire twice in a row
 //   - Read-only monitoring only — can observe, never act autonomously
 
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "fs";
 import { join } from "path";
-import { config } from "../config/index.js";
+import { DATA_DIR } from "./runtime-paths.js";
+import { collapseAlerts, isDuplicateAlert } from "./alert-dedupe.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -37,11 +38,7 @@ const CHECK_INTERVAL_MS  = 5 * 60 * 1000;   // 5 minutes
 const QUIET_HOUR_START   = 23;              // 11 PM
 const QUIET_HOUR_END     = 5;               // 5 AM
 const MAX_ALERTS_PER_HOUR = 3;
-
-const DATA_DIR = join(
-  process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368",
-  "jarvis", "apps", "orchestrator", "data"
-);
+const ALERTS_FILE = join(DATA_DIR, "proactive-alerts.json");
 
 // ─── ProactiveMonitor ────────────────────────────────────────────────
 
@@ -53,7 +50,7 @@ interface QuietMode {
 }
 
 class ProactiveMonitor {
-  private alertQueue: ProactiveAlert[] = [];
+  private alertQueue: ProactiveAlert[] = collapseAlerts(this.loadAlerts());
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private alertsThisHour = 0;
   private hourResetTime = Date.now() + 60 * 60 * 1000;
@@ -95,11 +92,13 @@ class ProactiveMonitor {
     const alert = this.alertQueue.find((a) => a.id === id);
     if (!alert) return false;
     alert.read = true;
+    this.saveAlerts();
     return true;
   }
 
   clearAll(): void {
     this.alertQueue = [];
+    this.saveAlerts();
   }
 
   /** Allow external services (e.g. market monitor) to queue an alert directly */
@@ -174,6 +173,7 @@ class ProactiveMonitor {
     alert: Omit<ProactiveAlert, "id" | "timestamp" | "read">,
     checkKey: string
   ): void {
+    if (isDuplicateAlert(this.alertQueue, alert.title, new Date().toISOString())) return;
     if (!this.canAlert()) return;
     if (!this.passesQuietFilter(alert.priority)) {
       console.log(`[Proactive Monitor] Suppressed by quiet mode: [${alert.priority}] ${alert.title}`);
@@ -196,11 +196,33 @@ class ProactiveMonitor {
     if (this.alertQueue.length > 50) {
       this.alertQueue = this.alertQueue.slice(-50);
     }
+    this.saveAlerts();
 
     if (state) state.lastAlertTime = Date.now();
     this.alertsThisHour++;
 
     console.log(`[Proactive Monitor] Alert queued: [${alert.priority}] ${alert.title}`);
+  }
+
+  private loadAlerts(): ProactiveAlert[] {
+    try {
+      if (!existsSync(ALERTS_FILE)) return [];
+      const parsed = JSON.parse(readFileSync(ALERTS_FILE, "utf8"));
+      return Array.isArray(parsed) ? parsed.slice(-50) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private saveAlerts(): void {
+    try {
+      if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+      const temp = `${ALERTS_FILE}.tmp`;
+      writeFileSync(temp, JSON.stringify(this.alertQueue.slice(-50), null, 2), "utf8");
+      renameSync(temp, ALERTS_FILE);
+    } catch (err) {
+      console.warn("[Proactive Monitor] Could not persist alerts:", (err as Error).message);
+    }
   }
 
   // ── Main check runner ────────────────────────────────────────────

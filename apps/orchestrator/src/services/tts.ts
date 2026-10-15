@@ -1,14 +1,16 @@
 /**
- * Text-to-Speech Service — ElevenLabs Integration
+ * Text-to-Speech Service
  *
- * Voice: resolved per call from services/voice-registry.ts — switchable
- * between JARVIS (Daniel) and FRIDAY (Rachel) via the switch_voice tool.
- * ELEVENLABS_VOICE_ID env still wins globally if set (legacy override).
- * Model: eleven_flash_v2_5
- * Fallback: returns null → frontend uses browser speechSynthesis
+ * Voice id and delivery come from services/voice-registry.ts at call time
+ * (JARVIS by default: calm British male). Provider is chosen by speech-plan.ts:
+ * ElevenLabs when ELEVENLABS_API_KEY is set, otherwise Microsoft Edge's free
+ * en-GB neural voice. A missing key never throws. If both fail, this returns
+ * null and the browser speaks with an en-GB male voice.
  */
 
 import { getActiveVoice } from "./voice-registry.js";
+import { isServerTtsAvailable, resolveSpeechPlan } from "./speech-plan.js";
+import { synthesizeEdge } from "./edge-tts.js";
 // Flash v2.5 generates audio at ~75ms time-to-first-byte vs eleven_v3's
 // ~800ms+. This is the ChatGPT-Advanced-Voice-class model for latency.
 // optimize_streaming_latency=4 is the most aggressive streaming preset.
@@ -59,40 +61,20 @@ export function stripForTTS(text: string): string {
 }
 
 /**
- * Check if ElevenLabs TTS is available (API key present)
+ * True when a server-side voice can be attempted (ElevenLabs or Edge).
+ * Edge needs no key. The browser is the last resort when this still returns null audio.
  */
 export function isTTSAvailable(): boolean {
-  const key = process.env.ELEVENLABS_API_KEY;
-  return !!key && key.length > 0;
+  return isServerTtsAvailable();
 }
 
-/**
- * Convert text to speech using ElevenLabs API.
- * Returns audio buffer (mp3) or null if unavailable/failed.
- */
-export async function textToSpeech(
+async function elevenLabsSpeech(
   text: string,
-  options: TTSOptions = {}
+  voiceId: string,
+  opts: Required<TTSOptions>
 ): Promise<Buffer | null> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
-
-  if (!apiKey) {
-    console.warn("[TTS] No ELEVENLABS_API_KEY — frontend will use browser fallback");
-    return null;
-  }
-
-  const cleaned = stripForTTS(text);
-
-  if (!cleaned || cleaned.length < 2) {
-    console.warn("[TTS] Text too short after stripping, skipping");
-    return null;
-  }
-
-  // Truncate very long text (ElevenLabs has limits)
-  const truncated = cleaned.length > 5000 ? cleaned.slice(0, 5000) + "..." : cleaned;
-
-  const opts = { ...DEFAULT_OPTIONS, ...options };
-  const { voiceId } = getActiveVoice(); // resolved per call — switchable at runtime
+  if (!apiKey) return null;
 
   try {
     const controller = new AbortController();
@@ -108,7 +90,7 @@ export async function textToSpeech(
           Accept: "audio/mpeg",
         },
         body: JSON.stringify({
-          text: truncated,
+          text,
           model_id: MODEL_ID,
           voice_settings: {
             stability: opts.stability,
@@ -125,7 +107,7 @@ export async function textToSpeech(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "unknown error");
-      console.error(`[TTS] ElevenLabs API error ${response.status}: ${errorText}`);
+      console.error(`[TTS] ElevenLabs API error ${response.status}: ${errorText.slice(0, 200)}`);
       return null;
     }
 
@@ -139,6 +121,44 @@ export async function textToSpeech(
     }
     return null;
   }
+}
+
+/**
+ * Convert text to speech. Returns MP3 bytes or null if every configured
+ * provider failed. Never throws.
+ */
+export async function textToSpeech(
+  text: string,
+  options: TTSOptions = {}
+): Promise<Buffer | null> {
+  const cleaned = stripForTTS(text);
+
+  if (!cleaned || cleaned.length < 2) {
+    console.warn("[TTS] Text too short after stripping, skipping");
+    return null;
+  }
+
+  const truncated = cleaned.length > 5000 ? cleaned.slice(0, 5000) + "..." : cleaned;
+  const active = getActiveVoice();
+  const plan = resolveSpeechPlan(process.env, active.edgeVoice);
+  const opts: Required<TTSOptions> = {
+    stability: options.stability ?? active.stability,
+    similarityBoost: options.similarityBoost ?? active.similarityBoost,
+    style: options.style ?? active.style,
+    useSpeakerBoost: options.useSpeakerBoost ?? DEFAULT_OPTIONS.useSpeakerBoost ?? true,
+  };
+
+  if (plan.provider === "elevenlabs") {
+    const audio = await elevenLabsSpeech(truncated, active.voiceId, opts);
+    if (audio) return audio;
+    if (plan.fallbackEdge) {
+      console.warn("[TTS] ElevenLabs failed — falling back to Edge en-GB");
+      return synthesizeEdge(truncated, plan.edgeVoice);
+    }
+    return null;
+  }
+
+  return synthesizeEdge(truncated, plan.edgeVoice);
 }
 
 /**
@@ -157,8 +177,16 @@ export async function streamTextToSpeech(
   if (!cleaned || cleaned.length < 2) return null;
 
   const truncated = cleaned.length > 5000 ? cleaned.slice(0, 5000) + "..." : cleaned;
-  const opts = { ...DEFAULT_OPTIONS, ...options };
-  const { voiceId } = getActiveVoice(); // resolved per call — switchable at runtime
+  const active = getActiveVoice();
+  const plan = resolveSpeechPlan(process.env, active.edgeVoice);
+  if (plan.provider !== "elevenlabs") return null;
+  const opts: Required<TTSOptions> = {
+    stability: options.stability ?? active.stability,
+    similarityBoost: options.similarityBoost ?? active.similarityBoost,
+    style: options.style ?? active.style,
+    useSpeakerBoost: options.useSpeakerBoost ?? true,
+  };
+  const voiceId = active.voiceId;
 
   try {
     const controller = new AbortController();

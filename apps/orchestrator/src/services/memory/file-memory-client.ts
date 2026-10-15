@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { config } from "../../config/index.js";
+import { DATA_DIR } from "../runtime-paths.js";
 import type { MemoryDocument, ChromaStatus, MemorySearchResult } from "./types.js";
 
 // File-based memory storage (no Docker required)
@@ -31,20 +31,13 @@ class FileMemoryClient {
   };
 
   constructor() {
-    // Store memories in user's JARVIS data folder
-    this.memoryDir = path.join(process.cwd(), "data", "memory");
+    this.memoryDir = path.join(DATA_DIR, "memory");
     this.memoryFile = path.join(this.memoryDir, "memories.json");
   }
 
-  // Initialize - load existing memories from disk
   async connect(): Promise<boolean> {
-    if (!config.chroma.enabled) {
-      console.log("[FileMemory] Memory system disabled via config");
-      return false;
-    }
-
     try {
-      console.log("[FileMemory] Initializing file-based memory...");
+      console.log("[FileMemory] Initializing local file memory...");
       
       // Create directory if needed
       await fs.mkdir(this.memoryDir, { recursive: true });
@@ -76,7 +69,7 @@ class FileMemoryClient {
         lastHealthCheck: new Date(),
       };
 
-      console.log(`[FileMemory] Loaded ${this.store!.memories.length} memories from disk`);
+      console.log(`[FileMemory] Loaded ${this.store!.memories.length} memories from ${this.memoryFile}`);
       return true;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
@@ -131,19 +124,37 @@ class FileMemoryClient {
   }
 
 
-  // Semantic search using embeddings
+  async searchByText(query: string, limit = 5): Promise<MemorySearchResult[]> {
+    if (!this.store) return [];
+    const terms = new Set(query.toLowerCase().split(/\W+/).filter((word) => word.length > 2));
+    if (terms.size === 0) return [];
+    return this.store.memories
+      .map((memory) => {
+        const words = memory.document.content.toLowerCase().split(/\W+/);
+        let hits = 0;
+        for (const word of words) if (terms.has(word)) hits++;
+        const similarity = hits / terms.size;
+        return { document: memory.document, similarity, distance: 1 - similarity };
+      })
+      .filter((result) => result.similarity > 0)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+  }
+
+  // Semantic search using embeddings, with a keyword fallback for empty vectors.
   async queryByEmbedding(
     embedding: number[],
     limit: number = 5,
     where?: Record<string, unknown>
   ): Promise<MemorySearchResult[]> {
     if (!this.store) throw new Error("Memory not initialized");
+    if (!embedding.length) return this.searchByText("", limit);
 
     // Calculate similarity for all memories
     let results = this.store.memories.map(m => ({
       document: m.document,
-      similarity: this.cosineSimilarity(embedding, m.embedding),
-      distance: 1 - this.cosineSimilarity(embedding, m.embedding),
+      similarity: m.embedding.length ? this.cosineSimilarity(embedding, m.embedding) : 0,
+      distance: 1,
     }));
 
     // Apply filters

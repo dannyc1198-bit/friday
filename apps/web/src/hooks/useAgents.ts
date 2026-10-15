@@ -1,73 +1,43 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-
-interface Agent {
-  id: string;
-  name: string;
-  specialty: string;
-  autonomyLevel: string;
-  capabilities: string[];
-}
-
-interface AgentTask {
-  id: string;
-  agentId: string;
-  task: string;
-  status: string;
-  createdAt: string;
-  completedAt?: string;
-}
-
-const ORCHESTRATOR_URL = "http://localhost:3001";
+import { useCallback, useEffect, useState } from "react";
+import {
+  dispatchAgentTask,
+  fetchAgentStatuses,
+  type AgentStatus,
+  type DispatchResponse,
+} from "@/lib/agents";
 
 export function useAgents() {
-  const [agents] = useState<Agent[]>([
-    { id: "nexus", name: "NEXUS", specialty: "Sales & Outreach", autonomyLevel: "supervised", capabilities: ["cold outreach", "lead research", "follow-ups"] },
-    { id: "builder", name: "BUILDER", specialty: "Technical Implementation", autonomyLevel: "supervised", capabilities: ["code generation", "deployment", "bug fixes"] },
-    { id: "creator", name: "CREATOR", specialty: "Content & Creative", autonomyLevel: "supervised", capabilities: ["blog posts", "social media", "video scripts"] },
-    { id: "pulse", name: "PULSE", specialty: "Analytics & Monitoring", autonomyLevel: "full", capabilities: ["revenue tracking", "analytics", "crypto portfolio"] },
-    { id: "clawdy", name: "CLAWDY", specialty: "General Operations", autonomyLevel: "confirm-each", capabilities: ["phone calls", "scheduling", "email triage"] },
-  ]);
-
-  const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchTasks = useCallback(async () => {
+  const refreshTasks = useCallback(async () => {
     try {
-      const resp = await fetch(`${ORCHESTRATOR_URL}/api/agents/tasks`);
-      if (resp.ok) {
-        const data = await resp.json();
-        setTasks(data.tasks || []);
-      }
-    } catch {
-      // Orchestrator offline
+      setAgents(await fetchAgentStatuses());
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "agent panel unavailable");
     }
   }, []);
 
-  const dispatchTask = useCallback(async (agentId: string, task: string) => {
+  const dispatchTask = useCallback(async (agentId: string, task: string): Promise<DispatchResponse> => {
     setLoading(true);
     try {
-      const resp = await fetch(`${ORCHESTRATOR_URL}/api/agents/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId, task }),
-      });
-      if (resp.ok) {
-        await fetchTasks();
-      }
-    } catch {
-      // Handle error
+      return await dispatchAgentTask(agentId, task);
+    } catch (err) {
+      return { ok: false, summary: err instanceof Error ? err.message : "dispatch failed" };
     } finally {
       setLoading(false);
     }
-  }, [fetchTasks]);
+  }, []);
 
   useEffect(() => {
-    fetchTasks();
-    const interval = setInterval(fetchTasks, 5000);
+    refreshTasks();
+    const interval = setInterval(refreshTasks, 15_000);
     return () => clearInterval(interval);
-  }, [fetchTasks]);
+  }, [refreshTasks]);
 
-  return { agents, tasks, loading, dispatchTask, refreshTasks: fetchTasks };
+  return { agents, loading, error, dispatchTask, refreshTasks };
 }

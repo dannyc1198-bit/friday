@@ -1,4 +1,5 @@
 import type { Tool, ToolResult } from "../types/index.js";
+import { isOutboundTool } from "../services/intent-router.js";
 
 class ToolRegistry {
   private tools: Map<string, Tool> = new Map();
@@ -31,6 +32,14 @@ class ToolRegistry {
   ): Promise<ToolResult> {
     const tool = this.tools.get(toolName);
 
+    if (isOutboundTool(toolName)) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: `Refused "${toolName}". Messages, spending, and live trades stay drafts until Danny explicitly approves one.`,
+      };
+    }
+
     if (!tool) {
       return {
         toolCallId: "",
@@ -40,9 +49,9 @@ class ToolRegistry {
     }
 
     try {
-      console.log(`[ToolRegistry] Executing tool: ${toolName}`, parameters);
+      console.log(`[ToolRegistry] Executing tool: ${toolName}`);
       const result = await tool.execute(parameters);
-      console.log(`[ToolRegistry] Tool result:`, result);
+      console.log(`[ToolRegistry] Tool result: ${toolName} ${result.success ? "ok" : "failed"}`);
       return result;
     } catch (error) {
       const errorMessage =

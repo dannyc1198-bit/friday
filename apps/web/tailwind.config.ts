@@ -54,6 +54,7 @@ const config: Config = {
           faint: "#2e4e68",       // structure text, deep dim
           amber: "#00b4ff",       // electric cyan — the accent (name is legacy)
           hot: "#00dcff",         // cyan, lit
+          gold: "#ffb020",        // amber — the one thing that matters
           ok: "#66ffb2",          // service online
           alert: "#ff5252",       // fault red
         },

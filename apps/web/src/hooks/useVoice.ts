@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePushToTalk, type STTMethod } from "./usePushToTalk";
 import type { Message } from "@/types";
+import { JARVIS_SPEECH_PITCH, JARVIS_SPEECH_RATE, pickJarvisVoice } from "@/lib/jarvis-voice";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -15,6 +16,8 @@ interface UseVoiceOptions {
   onTranscript: (text: string) => void;
   /** Whether voice features are enabled */
   enabled?: boolean;
+  /** ElevenLabs or Realtime already owns the microphone. */
+  suppressMic?: boolean;
 }
 
 interface UseVoiceReturn {
@@ -72,6 +75,7 @@ export function useVoice({
   isLoading,
   onTranscript,
   enabled = true,
+  suppressMic = false,
 }: UseVoiceOptions): UseVoiceReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -180,23 +184,13 @@ export function useVoice({
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 0.9;
+    utterance.lang = "en-GB";
+    utterance.rate = JARVIS_SPEECH_RATE;
+    utterance.pitch = JARVIS_SPEECH_PITCH;
     utterance.volume = 1.0;
 
-    // Prefer a young British female voice (matches Lily, the ElevenLabs primary).
-    // Browser TTS is only a fallback — when ElevenLabs is reachable, this never
-    // runs. Heuristic: name contains "female" / known female names, en-GB lang.
-    const voices = window.speechSynthesis.getVoices();
-    const FEMALE_HINTS = ["female", "lily", "libby", "sonia", "abbi", "olivia", "amy", "hazel", "kate"];
-    const britishVoice = voices.find(
-      (v) => v.lang === "en-GB" && FEMALE_HINTS.some((h) => v.name.toLowerCase().includes(h))
-    ) || voices.find(
-      (v) => v.lang === "en-GB"
-    ) || voices.find(
-      (v) => v.lang.startsWith("en")
-    );
-
+    // Free fallback: calm British male (Windows Ryan/George, or any en-GB male).
+    const britishVoice = pickJarvisVoice(window.speechSynthesis.getVoices());
     if (britishVoice) utterance.voice = britishVoice;
 
     synthUtteranceRef.current = utterance;
@@ -219,15 +213,17 @@ export function useVoice({
 
     setError(null);
 
-    // Try ElevenLabs first
     if (ttsAvailable) {
       const success = await speakWithElevenLabs(text);
       if (success) return;
     }
 
-    // Fallback to browser speechSynthesis
+    // Live mode must not stop at text. The browser voice is the last speaker.
     speakWithBrowser(text);
-  }, [ttsAvailable, speakWithElevenLabs, speakWithBrowser]);
+    if (isLiveMode && !("speechSynthesis" in window)) {
+      setError("Live voice has no speaker on this browser.");
+    }
+  }, [ttsAvailable, speakWithElevenLabs, speakWithBrowser, isLiveMode]);
 
   const stopSpeaking = useCallback(() => {
     // Stop HTML5 audio
@@ -330,7 +326,15 @@ export function useVoice({
   // Mute state is intentionally NOT a guard — mute means "don't speak to me",
   // not "don't listen to me". Mic stays on so the user can resume by speaking.
   useEffect(() => {
-    if (!isLiveMode || !enabled) return;
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.getVoices();
+    const load = () => window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+
+  useEffect(() => {
+    if (!isLiveMode || !enabled || suppressMic) return;
     if (ptt.isListening || isSpeaking || isLoading) return;
 
     if (rearmTimerRef.current) clearTimeout(rearmTimerRef.current);
@@ -347,7 +351,7 @@ export function useVoice({
         pttRef.current.startListening();
       }
     }, LIVE_REARM_DELAY_MS);
-  }, [isLiveMode, enabled, ptt.isListening, isSpeaking, isLoading]);
+  }, [isLiveMode, enabled, suppressMic, ptt.isListening, isSpeaking, isLoading]);
 
   // ─── Cleanup pending rearm timer on unmount ─────────────
   useEffect(() => {
@@ -387,7 +391,10 @@ export function useVoice({
     interimTranscript: ptt.interimTranscript,
     toggleMute,
     toggleLiveMode,
-    startListening: ptt.startListening,
+    startListening: () => {
+      if (suppressMic) return;
+      pttRef.current.startListening();
+    },
     stopListening: ptt.stopListening,
     stopSpeaking,
   };

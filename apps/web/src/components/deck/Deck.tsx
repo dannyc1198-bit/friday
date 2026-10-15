@@ -9,15 +9,22 @@ import NeuralBrain from "@/components/NeuralBrain";
 import BootSequence from "@/components/BootSequence";
 import { WaveformPresence, PresenceMode } from "./WaveformPresence";
 import { HealthChips } from "./HealthChips";
-import { MissionCard } from "./MissionCard";
-import { FleetCard } from "./FleetCard";
-import { MarketCard } from "./MarketCard";
-import { IntelCard } from "./IntelCard";
-import { BrainCard } from "./BrainCard";
-import { HistoryCard } from "./HistoryCard";
+import { AgentsCard } from "./AgentsCard";
 import { DeckMessage } from "./DeckMessage";
 import { DeckInput } from "./DeckInput";
 import { Icons } from "./deck-lib";
+import {
+  AllyBoard,
+  ArcReactor,
+  ContentBoard,
+  FocusBar,
+  FocusId,
+  TodayBoard,
+  WavelengthBoard,
+  IntegrationList,
+  LearnBoard,
+} from "./Workspaces";
+import { LiveTalk } from "./LiveTalk";
 
 // FRIDAY — Flight Deck.
 // One screen: the conversation in the middle, truth on both sides.
@@ -32,18 +39,33 @@ export default function Deck() {
     sendMessage,
     stopTask,
     newConversation,
-    loadConversation,
   } = useChat();
+
+  const [coreOnline, setCoreOnline] = useState(true);
+  const [focus, setFocus] = useState<FocusId>("today");
+  const [focusSignal, setFocusSignal] = useState(0);
+  const [agentLive, setAgentLive] = useState(false);
 
   const voice = useVoice({
     messages,
     isLoading,
     onTranscript: sendMessage,
     enabled: true,
+    suppressMic: agentLive,
   });
 
-  const [coreOnline, setCoreOnline] = useState(true);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  function ask(prompt: string) {
+    setFocus("talk");
+    sendMessage(prompt);
+  }
+
+  function afterGreeting() {
+    const muted = window.localStorage.getItem("JARVIS-voice-muted") === "true";
+    const mic = "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
+    setFocus("talk");
+    if (!muted && mic) voice.toggleLiveMode();
+    else setFocusSignal((n) => n + 1);
+  }
 
   const presence: PresenceMode = !coreOnline
     ? "offline"
@@ -90,12 +112,19 @@ export default function Deck() {
 
       {/* ── Top bar: wordmark · presence · truth chips ── */}
       <header className="flex h-14 shrink-0 items-center gap-4 border-b border-deck-line px-4">
+        <ArcReactor />
         <div className="shrink-0">
           <h1 className="font-deckdisplay text-lg font-bold uppercase tracking-[0.34em] text-deck-ink">
             Friday
           </h1>
         </div>
         <WaveformPresence mode={presence} className="h-10 min-w-0 flex-1" />
+        <Link
+          href="/learning"
+          className="shrink-0 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber"
+        >
+          Learning Lab
+        </Link>
         <Link
           href="/brain"
           className="shrink-0 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber"
@@ -107,21 +136,27 @@ export default function Deck() {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
-        {/* ── Left rail: her mind ── */}
-        <aside className="hidden min-h-0 space-y-3 overflow-y-auto border-r border-deck-line p-3 [scrollbar-width:thin] xl:block">
-          <BrainCard />
-          <HistoryCard
-            activeId={activeConvId}
-            onLoad={(id, msgs) => {
-              loadConversation(id, msgs);
-              setActiveConvId(id);
-            }}
-          />
-        </aside>
+      <FocusBar value={focus} onChange={setFocus} />
 
-        {/* ── Center: the conversation ── */}
-        <main className="flex min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {focus === "today" && <TodayBoard onAct={ask} />}
+        {focus === "wavelength" && <WavelengthBoard onAct={ask} />}
+        {focus === "content" && <ContentBoard onAct={ask} />}
+        {focus === "ally" && <AllyBoard onAct={ask} />}
+        {focus === "learn" && <LearnBoard />}
+        {focus === "agents" && (
+          <div className="mx-auto grid w-full max-w-3xl gap-4 px-5 py-6">
+            <AgentsCard />
+            <IntegrationList />
+          </div>
+        )}
+        {focus === "talk" && (
+        <main className="flex h-full min-h-0 flex-col">
+          <LiveTalk
+            active={voice.isLiveMode}
+            muted={voice.isMuted}
+            onAgent={setAgentLive}
+          />
           <div className="flex items-center justify-between border-b border-deck-line px-4 py-1.5">
             <span className="font-deckmono text-[10px] uppercase tracking-[0.2em] text-deck-faint">
               {presence === "offline"
@@ -137,7 +172,6 @@ export default function Deck() {
             <button
               onClick={() => {
                 newConversation();
-                setActiveConvId(null);
               }}
               className="flex items-center gap-1.5 rounded border border-deck-line px-2 py-1 font-deckmono text-[10px] uppercase tracking-wider text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber"
             >
@@ -189,21 +223,15 @@ export default function Deck() {
                 voice.stopSpeaking();
               }}
               voice={voice}
+              focusSignal={focusSignal}
             />
           </div>
         </main>
-
-        {/* ── Right rail: Danny's world ── */}
-        <aside className="hidden min-h-0 space-y-3 overflow-y-auto border-l border-deck-line p-3 [scrollbar-width:thin] xl:block">
-          <MissionCard />
-          <FleetCard />
-          <MarketCard />
-          <IntelCard />
-        </aside>
+        )}
       </div>
 
       {/* Boot overlay — once per browser session (sessionStorage.fridayBooted) */}
-      <BootSequence />
+      <BootSequence onFinished={afterGreeting} />
     </div>
   );
 }

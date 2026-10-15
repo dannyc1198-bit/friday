@@ -8,29 +8,13 @@
 // with arbitrary natural-language input. `--print` makes Claude Code
 // non-interactive and prints only the final response.
 
-import { spawn } from "child_process";
-import path from "path";
 import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
-
-// FRIDAY repo root — default working directory for delegations.
-// Resolved relative to this file: tools/claude-code.ts → ../../../../
-const FRIDAY_REPO_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..");
+import { dispatchAgent } from "../services/agents/registry.js";
 
 const MIN_TIMEOUT_SEC = 30;
 const MAX_TIMEOUT_SEC = 1800;
 const DEFAULT_TIMEOUT_SEC = 300;
-const MAX_OUTPUT_PREVIEW = 240;
-
-// Friendly aliases → actual Claude model IDs.
-// Omitting `model` lets the claude CLI pick its default (Haiku).
-const MODEL_ALIASES: Record<string, string> = {
-  fable: "claude-fable-5",
-  opus: "claude-opus-4-8",
-  sonnet: "claude-sonnet-4-6",
-  haiku: "claude-haiku-4-5-20251001",
-};
-
 const delegateToClaudeCodeTool: Tool = {
   name: "delegate_to_claude_code",
   description:
@@ -89,97 +73,30 @@ const delegateToClaudeCodeTool: Tool = {
       return { toolCallId: "", success: false, error: "task is required" };
     }
 
-    const cwd = (params.working_directory as string) || FRIDAY_REPO_ROOT;
     const timeoutSec = Math.min(
       MAX_TIMEOUT_SEC,
       Math.max(MIN_TIMEOUT_SEC, Number(params.timeout_seconds) || DEFAULT_TIMEOUT_SEC)
     );
-
-    // Resolve friendly model alias → CLI flag. Unknown alias = silently use default.
     const modelAlias = String(params.model ?? "").toLowerCase().trim();
-    const modelId = MODEL_ALIASES[modelAlias];
-    const cliArgs = ["--print", "--dangerously-skip-permissions"];
-    if (modelId) cliArgs.push("--model", modelId);
-
-    return new Promise<ToolResult>((resolve) => {
-      const startedAt = Date.now();
-      let stdout = "";
-      let stderr = "";
-      let killed = false;
-
-      // shell:true is required on Windows so PATH lookup finds claude.cmd.
-      // Args are not interpolated from `task` (passed via stdin), so no
-      // shell-injection vector through the prompt content.
-      const child = spawn("claude", cliArgs, {
-        cwd,
-        env: process.env,
-        shell: process.platform === "win32",
-      });
-
-      const timer = setTimeout(() => {
-        killed = true;
-        child.kill("SIGTERM");
-      }, timeoutSec * 1000);
-
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
-      });
-
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        resolve({
-          toolCallId: "",
-          success: false,
-          error: `Failed to spawn claude CLI: ${err.message}. Is Claude Code installed and on PATH?`,
-        });
-      });
-
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
-
-        if (killed) {
-          resolve({
-            toolCallId: "",
-            success: false,
-            error: `Claude Code timed out after ${timeoutSec}s. Last output: ${stdout.slice(-400) || "(none)"}`,
-          });
-          return;
-        }
-
-        if (code !== 0) {
-          resolve({
-            toolCallId: "",
-            success: false,
-            error: `Claude Code exited ${code} after ${elapsedSec}s. stderr: ${stderr.slice(-400) || "(empty)"}`,
-          });
-          return;
-        }
-
-        const output = stdout.trim();
-        const preview =
-          output.length > MAX_OUTPUT_PREVIEW
-            ? output.slice(0, MAX_OUTPUT_PREVIEW) + "…"
-            : output;
-
-        resolve({
-          toolCallId: "",
-          success: true,
-          data: {
-            message: `Claude Code finished in ${elapsedSec}s. Result: ${preview}`,
-            full_output: output,
-            cwd,
-            elapsed_seconds: Number(elapsedSec),
-          },
-        });
-      });
-
-      child.stdin.write(task);
-      child.stdin.end();
+    const startedAt = Date.now();
+    const result = await dispatchAgent("claude-code", task, {
+      workingDirectory: (params.working_directory as string) || undefined,
+      timeoutMs: timeoutSec * 1000,
+      model: modelAlias || undefined,
     });
+    if (!result.ok) {
+      return { toolCallId: "", success: false, error: result.summary };
+    }
+    const elapsedSec = Number(((Date.now() - startedAt) / 1000).toFixed(1));
+    return {
+      toolCallId: "",
+      success: true,
+      data: {
+        message: result.summary,
+        full_output: result.output || "",
+        elapsed_seconds: elapsedSec,
+      },
+    };
   },
 };
 

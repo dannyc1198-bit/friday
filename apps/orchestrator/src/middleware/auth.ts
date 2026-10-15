@@ -62,11 +62,11 @@ function loadOrGenerateApiKey(): string {
 
     envContent += `\n# FRIDAY API Authentication Key (auto-generated)\nFRIDAY_API_KEY=${newKey}\n`;
     writeFileSync(ENV_PATH, envContent, "utf-8");
-    console.log("[Auth] Generated new API key and saved to .env");
-    console.log(`[Auth] Your API key: ${newKey}`);
-    console.log("[Auth] Use this in requests: Authorization: Bearer <key>");
+    console.log("[Auth] Generated FRIDAY_API_KEY and saved it to .env.");
+    console.log("[Auth] Copy that line into apps/web/.env.local. The key is not printed here.");
   } catch (error) {
     console.warn("[Auth] Could not save API key to .env — using in-memory only");
+    console.warn(`[Auth] In-memory API key: ${newKey}`);
   }
 
   process.env.FRIDAY_API_KEY = newKey;
@@ -96,12 +96,22 @@ function safeCompare(a: string, b: string): boolean {
 const LOCALHOST_READ_PREFIXES = [
   "/api/system/",
   "/api/agents/",
+  "/api/media",
+  "/api/greeting",
+  "/api/today",
+  "/api/integrations",
+  "/api/upkeep",
+  "/api/voice/live",
+  "/api/voice/elevenlabs",
   "/api/learning/",
   "/api/proactive/",
   "/api/market/",
   "/api/memory/stats",
   "/api/tools",
   "/api/conversations",
+  "/api/skills/active",
+  "/api/skills/proposals",
+  "/api/skills/overview",
 ];
 
 function isLocalhost(request: FastifyRequest): boolean {
@@ -125,7 +135,8 @@ export async function authMiddleware(
     return;
   }
 
-  // Allow VAPI webhooks (validated by webhook secret separately)
+  // Phone routes do not use FRIDAY_API_KEY. The route handlers require
+  // VAPI_WEBHOOK_SECRET or RECEPTIONIST_WEBHOOK_SECRET before any tool runs.
   if (path.startsWith("/api/receptionist")) {
     return;
   }
@@ -133,7 +144,7 @@ export async function authMiddleware(
     return;
   }
 
-  // Allow VAPI custom LLM calls — VAPI doesn't send our auth token
+  // VAPI custom LLM calls. The route requires the webhook secret.
   if (path.startsWith("/vapi/llm")) {
     return;
   }
@@ -146,12 +157,28 @@ export async function authMiddleware(
     return;
   }
 
+  // The HUD claims the boot greeting and marks it heard from localhost.
+  if (isLocalhost(request) && (path === "/api/greeting" || path === "/api/greeting/heard")) {
+    return;
+  }
+
+  // Approve / Reject a repair, and mint a short-lived voice token, from this machine.
+  if (
+    isLocalhost(request) &&
+    request.method === "POST" &&
+    (/^\/api\/upkeep\/repairs\/[^/]+\/(approve|reject)$/.test(path) ||
+      path === "/api/voice/realtime/session" ||
+      path === "/api/voice/realtime/tool")
+  ) {
+    return;
+  }
+
   // Allow same-machine HUD reads on whitelisted prefixes.
   // Method must be GET (no mutations); IP must be local loopback.
   if (
     request.method === "GET" &&
     isLocalhost(request) &&
-    LOCALHOST_READ_PREFIXES.some((p) => path.startsWith(p))
+    (path === "/api/agents" || path === "/api/greeting" || LOCALHOST_READ_PREFIXES.some((p) => path.startsWith(p)))
   ) {
     return;
   }

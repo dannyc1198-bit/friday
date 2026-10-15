@@ -4,6 +4,7 @@
 
 import type { FastifyPluginAsync } from "fastify";
 import { toolRegistry } from "../tools/registry.js";
+import { webhookAuthorized, webhookSecret } from "../services/webhook-auth.js";
 
 interface VapiToolCall {
   id?: string;
@@ -44,8 +45,16 @@ export const fridayPhoneRoutes: FastifyPluginAsync = async (app) => {
   // Response shape matches VAPI's expected "results" array for toolCallList,
   // and "result" string for legacy functionCall.
   app.post<{ Body: VapiWebhookBody }>("/webhook", async (request, reply) => {
+    if (!webhookAuthorized(request.headers)) {
+      reply.code(401);
+      return {
+        error: webhookSecret()
+          ? "Invalid webhook secret."
+          : "Set VAPI_WEBHOOK_SECRET or RECEPTIONIST_WEBHOOK_SECRET. Phone tool calls are refused until then.",
+      };
+    }
     const body = request.body;
-    app.log.info({ body }, "[friday-phone] VAPI webhook received");
+    app.log.info({ type: body?.message?.type, calls: body?.message?.toolCallList?.length || body?.message?.toolCalls?.length || 0 }, "[friday-phone] VAPI webhook received");
 
     const toolCalls = body?.message?.toolCallList ?? body?.message?.toolCalls;
 

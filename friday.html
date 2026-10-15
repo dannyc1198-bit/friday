@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FRIDAY — Wavelength AI</title>
+<title>CORTANA — Wavelength AI</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
@@ -208,7 +208,7 @@ body::after{content:'';position:fixed;left:50%;top:50%;transform:translate(-50%,
 <body>
 
 <div id="boot">
-  <div class="blogo">FRIDAY</div>
+  <div class="blogo">CORTANA</div>
   <div class="bsub">Wavelength AI — Personal Intelligence System</div>
   <div class="blines" id="blines"></div>
 </div>
@@ -221,7 +221,7 @@ body::after{content:'';position:fixed;left:50%;top:50%;transform:translate(-50%,
   <header id="hdr">
     <div class="hdr-logo">
       <div class="hdr-hex" id="hdr-hex">&#9671;</div>
-      FRIDAY
+      CORTANA
     </div>
     <div class="hdr-mid">
       <div class="ws-dot" id="ws-dot"></div>
@@ -916,7 +916,7 @@ function pushHistory(role, text) {
   item.className = 'hitem';
   const roleDiv = document.createElement('div');
   roleDiv.className = 'hrole ' + (role === 'user' ? 'u' : 'f');
-  roleDiv.textContent = role === 'user' ? 'YOU' : 'FRIDAY';
+  roleDiv.textContent = role === 'user' ? 'YOU' : 'CORTANA';
   const txtDiv = document.createElement('div');
   txtDiv.className = 'htxt';
   txtDiv.textContent = text.slice(0, 200) + (text.length > 200 ? '...' : '');
@@ -992,7 +992,7 @@ document.getElementById('mbtn').addEventListener('click', () => {
     btn.style.boxShadow = '0 0 18px rgba(0,245,175,0.4)';
     lbl.textContent = 'VOICE ACTIVE — SPEAK ANYTIME';
     lbl.style.color = '#00f5af';
-    log('Voice mode ON — speak anytime, Friday will reply and re-arm', '#00e87a');
+    log('Voice mode ON — speak anytime, Cortana will reply and re-arm', '#00e87a');
     startListening();
   } else {
     btn.style.background = '';
@@ -1051,7 +1051,7 @@ function boot() {
           // Start systems
           const hasSR = initSpeechAPI();
           wsConnect();
-          log('FRIDAY online', 'rgba(0,168,255,0.9)');
+          log('CORTANA online', 'rgba(0,168,255,0.9)');
           if (!hasSR) log('Use text input — speech API unavailable', '#ffaa00');
         }, 900);
       }, 400);

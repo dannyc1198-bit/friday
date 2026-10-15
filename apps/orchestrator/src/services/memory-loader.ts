@@ -3,22 +3,16 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
 import { readFile, writeFile, mkdir } from "fs/promises";
-import { join, dirname, basename } from "path";
-import { fileURLToPath } from "url";
+import { join, basename } from "path";
+import { DATA_DIR, REPO_ROOT, localDateKey } from "./runtime-paths.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const HOME = process.env.USERPROFILE || process.env.HOME || "";
-const DATA_DIR = join(__dirname, "..", "..", "data");
+import { getBrainDir } from "./vault-config.js";
+import { PROFILE_FILENAME, formatCoreProfile } from "./profile.js";
 
 // ─── OBSIDIAN BRAIN (Danny's living second brain) ────────────
 // Replaces MASTER_MEMORY.md as of 2026-05-04. Source of truth lives in
 // the Obsidian vault under FRIDAY_BRAIN/. Every .md file there is
 // concatenated into the system prompt. Edit those notes to teach FRIDAY.
-
-const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || join(HOME, "Obsidian", "Wavelength");
-const BRAIN_DIR = join(VAULT_PATH, "FRIDAY_BRAIN");
 
 let cachedBrain: string | null = null;
 let brainLastLoaded = 0;
@@ -30,20 +24,20 @@ function loadObsidianBrain(): string {
     return cachedBrain;
   }
 
-  if (!existsSync(BRAIN_DIR)) {
+  if (!existsSync(getBrainDir())) {
     cachedBrain = "";
     brainLastLoaded = now;
     return "";
   }
 
   try {
-    const files = readdirSync(BRAIN_DIR)
-      .filter((f) => f.endsWith(".md"))
+    const files = readdirSync(getBrainDir())
+      .filter((f) => f.endsWith(".md") && f !== PROFILE_FILENAME)
       .sort();
 
     const sections: string[] = [];
     for (const f of files) {
-      const full = join(BRAIN_DIR, f);
+      const full = join(getBrainDir(), f);
       try {
         const raw = readFileSync(full, "utf-8").trim();
         if (!raw) continue;
@@ -77,7 +71,7 @@ function loadProjectState(): string {
     return cachedProjectState;
   }
 
-  const statePath = join(HOME, "jarvis", ".planning", "STATE.md");
+  const statePath = join(REPO_ROOT, ".planning", "STATE.md");
   try {
     if (existsSync(statePath)) {
       const raw = readFileSync(statePath, "utf-8");
@@ -119,7 +113,7 @@ function loadConversationSummaries(): ConversationSummary[] {
 
 export async function saveConversationSummary(summary: string, keyFacts: string[]): Promise<void> {
   const summaries = loadConversationSummaries();
-  const today = new Date().toISOString().split("T")[0];
+  const today = localDateKey();
 
   // Update today's entry if it exists, otherwise add new
   const existing = summaries.findIndex((s) => s.date === today);
@@ -252,6 +246,9 @@ function loadRecentFacts(days: number): string {
 
 export function buildFullMemoryContext(): string {
   const parts: string[] = [];
+
+  // 0. Pinned identity. Current businesses live here, not in archive/.
+  parts.push(formatCoreProfile());
 
   // 1. Obsidian brain (Danny's living second brain — FRIDAY_BRAIN/*.md)
   const brain = loadObsidianBrain();

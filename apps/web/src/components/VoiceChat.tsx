@@ -6,13 +6,14 @@
 //   1. User clicks mic → request mic permission + start Web Speech API recognition
 //   2. Browser produces final transcript → sent over WebSocket as JSON
 //   3. Backend streams LLM response (assistant_delta) → we accumulate for display
-//   4. Backend synthesizes full reply on Lily → binary MP3 frame arrives → play
+//   4. Backend synthesizes the JARVIS voice (ElevenLabs or Edge en-GB) → MP3 frame → play
 //   5. After playback, mic stays armed; next user utterance starts the next turn
 //
 // Web Speech API only — Chrome / Edge. Firefox/Safari users see a fallback notice.
 // Audio is one MP3 buffer per turn (not chunked) — keeps the playback path trivial.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { JARVIS_SPEECH_PITCH, JARVIS_SPEECH_RATE, pickJarvisVoice } from "@/lib/jarvis-voice";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -205,8 +206,10 @@ export function VoiceChat() {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "en-GB";
-      u.rate = 1.0;
-      u.pitch = 1.0;
+      u.rate = JARVIS_SPEECH_RATE;
+      u.pitch = JARVIS_SPEECH_PITCH;
+      const voice = pickJarvisVoice(window.speechSynthesis.getVoices());
+      if (voice) u.voice = voice;
       u.onend = () => resolve();
       u.onerror = () => resolve();
       window.speechSynthesis.speak(u);

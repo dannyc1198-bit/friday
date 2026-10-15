@@ -15,6 +15,7 @@ import { EventEmitter } from "events";
 import { randomBytes } from "crypto";
 import { existsSync, mkdirSync, appendFileSync } from "fs";
 import { join, normalize, resolve } from "path";
+import { DATA_DIR, REPO_ROOT } from "./runtime-paths.js";
 
 // ─── Safe-command & safe-path lists ──────────────────────────────
 
@@ -35,7 +36,7 @@ export const SAFE_COMMAND_WHITELIST: RegExp[] = [
 ];
 
 export const SAFE_FILE_PATH_PREFIXES: string[] = [
-  "C:\\Users\\12368\\jarvis\\",
+  REPO_ROOT + "\\",
   "C:\\Users\\12368\\Obsidian\\",
   "C:\\Users\\12368\\Documents\\",
 ];
@@ -110,7 +111,7 @@ const CONFIRM_TIMEOUT_MS = 60_000;
 
 // ─── Audit log ───────────────────────────────────────────────────
 
-const AUDIT_DIR = join(process.cwd(), "data");
+const AUDIT_DIR = DATA_DIR;
 const AUDIT_LOG = join(AUDIT_DIR, "audit.log");
 
 function auditLog(event: Record<string, unknown>): void {

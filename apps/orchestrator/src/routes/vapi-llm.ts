@@ -16,6 +16,7 @@ import { unifiedMemory } from "../services/unified-memory.js";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { Message } from "../types/index.js";
+import { webhookAuthorized, webhookSecret } from "../services/webhook-auth.js";
 
 // ─── Hermes memory paths ─────────────────────────────────────────
 const HERMES_HOME =
@@ -103,6 +104,14 @@ export const vapiLlmRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: ChatCompletionsRequest }>(
     "/chat/completions",
     async (request, reply) => {
+      if (!webhookAuthorized(request.headers)) {
+        reply.code(401);
+        return {
+          error: webhookSecret()
+            ? "Invalid webhook secret."
+            : "Set VAPI_WEBHOOK_SECRET or RECEPTIONIST_WEBHOOK_SECRET. The phone LLM is refused until then.",
+        };
+      }
       const { messages = [], stream = true } = request.body;
 
       const lastUserMsg =
@@ -155,7 +164,6 @@ export const vapiLlmRoutes: FastifyPluginAsync = async (app) => {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
-        "Access-Control-Allow-Origin": "*",
       });
 
       const abortController = new AbortController();

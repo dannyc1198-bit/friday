@@ -24,11 +24,13 @@ export function DeckInput({
   isLoading,
   onStop,
   voice,
+  focusSignal = 0,
 }: {
   onSend: (text: string) => void;
   isLoading: boolean;
   onStop: () => void;
   voice: DeckVoice;
+  focusSignal?: number;
 }) {
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -40,6 +42,11 @@ export function DeckInput({
     el.style.height = "0px";
     el.style.height = Math.min(el.scrollHeight, 132) + "px";
   }, [text]);
+
+  useEffect(() => {
+    if (!focusSignal) return;
+    areaRef.current?.focus();
+  }, [focusSignal]);
 
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
@@ -65,6 +72,30 @@ export function DeckInput({
       onSubmit={submit}
       className="rounded-hud border border-deck-line bg-deck-panel p-2"
     >
+      <div className="mb-2 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={voice.toggleLiveMode}
+          className={`min-h-12 rounded border px-3 font-deckdisplay text-lg ${
+            voice.isLiveMode
+              ? "border-deck-hot bg-deck-raised text-deck-ink"
+              : "border-deck-line text-deck-dim"
+          }`}
+        >
+          {voice.isLiveMode ? "End hands-free" : "Hands-free"}
+        </button>
+        <button
+          type="button"
+          onPointerDown={() => voice.startListening()}
+          onPointerUp={() => voice.stopListening()}
+          onPointerLeave={() => voice.isListening && voice.stopListening()}
+          className={`min-h-12 rounded border px-3 font-deckdisplay text-lg ${
+            voice.isListening ? "border-deck-hot text-deck-ink" : "border-deck-line text-deck-dim"
+          }`}
+        >
+          Hold to talk
+        </button>
+      </div>
       {voice.isListening && (
         <p className="px-1 pb-1.5 font-deckmono text-[10px] uppercase tracking-wider text-deck-hot">
           {voice.isLiveMode ? "live — " : ""}listening
@@ -78,28 +109,11 @@ export function DeckInput({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
           rows={1}
+          data-friday-input="true"
           placeholder="Talk to FRIDAY…"
           aria-label="Message FRIDAY"
           className="min-h-[36px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] leading-relaxed text-deck-ink placeholder:text-deck-faint focus:outline-none"
         />
-
-        {/* live voice — continuous conversation (Ctrl+Enter) */}
-        <button
-          type="button"
-          onClick={voice.toggleLiveMode}
-          title={
-            voice.isLiveMode
-              ? "End live voice (Ctrl+Enter)"
-              : "Live voice — continuous conversation (Ctrl+Enter)"
-          }
-          className={`${iconBtn} w-auto px-2 font-deckmono text-[10px] tracking-wider ${
-            voice.isLiveMode
-              ? "border-deck-line-bright text-deck-hot shadow-deck-amber animate-pulse"
-              : ""
-          }`}
-        >
-          LIVE
-        </button>
 
         {/* hear her / mute her */}
         <button

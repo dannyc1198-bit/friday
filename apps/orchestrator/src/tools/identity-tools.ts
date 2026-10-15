@@ -4,7 +4,7 @@
 // This is how JARVIS evolves — by writing to its own soul.
 // ═══════════════════════════════════════════
 
-import { toolRegistry } from "./registry";
+import { toolRegistry } from "./registry.js";
 import {
   readIdentityFile,
   updateIdentityFile,
@@ -12,7 +12,7 @@ import {
   logLearnedStrategy,
   logDetectedPattern,
   checkIdentityHealth,
-} from "../services/identity";
+} from "../services/identity.js";
 
 // Read any identity file
 const readIdentityTool = {
