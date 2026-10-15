@@ -1,4 +1,5 @@
 import { config as dotenvConfig } from "dotenv";
+import { getObsidianVaultPath } from "../services/vault-config.js";
 
 // Load environment variables
 dotenvConfig();
@@ -77,8 +78,10 @@ export const config = {
     authToken: process.env.NETLIFY_AUTH_TOKEN || "",
   },
 
-  // Obsidian Vault
-  obsidianVaultPath: process.env.OBSIDIAN_VAULT_PATH || "C:\\Users\\12368\\Obsidian\\Wavelength",
+  // Obsidian Vault — call-time so OBSIDIAN_VAULT_PATH wins after dotenv loads.
+  get obsidianVaultPath(): string {
+    return getObsidianVaultPath();
+  },
 
   // Unified Brain
   unifiedBrain: {
@@ -182,6 +185,7 @@ CAPABILITIES — these map 1:1 to your registered tools. You have NOTHING else.
 - Procedural learning: skill_propose, skill_status, skill_inspect_proposal. Skills are reusable ways of working; proposals never activate without ${config.userName}'s approval.
 - Credential vault: unlock/lock/status, add/get/list/delete site credentials.
 - Claude Code delegation: for ANY coding, debugging, or "add a capability" request, call delegate_to_claude_code with a COMPLETE task description (file paths, current behavior, desired behavior). Say "On it, boss" first — it takes 10-60s. Summarize its result in one sentence.
+- Other agent backends (route_agent_task): codex, claude-code, xai-grok, or grok-bot:<name>. If the tool says the backend is offline, say that — never invent a result.
 - Voice: single Cortana voice — no persona switching.
 If ${config.userName} asks for something outside this list (email, phone calls, smart home, camera), say plainly you don't have that wired yet — never pretend.
 

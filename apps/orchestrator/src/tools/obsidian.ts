@@ -6,13 +6,16 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
+import { getObsidianVaultPath } from "../services/vault-config.js";
 
-const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || "C:\\Users\\12368\\Obsidian\\Wavelength";
+function vaultPath(): string {
+  return getObsidianVaultPath();
+}
 const IGNORED_DIRS = new Set([".obsidian", ".trash", "node_modules"]);
 
 function assertInsideVault(fullPath: string): void {
   const resolved = path.resolve(fullPath);
-  const vaultResolved = path.resolve(VAULT_PATH);
+  const vaultResolved = path.resolve(vaultPath());
   if (!resolved.startsWith(vaultResolved + path.sep) && resolved !== vaultResolved) {
     throw new Error("Path traversal attempt blocked: path resolves outside vault");
   }
@@ -20,7 +23,7 @@ function assertInsideVault(fullPath: string): void {
 
 // ─── Helpers ────────────────────────────────────────────────
 
-async function getAllNotes(dir: string = VAULT_PATH): Promise<string[]> {
+async function getAllNotes(dir: string = vaultPath()): Promise<string[]> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const files: string[] = [];
 
@@ -37,7 +40,7 @@ async function getAllNotes(dir: string = VAULT_PATH): Promise<string[]> {
 }
 
 function relPath(absolute: string): string {
-  return path.relative(VAULT_PATH, absolute).replace(/\\/g, "/");
+  return path.relative(vaultPath(), absolute).replace(/\\/g, "/");
 }
 
 function noteName(filePath: string): string {
@@ -157,7 +160,7 @@ const obsidianReadTool: Tool = {
 
     try {
       // Try as direct path first
-      let fullPath = path.join(VAULT_PATH, input);
+      let fullPath = path.join(vaultPath(), input);
       if (!fullPath.endsWith(".md")) fullPath += ".md";
       assertInsideVault(fullPath);
 
@@ -246,7 +249,7 @@ const obsidianListTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     const folder = ((params.folder as string) || "").trim().replace(/^\/+/, "");
-    const target = folder ? path.join(VAULT_PATH, folder) : VAULT_PATH;
+    const target = folder ? path.join(vaultPath(), folder) : vaultPath();
     assertInsideVault(target);
 
     try {
@@ -488,7 +491,7 @@ const obsidianCreateTool: Tool = {
       return { toolCallId: "", success: false, error: "Title is required." };
     }
 
-    const dir = folder ? path.join(VAULT_PATH, folder) : VAULT_PATH;
+    const dir = folder ? path.join(vaultPath(), folder) : vaultPath();
     const filePath = path.join(dir, `${title}.md`);
     assertInsideVault(filePath);
 
@@ -592,7 +595,7 @@ const obsidianEditTool: Tool = {
     }
 
     // Resolve note path
-    let filePath = path.join(VAULT_PATH, input);
+    let filePath = path.join(vaultPath(), input);
     if (!filePath.endsWith(".md")) filePath += ".md";
     assertInsideVault(filePath);
 
@@ -701,7 +704,7 @@ const obsidianDailyTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     const date = ((params.date as string) || todayDate()).trim();
-    const dir = path.join(VAULT_PATH, "Daily");
+    const dir = path.join(vaultPath(), "Daily");
     const filePath = path.join(dir, `${date}.md`);
     assertInsideVault(filePath);
 
@@ -776,7 +779,7 @@ const obsidianDeleteTool: Tool = {
       return { toolCallId: "", success: false, error: "Deletion not confirmed. Set confirmed=true after asking Danny." };
     }
 
-    let filePath = path.join(VAULT_PATH, input);
+    let filePath = path.join(vaultPath(), input);
     if (!filePath.endsWith(".md")) filePath += ".md";
     assertInsideVault(filePath);
 
@@ -914,5 +917,5 @@ export function registerObsidianTools(): void {
   toolRegistry.register(obsidianDailyTool);
   toolRegistry.register(obsidianDeleteTool);
   toolRegistry.register(obsidianTagsTool);
-  console.log(`  ✓ Obsidian vault connected — 9 tools (${VAULT_PATH})`);
+  console.log(`  ✓ Obsidian vault connected — 9 tools (${vaultPath()})`);
 }

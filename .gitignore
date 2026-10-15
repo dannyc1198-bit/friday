@@ -60,3 +60,9 @@ tmpclaude-*
 # Python venv + runtime logs (added 2026-07-20, ARC Deck Phase 0)
 .venv/
 *.log
+
+# Audio backups and commercial rips — do not commit
+*.mp3.bak*
+
+# Local browser snapshots from agent verification
+.playwright-mcp/

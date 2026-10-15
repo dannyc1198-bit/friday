@@ -11,6 +11,7 @@ import { WaveformPresence, PresenceMode } from "./WaveformPresence";
 import { HealthChips } from "./HealthChips";
 import { MissionCard } from "./MissionCard";
 import { FleetCard } from "./FleetCard";
+import { AgentsCard } from "./AgentsCard";
 import { MarketCard } from "./MarketCard";
 import { IntelCard } from "./IntelCard";
 import { BrainCard } from "./BrainCard";
@@ -202,6 +203,7 @@ export default function Deck() {
         {/* ── Right rail: Danny's world ── */}
         <aside className="hidden min-h-0 space-y-3 overflow-y-auto border-l border-deck-line p-3 [scrollbar-width:thin] xl:block">
           <MissionCard />
+          <AgentsCard />
           <FleetCard />
           <MarketCard />
           <IntelCard />

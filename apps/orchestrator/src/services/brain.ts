@@ -27,10 +27,14 @@ import MiniSearch from "minisearch";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const HOME = process.env.USERPROFILE || process.env.HOME || "";
-const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || path.join(HOME, "Obsidian", "Wavelength");
-const BRAIN_DIR = path.join(VAULT_PATH, "FRIDAY_BRAIN");
-const ENTITIES_DIR = path.join(BRAIN_DIR, "entities");
+import { getEntitiesDir, getObsidianVaultPath } from "./vault-config.js";
+
+function vaultPath(): string {
+  return getObsidianVaultPath();
+}
+function entitiesDir(): string {
+  return getEntitiesDir();
+}
 const DATA_DIR = path.join(__dirname, "..", "..", "data");
 const JOURNAL_FILE = path.join(DATA_DIR, "brain-journal.json");
 
@@ -97,7 +101,7 @@ function newIndex(): MiniSearch<BrainChunk> {
 
 // ─── Vault walking + chunking ───────────────────────────────────
 
-async function walkVault(dir: string = VAULT_PATH): Promise<string[]> {
+async function walkVault(dir: string = vaultPath()): Promise<string[]> {
   const out: string[] = [];
   let entries;
   try {
@@ -119,7 +123,7 @@ async function walkVault(dir: string = VAULT_PATH): Promise<string[]> {
 }
 
 function relPath(absolute: string): string {
-  return path.relative(VAULT_PATH, absolute).replace(/\\/g, "/");
+  return path.relative(vaultPath(), absolute).replace(/\\/g, "/");
 }
 
 /** True for FRIDAY_BRAIN root-level core notes — always in the prompt already. */
@@ -245,11 +249,11 @@ export async function rescanVault(): Promise<{ indexed: number; removed: number 
 }
 
 export async function initBrain(): Promise<BrainStats> {
-  if (!existsSync(ENTITIES_DIR)) mkdirSync(ENTITIES_DIR, { recursive: true });
+  if (!existsSync(entitiesDir())) mkdirSync(entitiesDir(), { recursive: true });
   const t0 = Date.now();
   const { indexed } = await rescanVault();
   console.log(
-    `[Brain] Indexed ${indexed} notes (${fileState.size} files, ${mini.documentCount} chunks) in ${Date.now() - t0}ms — vault: ${VAULT_PATH}`
+    `[Brain] Indexed ${indexed} notes (${fileState.size} files, ${mini.documentCount} chunks) in ${Date.now() - t0}ms — vault: ${vaultPath()}`
   );
   if (!rescanHandle) {
     rescanHandle = setInterval(() => {
@@ -349,8 +353,8 @@ export async function rememberFact(input: RememberInput): Promise<RememberResult
   const category = OBS_CATEGORIES.includes(input.category as any) ? (input.category as string) : "fact";
   const source = input.source || "chat";
 
-  if (!existsSync(ENTITIES_DIR)) mkdirSync(ENTITIES_DIR, { recursive: true });
-  const file = path.join(ENTITIES_DIR, `${name}.md`);
+  if (!existsSync(entitiesDir())) mkdirSync(entitiesDir(), { recursive: true });
+  const file = path.join(entitiesDir(), `${name}.md`);
   const obsLine = `- [${category}] ${observation} *(as of ${today()}, ${source})*`;
 
   let created = false;
@@ -460,8 +464,8 @@ export function getRecentLearnings(limit = 20): JournalEntry[] {
 export function getBrainStats(): BrainStats {
   let entities = 0;
   try {
-    if (existsSync(ENTITIES_DIR)) {
-      entities = readdirSync(ENTITIES_DIR).filter((f) => f.endsWith(".md")).length;
+    if (existsSync(entitiesDir())) {
+      entities = readdirSync(entitiesDir()).filter((f) => f.endsWith(".md")).length;
     }
   } catch { /* 0 */ }
   return {
@@ -469,6 +473,6 @@ export function getBrainStats(): BrainStats {
     chunks: mini.documentCount,
     entities,
     lastIndexed,
-    vaultPath: VAULT_PATH,
+    vaultPath: vaultPath(),
   };
 }

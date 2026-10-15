@@ -17,20 +17,22 @@ import path from "path";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const LEDGER_PATH = path.join(
-  process.env.OBSIDIAN_VAULT_PATH || path.join(os.homedir(), "Obsidian", "Wavelength"),
-  "FRIDAY_BRAIN",
-  "memory",
-  "ACTION-LEDGER.md"
-);
+function ledgerPath(): string {
+  return path.join(
+    process.env.OBSIDIAN_VAULT_PATH || path.join(os.homedir(), "Obsidian", "Wavelength"),
+    "FRIDAY_BRAIN",
+    "memory",
+    "ACTION-LEDGER.md"
+  );
+}
 
 const ACTIVE_WINDOW_MS = 10 * 60 * 1000;
 const TAIL_LINES = 30;
 
 export async function GET() {
   try {
-    const stat = await fs.stat(LEDGER_PATH);
-    const raw = await fs.readFile(LEDGER_PATH, "utf8");
+    const stat = await fs.stat(ledgerPath());
+    const raw = await fs.readFile(ledgerPath(), "utf8");
     const entries = raw
       .split(/\r?\n/)
       .map((line) => line.trim())

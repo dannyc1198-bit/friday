@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { JARVIS_SPEECH_PITCH, JARVIS_SPEECH_RATE, pickJarvisVoice } from "@/lib/jarvis-voice";
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -276,8 +277,10 @@ export function useVoiceChat(): UseVoiceChatReturn {
         // Fallback: browser TTS. Wait for it to finish before rearm.
         await new Promise<void>((resolve) => {
           const u = new SpeechSynthesisUtterance(truncated);
-          const voices = window.speechSynthesis.getVoices();
-          const gb = voices.find((v) => v.lang === "en-GB") || voices.find((v) => v.lang.startsWith("en"));
+          u.lang = "en-GB";
+          u.rate = JARVIS_SPEECH_RATE;
+          u.pitch = JARVIS_SPEECH_PITCH;
+          const gb = pickJarvisVoice(window.speechSynthesis.getVoices());
           if (gb) u.voice = gb;
           u.onend = () => resolve();
           u.onerror = () => resolve();

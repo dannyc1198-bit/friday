@@ -19,12 +19,11 @@ import path from "path";
 import { simpleCompletion } from "./openai.js";
 import { rememberFact, getBrainStats, getRecentLearnings } from "./brain.js";
 import { DATA_DIR, CONVERSATION_DIR, localDateKey, localTimestamp } from "./runtime-paths.js";
+import { getBrainDir, getDailyDir, getEntitiesDir, getObsidianVaultPath } from "./vault-config.js";
 
-const HOME = process.env.USERPROFILE || process.env.HOME || "";
-const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || path.join(HOME, "Obsidian", "Wavelength");
-const BRAIN_DIR = path.join(VAULT_PATH, "FRIDAY_BRAIN");
-const ENTITIES_DIR = path.join(BRAIN_DIR, "entities");
-const DAILY_DIR = path.join(VAULT_PATH, "Daily");
+function vaultPath(): string {
+  return getObsidianVaultPath();
+}
 const CONVO_DIR = CONVERSATION_DIR;
 const STATE_FILE = path.join(DATA_DIR, "brain-reflection.json");
 
@@ -125,13 +124,13 @@ async function vaultActivityToday(date: string): Promise<string[]> {
         try {
           const stat = await fs.stat(full);
           if (localDateKey(stat.mtime) === date) {
-            touched.push(path.relative(VAULT_PATH, full).replace(/\\/g, "/"));
+            touched.push(path.relative(vaultPath(), full).replace(/\\/g, "/"));
           }
         } catch { /* skip */ }
       }
     }
   }
-  await walk(VAULT_PATH);
+  await walk(vaultPath());
   return touched.slice(0, 15);
 }
 
@@ -167,8 +166,8 @@ function extractJson(raw: string): any {
 // ─── Vault write-backs ──────────────────────────────────────────
 
 async function appendToDailyNote(date: string, md: string): Promise<void> {
-  if (!existsSync(DAILY_DIR)) mkdirSync(DAILY_DIR, { recursive: true });
-  const file = path.join(DAILY_DIR, `${date}.md`);
+  if (!existsSync(getDailyDir())) mkdirSync(getDailyDir(), { recursive: true });
+  const file = path.join(getDailyDir(), `${date}.md`);
   let content = "";
   try {
     content = await fs.readFile(file, "utf-8");
@@ -187,14 +186,14 @@ async function appendToDailyNote(date: string, md: string): Promise<void> {
 }
 
 async function refreshBrainIndex(): Promise<void> {
-  if (!existsSync(ENTITIES_DIR)) return;
-  const files = readdirSync(ENTITIES_DIR).filter((f) => f.endsWith(".md"));
+  if (!existsSync(getEntitiesDir())) return;
+  const files = readdirSync(getEntitiesDir()).filter((f) => f.endsWith(".md"));
   const byType = new Map<string, string[]>();
 
   for (const f of files) {
     let type = "fact";
     try {
-      const raw = readFileSync(path.join(ENTITIES_DIR, f), "utf-8");
+      const raw = readFileSync(path.join(getEntitiesDir(), f), "utf-8");
       const m = raw.match(/^type:\s*(\w+)/m);
       if (m) type = m[1];
     } catch { /* default */ }
@@ -236,7 +235,7 @@ async function refreshBrainIndex(): Promise<void> {
     lines.push("");
   }
 
-  await fs.writeFile(path.join(BRAIN_DIR, "INDEX.md"), lines.join("\n"), "utf-8");
+  await fs.writeFile(path.join(getBrainDir(), "INDEX.md"), lines.join("\n"), "utf-8");
 }
 
 // ─── Main entry ─────────────────────────────────────────────────

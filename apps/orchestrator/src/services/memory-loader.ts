@@ -6,15 +6,12 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, basename } from "path";
 import { DATA_DIR, REPO_ROOT, localDateKey } from "./runtime-paths.js";
 
-const HOME = process.env.USERPROFILE || process.env.HOME || "";
+import { getBrainDir } from "./vault-config.js";
 
 // ─── OBSIDIAN BRAIN (Danny's living second brain) ────────────
 // Replaces MASTER_MEMORY.md as of 2026-05-04. Source of truth lives in
 // the Obsidian vault under FRIDAY_BRAIN/. Every .md file there is
 // concatenated into the system prompt. Edit those notes to teach FRIDAY.
-
-const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || join(HOME, "Obsidian", "Wavelength");
-const BRAIN_DIR = join(VAULT_PATH, "FRIDAY_BRAIN");
 
 let cachedBrain: string | null = null;
 let brainLastLoaded = 0;
@@ -26,20 +23,20 @@ function loadObsidianBrain(): string {
     return cachedBrain;
   }
 
-  if (!existsSync(BRAIN_DIR)) {
+  if (!existsSync(getBrainDir())) {
     cachedBrain = "";
     brainLastLoaded = now;
     return "";
   }
 
   try {
-    const files = readdirSync(BRAIN_DIR)
+    const files = readdirSync(getBrainDir())
       .filter((f) => f.endsWith(".md"))
       .sort();
 
     const sections: string[] = [];
     for (const f of files) {
-      const full = join(BRAIN_DIR, f);
+      const full = join(getBrainDir(), f);
       try {
         const raw = readFileSync(full, "utf-8").trim();
         if (!raw) continue;

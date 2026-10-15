@@ -19,6 +19,7 @@ import { registerVaultTools } from "./vault-tools.js";
 import { registerBrowserTools } from "./browser-control.js";
 import { registerObsidianTools } from "./obsidian.js";
 import { registerClaudeCodeTools } from "./claude-code.js";
+import { registerAgentRouterTools } from "./agent-router.js";
 import { registerBrainTools } from "./brain-tools.js";
 import { registerAppControlTools } from "./app-control.js";
 import { registerProceduralSkillTools } from "./procedural-skills.js";
@@ -47,7 +48,8 @@ export function initializeTools(): void {
   console.log("  ✓ Brain (recall / remember / reflect — the learning loop)");
 
   registerClaudeCodeTools();
-  console.log("  ✓ Claude Code (delegation for code-intelligence work)");
+  registerAgentRouterTools();
+  console.log("  ✓ Claude Code + agent router (codex / claude / xAI / grok bots)");
 
   registerAppControlTools();
   console.log("  ✓ App Control (fleet status/launch/stop/logs + market + intel)");

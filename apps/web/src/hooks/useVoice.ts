@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePushToTalk, type STTMethod } from "./usePushToTalk";
 import type { Message } from "@/types";
+import { JARVIS_SPEECH_PITCH, JARVIS_SPEECH_RATE, pickJarvisVoice } from "@/lib/jarvis-voice";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -180,23 +181,13 @@ export function useVoice({
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 0.9;
+    utterance.lang = "en-GB";
+    utterance.rate = JARVIS_SPEECH_RATE;
+    utterance.pitch = JARVIS_SPEECH_PITCH;
     utterance.volume = 1.0;
 
-    // Prefer a young British female voice (matches Lily, the ElevenLabs primary).
-    // Browser TTS is only a fallback — when ElevenLabs is reachable, this never
-    // runs. Heuristic: name contains "female" / known female names, en-GB lang.
-    const voices = window.speechSynthesis.getVoices();
-    const FEMALE_HINTS = ["female", "lily", "libby", "sonia", "abbi", "olivia", "amy", "hazel", "kate"];
-    const britishVoice = voices.find(
-      (v) => v.lang === "en-GB" && FEMALE_HINTS.some((h) => v.name.toLowerCase().includes(h))
-    ) || voices.find(
-      (v) => v.lang === "en-GB"
-    ) || voices.find(
-      (v) => v.lang.startsWith("en")
-    );
-
+    // Free fallback: calm British male (Windows Ryan/George, or any en-GB male).
+    const britishVoice = pickJarvisVoice(window.speechSynthesis.getVoices());
     if (britishVoice) utterance.voice = britishVoice;
 
     synthUtteranceRef.current = utterance;

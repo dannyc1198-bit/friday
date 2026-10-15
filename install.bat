@@ -1,55 +1,70 @@
 @echo off
+setlocal
 title FRIDAY Installer
+set "ROOT=%~dp0"
+
 echo.
 echo  ================================================
 echo   F.R.I.D.A.Y. — Installation
 echo  ================================================
 echo.
 
-:: Verify Node.js is available
-node --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Node.js not found. Install from nodejs.org first.
+where node >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Node.js not found. Install from https://nodejs.org/ first.
     pause
     exit /b 1
 )
 
-echo [1/4] Installing orchestrator dependencies...
-cd /d C:\Users\12368\jarvis\apps\orchestrator
+echo [1/3] Installing orchestrator dependencies...
+cd /d "%ROOT%apps\orchestrator"
 call npm install
-if %errorlevel% neq 0 ( echo [ERROR] Orchestrator install failed. & pause & exit /b 1 )
+if errorlevel 1 (
+    echo [ERROR] Orchestrator install failed.
+    pause
+    exit /b 1
+)
 
 echo.
-echo [2/4] Installing web app dependencies...
-cd /d C:\Users\12368\jarvis\apps\web
+echo [2/3] Installing web app dependencies...
+cd /d "%ROOT%apps\web"
 call npm install
-if %errorlevel% neq 0 ( echo [ERROR] Web install failed. & pause & exit /b 1 )
+if errorlevel 1 (
+    echo [ERROR] Web install failed.
+    pause
+    exit /b 1
+)
 
 echo.
-echo [3/4] Installing Electron dependencies...
-cd /d C:\Users\12368\jarvis\electron
+echo [3/3] Installing Electron dependencies...
+cd /d "%ROOT%electron"
 call npm install
-if %errorlevel% neq 0 ( echo [ERROR] Electron install failed. & pause & exit /b 1 )
+if errorlevel 1 (
+    echo [ERROR] Electron install failed.
+    pause
+    exit /b 1
+)
 
 echo.
-echo [4/4] Registering Windows startup task (requires admin)...
-cd /d C:\Users\12368\jarvis
-powershell -ExecutionPolicy Bypass -File install-windows-startup.ps1
+if not exist "%ROOT%apps\orchestrator\.env" (
+    copy /Y "%ROOT%apps\orchestrator\.env.example" "%ROOT%apps\orchestrator\.env" >nul
+    echo Created apps\orchestrator\.env from .env.example. Fill in the keys you have.
+)
+if not exist "%ROOT%apps\web\.env.local" (
+    copy /Y "%ROOT%apps\web\.env.example" "%ROOT%apps\web\.env.local" >nul
+    echo Created apps\web\.env.local from .env.example.
+)
 
 echo.
 echo  ================================================
 echo   Installation complete.
 echo.
-echo   Next steps:
-echo     1. Add your API keys to apps\orchestrator\.env
-echo     2. Run start-jarvis.bat to launch
-echo     3. Restart PC to enable auto-start at login
-echo.
-echo   Controls:
-echo     Backtick  - hold to talk
-echo     M         - mute / unmute
-echo     Alt+J     - show / hide FRIDAY
-echo     ESC       - minimize
+echo   Next:
+echo     1. Edit apps\orchestrator\.env  ^(see SETUP-WINDOWS.md^)
+echo     2. Run start-unified.bat  or  start-jarvis.bat
+echo     3. Optional logon task, from an elevated PowerShell:
+echo        powershell -ExecutionPolicy Bypass -File "%ROOT%install-windows-startup.ps1"
 echo  ================================================
 echo.
 pause
+endlocal

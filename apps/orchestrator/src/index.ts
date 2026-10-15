@@ -25,6 +25,8 @@ import { streamChatCompletion } from "./services/openai.js";
 import { memoryService } from "./services/memory/index.js";
 import { textToSpeech, isTTSAvailable } from "./services/tts.js";
 import { getActiveVoice } from "./services/voice-registry.js";
+import { resolveSpeechPlan } from "./services/speech-plan.js";
+import { agentRoutes } from "./routes/agents.js";
 import {
   initializeMCPClients,
   shutdownMCPClients,
@@ -183,6 +185,7 @@ await app.register(vapiLlmRoutes, { prefix: "/vapi/llm" });
 await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
 await app.register(brainRoutes, { prefix: "/api/brain" });
 await app.register(skillRoutes, { prefix: "/api/skills" });
+await app.register(agentRoutes);
 await app.register(proactiveAlertsRoutes);
 
 initializeTools();
@@ -532,10 +535,14 @@ app.post<{ Body: { text: string } }>(
 app.get("/api/tts/status", async () => {
   // Resolved per request from the voice registry — reflects switch_voice live.
   const activeVoice = getActiveVoice();
+  const plan = resolveSpeechPlan(process.env, activeVoice.edgeVoice);
   return {
     available: isTTSAvailable(),
-    provider: "elevenlabs",
-    voice: activeVoice.voiceId,
+    provider: plan.provider,
+    fallback: plan.provider === "elevenlabs" && plan.fallbackEdge ? "edge" : "browser",
+    voice: plan.provider === "edge" ? plan.edgeVoice : activeVoice.voiceId,
+    edgeVoice: plan.edgeVoice,
+    elevenLabsConfigured: plan.elevenLabsConfigured,
     persona: activeVoice.persona,
     personaName: activeVoice.displayName,
   };

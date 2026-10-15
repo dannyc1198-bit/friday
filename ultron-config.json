@@ -4,12 +4,12 @@
     "fullscreen": true,
     "skipAfterFirstRun": false,
     "music": {
-      "source": "local",
-      "track": "Back in Black",
-      "artist": "AC/DC",
-      "filePath": "C:/Users/12368/JARVIS/apps/web/public/sounds/startup/back-in-black-intro.mp3",
+      "source": "none",
+      "track": "",
+      "artist": "",
+      "filePath": "",
       "startAt": 0,
-      "volume": 0.85
+      "volume": 0
     },
     "voice": {
       "enabled": true,

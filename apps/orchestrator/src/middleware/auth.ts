@@ -154,7 +154,7 @@ export async function authMiddleware(
   if (
     request.method === "GET" &&
     isLocalhost(request) &&
-    LOCALHOST_READ_PREFIXES.some((p) => path.startsWith(p))
+    (path === "/api/agents" || LOCALHOST_READ_PREFIXES.some((p) => path.startsWith(p)))
   ) {
     return;
   }
