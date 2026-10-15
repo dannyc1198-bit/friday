@@ -14,7 +14,7 @@ function tone(state: string): "ok" | "alert" | "amber" | "dim" {
 
 export function AgentsCard() {
   const { demo } = useDemo();
-  const { agents, loading, error, dispatchTask } = useAgents();
+  const { agents, loading, error, dispatchTask } = useAgents(!demo);
   const [task, setTask] = useState("");
   const [target, setTarget] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);

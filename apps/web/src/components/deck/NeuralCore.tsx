@@ -189,9 +189,9 @@ export function NeuralCoreBoard() {
       <div className="rounded border border-deck-gold/70 bg-deck-panel p-4">
         <p className="font-deckmono text-xs uppercase tracking-wider text-deck-gold">Thinking loop</p>
         <p className="mt-2 text-sm leading-relaxed text-deck-dim">
-          Off until you arm it. At most {status?.cap ?? 4} passes a day, {status?.gapMinutes ?? 30} minutes apart.
-          Insights land in FRIDAY_BRAIN/insights/. Profile lines are proposals. You edit DANNY-PROFILE.md yourself.
-          The loop does not send, spend, or trade.
+          {demo
+            ? "Sample only. Arm thinking does not start a pass, and nothing is written."
+            : `Off until you arm it. At most ${status?.cap ?? 4} passes a day, ${status?.gapMinutes ?? 30} minutes apart. Insights land in FRIDAY_BRAIN/insights/. Profile lines are proposals. You edit DANNY-PROFILE.md yourself. The loop does not send, spend, or trade.`}
         </p>
         <p className="mt-2 text-sm text-deck-ink">{demo ? "SAMPLE · thinking stays off." : status?.reason || "Thinking loop is off."}</p>
         <p className="mt-1 text-sm text-deck-dim">Passes today: {demo ? 0 : status?.runsToday ?? 0}</p>
