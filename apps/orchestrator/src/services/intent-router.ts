@@ -40,7 +40,11 @@ const ALIASES: Record<string, string> = {
   blender: "blender_render",
 };
 
-const BLOCKED = /^(send_|email_send|sms_|trade_|buy_|sell_|place_order|spend_|wire_)/i;
+// Tool names that send, spend, or trade. The model cannot self-approve these
+// by passing confirmed=true. There is no live approval path for them.
+const OUTBOUND_TOOL = /(^|_)(send|sms|trade|buy|sell|spend|wire)(_|$)|(^|_)(place_order|email_send|gmail_send|send_message|send_email)$/;
+
+const OUTBOUND_TASK = /\b(send (an |the |a )?(email|e-mail|sms|text message|invoice)|wire (the )?money|spend (the )?money|place (an |the )?order|trade live|transfer (the )?money)\b/i;
 
 export function classifyIntent(message: string): IntentDecision {
   const text = (message || "").trim();
@@ -97,7 +101,7 @@ export function resolveToolCall(
     }
     return { name: null, reason: "The model returned a tool call with no name. Nothing ran." };
   }
-  if (BLOCKED.test(normalized)) {
+  if (isOutboundTool(normalized)) {
     return {
       name: null,
       reason: `Refused "${normalized}". Messages, spending, and live trades stay drafts until Danny explicitly approves one.`,
@@ -119,16 +123,222 @@ export function resolveToolCall(
   return { name: null, reason: `No registered tool named "${normalized}". Nothing ran.` };
 }
 
+export function isOutboundTool(name: string): boolean {
+  const normalized = (name || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+  return OUTBOUND_TOOL.test(normalized);
+}
+
+/** Dispatch tasks that would send, spend, or trade. Drafts only. */
+export function isUnapprovedExternalAction(text: string): boolean {
+  return OUTBOUND_TASK.test(text || "");
+}
+
+export interface PartialToolCall {
+  id?: string;
+  name?: string;
+  argumentsJson: string;
+  /** Gemini thought signature, returned on the tool call as extra_content. */
+  extra?: unknown;
+}
+
+export interface ToolCallDelta {
+  index?: number;
+  id?: string;
+  function?: { name?: string; arguments?: unknown };
+  extra_content?: unknown;
+}
+
+/**
+ * Gemini's OpenAI-compatible stream often omits `index` and sends argument
+ * chunks that are not pure deltas: an empty `{}` followed by the real object,
+ * or a cumulative copy of the JSON so far. Concatenating those is invalid JSON
+ * and the next request 400s when that string is replayed.
+ */
+export function applyToolCallDelta(partials: Record<number, PartialToolCall>, delta: ToolCallDelta): void {
+  const idx = toolCallIndex(delta.index, partials);
+  if (!partials[idx]) partials[idx] = { argumentsJson: "" };
+  const slot = partials[idx];
+  if (delta.id) slot.id = delta.id;
+  if (delta.function?.name) {
+    const next = delta.function.name;
+    if (!slot.name || next.startsWith(slot.name)) slot.name = next;
+    else if (!slot.name.startsWith(next)) slot.name += next;
+  }
+  if (delta.function && "arguments" in delta.function && delta.function.arguments != null && delta.function.arguments !== "") {
+    slot.argumentsJson = appendArgumentDelta(slot.argumentsJson, delta.function.arguments);
+  }
+  if (delta.extra_content && slot.extra == null) slot.extra = delta.extra_content;
+}
+
+export function toolCallIndex(index: number | undefined, partials: Record<number, PartialToolCall>): number {
+  if (typeof index === "number" && Number.isInteger(index) && index >= 0 && index < 32) return index;
+  const keys = Object.keys(partials).map(Number).filter((n) => Number.isInteger(n) && n >= 0);
+  if (keys.length === 0) return 0;
+  return Math.max(...keys);
+}
+
+export function appendArgumentDelta(current: string, delta: unknown): string {
+  if (delta == null || delta === "") return current;
+  const piece = typeof delta === "string" ? delta : JSON.stringify(delta);
+  if (!piece) return current;
+  if (!current) return piece;
+  if (current === "{}" || current === "[]") return piece.startsWith("{") || piece.startsWith("[") ? piece : current + piece;
+  if ((piece.startsWith("{") || piece.startsWith("[")) && (piece.startsWith(current) || current.startsWith(piece))) {
+    return piece.length >= current.length ? piece : current;
+  }
+  return current + piece;
+}
+
 export function parseToolArguments(
   raw: string
 ): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
-  const text = (raw || "").trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+  const text = stripFence(raw);
   if (!text) return { ok: true, value: {} };
-  const parsed = tryParse(text) || tryParse(text.replace(/,\s*([}\]])/g, "$1"));
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    return { ok: true, value: parsed as Record<string, unknown> };
-  }
+  const direct = asObject(parseJsonish(text));
+  if (direct) return { ok: true, value: direct };
+  const repaired = asObject(parseJsonish(text.replace(/,\s*([}\]])/g, "$1")));
+  if (repaired) return { ok: true, value: repaired };
+  const merged = mergeConcatenated(text) || (text.includes(":") ? mergeConcatenated(closeTruncated(text)) : null);
+  if (merged) return { ok: true, value: merged };
   return { ok: false, error: "Tool arguments were not valid JSON." };
+}
+
+/** Always a JSON object string, so a follow-up request cannot 400 on replay. */
+export function canonicalToolArguments(raw: string): string {
+  const parsed = parseToolArguments(raw);
+  return JSON.stringify(parsed.ok ? parsed.value : {});
+}
+
+export function argumentsForTool(
+  raw: string,
+  toolName: string | null,
+  intent: IntentDecision
+): { ok: true; value: Record<string, unknown>; recovered: boolean } | { ok: false; error: string } {
+  const parsed = parseToolArguments(raw);
+  if (parsed.ok && Object.keys(parsed.value).length > 0) {
+    return { ok: true, value: parsed.value, recovered: false };
+  }
+  if (
+    toolName &&
+    intent.tool === toolName &&
+    intent.confidence >= 0.7 &&
+    Object.keys(intent.args).length > 0
+  ) {
+    return { ok: true, value: intent.args, recovered: true };
+  }
+  if (parsed.ok) return { ok: true, value: parsed.value, recovered: false };
+  return parsed;
+}
+
+function stripFence(raw: string): string {
+  return (raw || "").trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+}
+
+function parseJsonish(text: string): unknown {
+  const parsed = tryParse(text);
+  if (typeof parsed === "string") {
+    const again = tryParse(parsed.trim());
+    return again ?? parsed;
+  }
+  return parsed;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  return null;
+}
+
+function mergeConcatenated(text: string): Record<string, unknown> | null {
+  if (!text) return null;
+  const values: unknown[] = [];
+  let i = 0;
+  while (i < text.length) {
+    while (i < text.length && /\s/.test(text[i])) i++;
+    if (i >= text.length) break;
+    const end = jsonValueEnd(text, i);
+    if (end < 0) return null;
+    const parsed = tryParse(text.slice(i, end));
+    if (parsed === null && text.slice(i, end) !== "null") return null;
+    values.push(parsed);
+    i = end;
+  }
+  if (values.length === 0) return null;
+  if (values.some((value) => !value || typeof value !== "object" || Array.isArray(value))) return null;
+  return Object.assign({}, ...(values as Record<string, unknown>[]));
+}
+
+function jsonValueEnd(text: string, start: number): number {
+  const open = text[start];
+  if (open !== "{" && open !== "[") {
+    if (open === '"') {
+      for (let i = start + 1; i < text.length; i++) {
+        if (text[i] === "\\") {
+          i++;
+          continue;
+        }
+        if (text[i] === '"') return i + 1;
+      }
+      return -1;
+    }
+    const match = text.slice(start).match(/^(?:true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
+    return match ? start + match[0].length : -1;
+  }
+  const stack = [open];
+  let inString = false;
+  let escape = false;
+  for (let i = start + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}" || ch === "]") {
+      const want = stack[stack.length - 1];
+      if ((ch === "}" && want !== "{") || (ch === "]" && want !== "[")) return -1;
+      stack.pop();
+      if (stack.length === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+function closeTruncated(text: string): string {
+  if (!text.startsWith("{") && !text.startsWith("[")) return text;
+  let inString = false;
+  let escape = false;
+  const stack: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{" || ch === "[") stack.push(ch);
+    else if ((ch === "}" || ch === "]") && stack.length) stack.pop();
+  }
+  let suffix = "";
+  if (inString) suffix += '"';
+  while (stack.length) {
+    const open = stack.pop();
+    suffix += open === "[" ? "]" : "}";
+  }
+  return text + suffix;
 }
 
 function tryParse(text: string): unknown {

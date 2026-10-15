@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyIntent, parseToolArguments, resolveToolCall } from "./intent-router.js";
+import {
+  applyToolCallDelta,
+  argumentsForTool,
+  canonicalToolArguments,
+  classifyIntent,
+  isOutboundTool,
+  isUnapprovedExternalAction,
+  parseToolArguments,
+  resolveToolCall,
+  type PartialToolCall,
+} from "./intent-router.js";
 
 const known = ["brain_recall", "brain_remember", "brain_status", "meshy_text_to_3d", "higgsfield_image", "higgsfield_video", "blender_render"];
 
@@ -38,4 +48,59 @@ test("broken tool JSON is repaired or explained", () => {
   assert.equal(repaired.ok, true);
   if (repaired.ok) assert.deepEqual(repaired.value, { query: "Enagic" });
   assert.equal(parseToolArguments("{").ok, false);
+});
+
+test("Gemini brain_recall stream does not replay invalid JSON", () => {
+  const question = "Who is Russell Ally and what is my Enagic goal?";
+  const intent = classifyIntent(question);
+  const partials: Record<number, PartialToolCall> = {};
+  // Gemini 2.5 Flash OpenAI-compat stream: empty object, then the real object.
+  // The index is missing on the later chunks. Concatenating them used to log
+  // "brain_recall: Tool arguments were not valid JSON" and the next request 400'd.
+  applyToolCallDelta(partials, { id: "call_russell", function: { name: "brain_recall", arguments: "" } });
+  applyToolCallDelta(partials, { function: { arguments: "{}" } });
+  applyToolCallDelta(partials, { function: { arguments: JSON.stringify({ query: question }) } });
+  applyToolCallDelta(partials, {
+    extra_content: { google: { thought_signature: "sig-russell" } },
+  });
+
+  const call = partials[0];
+  assert.equal(call.name, "brain_recall");
+  assert.equal(call.extra && (call.extra as { google: { thought_signature: string } }).google.thought_signature, "sig-russell");
+
+  const naive = "{}" + JSON.stringify({ query: question });
+  const parsed = parseToolArguments(naive);
+  assert.equal(parsed.ok, true);
+  if (parsed.ok) assert.equal(parsed.value.query, question);
+
+  const assembled = parseToolArguments(call.argumentsJson);
+  assert.equal(assembled.ok, true);
+  if (assembled.ok) assert.equal(assembled.value.query, question);
+
+  const history = canonicalToolArguments(naive);
+  assert.deepEqual(JSON.parse(history), { query: question });
+
+  const recovered = argumentsForTool("{{{not-json", "brain_recall", intent);
+  assert.equal(recovered.ok, true);
+  if (recovered.ok) {
+    assert.equal(recovered.recovered, true);
+    assert.equal(recovered.value.query, question);
+  }
+  assert.doesNotThrow(() => JSON.parse(canonicalToolArguments("{{{not-json")));
+
+  const objectDelta: Record<number, PartialToolCall> = {};
+  applyToolCallDelta(objectDelta, { index: 0, id: "call_obj", function: { name: "brain_recall", arguments: {} } });
+  applyToolCallDelta(objectDelta, { index: 0, function: { arguments: { query: question } } });
+  assert.equal(JSON.parse(canonicalToolArguments(objectDelta[0].argumentsJson)).query, question);
+  assert.doesNotMatch(objectDelta[0].argumentsJson, /\[object Object\]/);
+});
+
+test("outbound tools and tasks stay drafts", () => {
+  assert.equal(isOutboundTool("gmail_send"), true);
+  assert.equal(isOutboundTool("brain_recall"), false);
+  assert.equal(isUnapprovedExternalAction("send the invoice email to Russell"), true);
+  assert.equal(isUnapprovedExternalAction("Who is Russell Ally and what is my Enagic goal?"), false);
+  const blocked = resolveToolCall("gmail_send", known, classifyIntent("hello there"));
+  assert.equal(blocked.name, null);
+  assert.match(blocked.reason, /drafts/i);
 });

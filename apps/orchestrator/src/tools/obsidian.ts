@@ -6,6 +6,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
+import { resolveInside } from "../services/safe-path.js";
 import { getObsidianVaultPath } from "../services/vault-config.js";
 
 function vaultPath(): string {
@@ -13,12 +14,8 @@ function vaultPath(): string {
 }
 const IGNORED_DIRS = new Set([".obsidian", ".trash", "node_modules"]);
 
-function assertInsideVault(fullPath: string): void {
-  const resolved = path.resolve(fullPath);
-  const vaultResolved = path.resolve(vaultPath());
-  if (!resolved.startsWith(vaultResolved + path.sep) && resolved !== vaultResolved) {
-    throw new Error("Path traversal attempt blocked: path resolves outside vault");
-  }
+async function vaultFile(candidate: string): Promise<string> {
+  return resolveInside(vaultPath(), candidate);
 }
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -28,7 +25,7 @@ async function getAllNotes(dir: string = vaultPath()): Promise<string[]> {
   const files: string[] = [];
 
   for (const entry of entries) {
-    if (IGNORED_DIRS.has(entry.name)) continue;
+    if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       files.push(...(await getAllNotes(full)));
@@ -162,7 +159,7 @@ const obsidianReadTool: Tool = {
       // Try as direct path first
       let fullPath = path.join(vaultPath(), input);
       if (!fullPath.endsWith(".md")) fullPath += ".md";
-      assertInsideVault(fullPath);
+      fullPath = await vaultFile(fullPath);
 
       try {
         const content = await fs.readFile(fullPath, "utf-8");
@@ -249,8 +246,16 @@ const obsidianListTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     const folder = ((params.folder as string) || "").trim().replace(/^\/+/, "");
-    const target = folder ? path.join(vaultPath(), folder) : vaultPath();
-    assertInsideVault(target);
+    let target: string;
+    try {
+      target = await vaultFile(folder ? path.join(vaultPath(), folder) : vaultPath());
+    } catch (error) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: error instanceof Error ? error.message : "Folder is outside the vault.",
+      };
+    }
 
     try {
       const entries = await fs.readdir(target, { withFileTypes: true });
@@ -259,7 +264,7 @@ const obsidianListTool: Tool = {
       const notes: string[] = [];
 
       for (const entry of entries) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
+        if (IGNORED_DIRS.has(entry.name) || entry.isSymbolicLink()) continue;
         if (entry.name.startsWith(".")) continue;
         if (entry.isDirectory()) folders.push(entry.name);
         else if (entry.name.endsWith(".md")) notes.push(entry.name.replace(/\.md$/, ""));
@@ -492,8 +497,16 @@ const obsidianCreateTool: Tool = {
     }
 
     const dir = folder ? path.join(vaultPath(), folder) : vaultPath();
-    const filePath = path.join(dir, `${title}.md`);
-    assertInsideVault(filePath);
+    let filePath: string;
+    try {
+      filePath = await vaultFile(path.join(dir, `${title}.md`));
+    } catch (error) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: error instanceof Error ? error.message : "Path is outside the vault.",
+      };
+    }
 
     try {
       // Check if already exists
@@ -504,7 +517,7 @@ const obsidianCreateTool: Tool = {
         // Good — doesn't exist yet
       }
 
-      await ensureDir(dir);
+      await ensureDir(path.dirname(filePath));
 
       // Build content
       let body: string;
@@ -597,7 +610,15 @@ const obsidianEditTool: Tool = {
     // Resolve note path
     let filePath = path.join(vaultPath(), input);
     if (!filePath.endsWith(".md")) filePath += ".md";
-    assertInsideVault(filePath);
+    try {
+      filePath = await vaultFile(filePath);
+    } catch (error) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: error instanceof Error ? error.message : "Path is outside the vault.",
+      };
+    }
 
     try {
       await fs.access(filePath);
@@ -609,8 +630,7 @@ const obsidianEditTool: Tool = {
       if (!match) {
         return { toolCallId: "", success: false, error: `Note "${input}" not found.` };
       }
-      filePath = match;
-      assertInsideVault(filePath);
+      filePath = await vaultFile(match);
     }
 
     try {
@@ -704,9 +724,11 @@ const obsidianDailyTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     const date = ((params.date as string) || todayDate()).trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { toolCallId: "", success: false, error: "Date must be YYYY-MM-DD." };
+    }
     const dir = path.join(vaultPath(), "Daily");
-    const filePath = path.join(dir, `${date}.md`);
-    assertInsideVault(filePath);
+    const filePath = await vaultFile(path.join(dir, `${date}.md`));
 
     try {
       // Try to read existing
@@ -726,7 +748,7 @@ const obsidianDailyTool: Tool = {
         // Doesn't exist — create it
       }
 
-      await ensureDir(dir);
+      await ensureDir(path.dirname(filePath));
       const body = TEMPLATES.daily(date, date);
       await fs.writeFile(filePath, body, "utf-8");
 
@@ -781,7 +803,15 @@ const obsidianDeleteTool: Tool = {
 
     let filePath = path.join(vaultPath(), input);
     if (!filePath.endsWith(".md")) filePath += ".md";
-    assertInsideVault(filePath);
+    try {
+      filePath = await vaultFile(filePath);
+    } catch (error) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: error instanceof Error ? error.message : "Path is outside the vault.",
+      };
+    }
 
     try {
       await fs.access(filePath);
@@ -792,8 +822,7 @@ const obsidianDeleteTool: Tool = {
       if (!match) {
         return { toolCallId: "", success: false, error: `Note "${input}" not found.` };
       }
-      filePath = match;
-      assertInsideVault(filePath);
+      filePath = await vaultFile(match);
     }
 
     try {

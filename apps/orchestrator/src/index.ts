@@ -67,6 +67,7 @@ import {
 import { promises as fs } from "fs";
 import path from "path";
 import { CONVERSATION_DIR, ensureRuntimeDirs, localTimestamp } from "./services/runtime-paths.js";
+import { conversationTranscriptPath } from "./services/safe-path.js";
 import {
   buildProceduralSkillContextWithUsage,
   captureCorrectionProposal,
@@ -96,7 +97,8 @@ function appendTranscript(
   const next = prev.then(async () => {
     try {
       await fs.mkdir(CONVO_DIR, { recursive: true });
-      const file = path.join(CONVO_DIR, `${conversationId}.jsonl`);
+      const file = conversationTranscriptPath(CONVO_DIR, conversationId);
+      if (!file) return;
       const line = JSON.stringify({
         role,
         content,
@@ -151,7 +153,8 @@ async function listTranscripts(): Promise<Array<{ id: string; turns: number; fir
 
 async function readTranscript(conversationId: string): Promise<Array<{ role: string; content: string; timestamp: string }>> {
   try {
-    const file = path.join(CONVO_DIR, `${conversationId}.jsonl`);
+    const file = conversationTranscriptPath(CONVO_DIR, conversationId);
+    if (!file) return [];
     const raw = await fs.readFile(file, "utf-8");
     return raw.split("\n").filter(Boolean).map((l) => {
       try { return JSON.parse(l); } catch { return null; }
@@ -162,6 +165,16 @@ async function readTranscript(conversationId: string): Promise<Array<{ role: str
 }
 
 const MAX_MESSAGE_LENGTH = 4000;
+
+function storedParameters(raw: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  } catch {
+    // Tool arguments are canonicalized before they are logged. A bad line must not drop the reply.
+  }
+  return {};
+}
 const activeAbortControllers = new Map<string, AbortController>();
 const lastProceduralSkillsByConversation = new Map<string, string[]>();
 
@@ -404,7 +417,7 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
           ? toolCalls.map((tc, i) => ({
               id: `call-${i}`,
               toolName: tc.name,
-              parameters: JSON.parse(tc.arguments),
+              parameters: storedParameters(tc.arguments),
             }))
           : undefined,
         toolResults.length > 0 ? toolResults : undefined

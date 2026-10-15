@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -50,6 +50,26 @@ test("fixture vault can be searched, read, and written", async () => {
 
   const outside = await toolRegistry.execute("obsidian_read", { note: "../../etc/passwd" });
   assert.equal(outside.success, false);
+});
+
+test("vault writes, dates, and symlinks cannot leave the vault", async () => {
+  const escaped = await toolRegistry.execute("obsidian_create", {
+    title: "escaped",
+    folder: "../../friday-vault-escape",
+    content: "nope",
+  });
+  assert.equal(escaped.success, false);
+  assert.equal(existsSync(path.resolve(root, "../../friday-vault-escape/escaped.md")), false);
+
+  const daily = await toolRegistry.execute("obsidian_daily", { date: "../../etc/passwd" });
+  assert.equal(daily.success, false);
+
+  const secretDir = mkdtempSync(path.join(os.tmpdir(), "friday-outside-"));
+  writeFileSync(path.join(secretDir, "secret.md"), "top secret");
+  symlinkSync(path.join(secretDir, "secret.md"), path.join(root, "link.md"));
+  const linked = await toolRegistry.execute("obsidian_read", { note: "link" });
+  assert.equal(linked.success, false);
+  rmSync(secretDir, { recursive: true, force: true });
 });
 
 test("brain indexes the fixture vault and writes an entity note", async () => {

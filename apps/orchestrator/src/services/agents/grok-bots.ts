@@ -46,7 +46,7 @@ async function probe(url: string, fetchImpl: typeof fetch, token: string | undef
       method: "GET",
       headers,
       signal: AbortSignal.timeout(2500),
-      redirect: "follow",
+      redirect: "manual",
     });
     if (response.ok) return { state: "online", detail: `status ${response.status}` };
     return { state: "offline", detail: `status ${response.status}` };
@@ -117,6 +117,7 @@ export function createGrokBotAdapter(deps: AgentDeps): AgentAdapter {
           headers,
           body: JSON.stringify({ agent: bot.name, task: request.task }),
           signal: AbortSignal.timeout(request.timeoutMs ?? 30_000),
+          redirect: "manual",
         });
         const text = await response.text();
         if (!response.ok) {

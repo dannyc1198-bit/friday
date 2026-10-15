@@ -6,12 +6,22 @@ import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { blenderPath } from "./credentials.js";
+import { isInsideRoot } from "../safe-path.js";
 import { createMediaJob, latestModelFile, mediaDir, updateMediaJob, type MediaJob } from "../media-jobs.js";
 
 const SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "blender_preview.py");
 
 export function startBlenderRender(fileName?: string, env = process.env): MediaJob {
   const exe = blenderPath(env);
+  if (unsafeExecutable(exe)) {
+    return createMediaJob({
+      kind: "blender-render",
+      title: "Blender preview",
+      prompt: fileName || "",
+      status: "offline",
+      detail: "BLENDER_PATH contains characters that are not allowed in an executable path.",
+    });
+  }
   if (!existsSync(exe)) {
     return createMediaJob({
       kind: "blender-render",
@@ -31,15 +41,26 @@ export function startBlenderRender(fileName?: string, env = process.env): MediaJ
       detail: "No GLB or FBX in the media folder yet.",
     });
   }
-  const source = path.join(mediaDir(), name);
+  const source = path.resolve(mediaDir(), name);
+  const pngPath = path.resolve(mediaDir(), `${path.parse(name).name}-preview.png`);
+  if (!isInsideRoot(mediaDir(), source) || !isInsideRoot(mediaDir(), pngPath)) {
+    return createMediaJob({
+      kind: "blender-render",
+      title: "Blender preview",
+      prompt: name,
+      status: "failed",
+      detail: "Model path is outside the media folder.",
+    });
+  }
   if (!existsSync(source)) {
     return createMediaJob({ kind: "blender-render", title: "Blender preview", prompt: name, status: "failed", detail: "That model file is not in the media folder." });
   }
-  const png = `${path.parse(name).name}-preview.png`;
+  const png = path.basename(pngPath);
   const job = createMediaJob({ kind: "blender-render", title: "Blender preview", prompt: name, detail: "Rendering" });
-  const child = spawn(exe, ["-b", "--python", SCRIPT, "--", source, path.join(mediaDir(), png), ""], {
+  const child = spawn(exe, ["-b", "--python", SCRIPT, "--", source, pngPath], {
     shell: false,
     windowsHide: true,
+    env: blenderEnv(env),
   });
   let stderr = "";
   child.stderr?.on("data", (chunk) => {
@@ -47,7 +68,7 @@ export function startBlenderRender(fileName?: string, env = process.env): MediaJ
   });
   child.on("error", (err) => updateMediaJob(job.id, { status: "failed", detail: err.message }));
   child.on("close", (code) => {
-    if (code === 0 && existsSync(path.join(mediaDir(), png))) {
+    if (code === 0 && existsSync(pngPath)) {
       updateMediaJob(job.id, { status: "succeeded", progress: 100, detail: "Preview rendered", files: [{ name: png, label: "Preview" }] });
     } else {
       updateMediaJob(job.id, { status: "failed", detail: stderr || `Blender exited ${code}` });
@@ -58,6 +79,15 @@ export function startBlenderRender(fileName?: string, env = process.env): MediaJ
 
 export function startBlenderOpen(fileName?: string, env = process.env): MediaJob {
   const exe = blenderPath(env);
+  if (unsafeExecutable(exe)) {
+    return createMediaJob({
+      kind: "blender-open",
+      title: "Blender",
+      prompt: fileName || "",
+      status: "offline",
+      detail: "BLENDER_PATH contains characters that are not allowed in an executable path.",
+    });
+  }
   if (!existsSync(exe)) {
     return createMediaJob({
       kind: "blender-open",
@@ -68,8 +98,9 @@ export function startBlenderOpen(fileName?: string, env = process.env): MediaJob
     });
   }
   const name = safeMediaName(fileName) || latestModelFile();
-  const args = name && existsSync(path.join(mediaDir(), name)) ? [path.join(mediaDir(), name)] : [];
-  const child = spawn(exe, args, { shell: false, detached: true, stdio: "ignore" });
+  const source = name ? path.resolve(mediaDir(), name) : "";
+  const args = source && isInsideRoot(mediaDir(), source) && existsSync(source) ? [source] : [];
+  const child = spawn(exe, args, { shell: false, detached: true, stdio: "ignore", env: blenderEnv(env) });
   child.on("error", () => {});
   child.unref();
   return createMediaJob({
@@ -80,6 +111,18 @@ export function startBlenderOpen(fileName?: string, env = process.env): MediaJob
     progress: 100,
     detail: name ? `Opened ${name}` : "Opened Blender",
   });
+}
+
+function unsafeExecutable(exe: string): boolean {
+  return /[&|<>^%\r\n"]/.test(exe);
+}
+
+function blenderEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const next: NodeJS.ProcessEnv = { ...env };
+  for (const key of Object.keys(next)) {
+    if (/KEY|TOKEN|SECRET|PASSWORD|PASSWD/i.test(key)) delete next[key];
+  }
+  return next;
 }
 
 function safeMediaName(fileName?: string): string | null {

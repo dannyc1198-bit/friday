@@ -16,7 +16,15 @@ import OpenAI from "openai";
 import { FRIDAY_SYSTEM_PROMPT } from "../config/index.js";
 import type { Message, StreamChunk } from "../types/index.js";
 import { toolRegistry } from "../tools/registry.js";
-import { classifyIntent, parseToolArguments, resolveToolCall } from "./intent-router.js";
+import {
+  applyToolCallDelta,
+  argumentsForTool,
+  canonicalToolArguments,
+  classifyIntent,
+  resolveToolCall,
+  type PartialToolCall,
+} from "./intent-router.js";
+import { redactSecrets } from "./redact.js";
 
 // ─── Provider selection ─────────────────────────────────────────────
 // Order of resolution:
@@ -164,11 +172,32 @@ function toOpenAIMessages(messages: Message[], systemPrompt: string): ChatMessag
 }
 
 function publicLlmError(status: number | undefined, message: string): string {
-  const clean = (message || "the model connection failed")
-    .replace(/sk-[a-zA-Z0-9_-]+/g, "sk-…")
-    .replace(/Bearer\s+\S+/gi, "Bearer …")
-    .slice(0, 180);
+  const clean = redactSecrets(message || "the model connection failed").slice(0, 180);
   return `I couldn't finish that${status ? ` (${status})` : ""}: ${clean}`;
+}
+
+function speechFromToolMessages(messages: ChatMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "tool" || typeof msg.content !== "string") continue;
+    try {
+      const data = JSON.parse(msg.content) as {
+        message?: string;
+        error?: string;
+        results?: Array<{ note?: string; text?: string }>;
+      };
+      const lines = (data.results || []).slice(0, 3).map((hit) => {
+        const text = String(hit.text || "").replace(/\s+/g, " ").trim();
+        return text ? `${hit.note || "Note"}: ${text}` : "";
+      }).filter(Boolean);
+      if (lines.length) return lines.join(" ");
+      if (data.message) return String(data.message);
+      if (data.error) return String(data.error);
+    } catch {
+      if (msg.content.trim()) return msg.content.trim().slice(0, 500);
+    }
+  }
+  return null;
 }
 
 // ─── Streaming chat completion with agentic tool loop ─
@@ -242,26 +271,35 @@ export async function* streamChatCompletion(
       } else if (status === 401 || status === 403 || /credit|billing|insufficient/i.test(msg)) {
         yield { type: "text", content: `My ${PROVIDER_LABEL} key's out of credits, boss. Top it up and I'm back.` };
       } else {
+        if ((status === 400 || status === 422) && round > 0) {
+          const spoken = speechFromToolMessages(openaiMessages);
+          console.error("[FRIDAY LLM] provider rejected the tool follow-up:", status, redactSecrets(msg));
+          if (spoken) {
+            yield { type: "text", content: spoken };
+            yield { type: "done" };
+            return;
+          }
+        }
         const reason = publicLlmError(status, msg);
         yield { type: "error", content: reason };
         yield { type: "text", content: reason };
-        console.error("[FRIDAY LLM] stream error:", status, msg);
+        console.error("[FRIDAY LLM] stream error:", status, redactSecrets(msg));
       }
+      yield { type: "done" };
       return;
     }
 
     let accumulatedText = "";
-    // OpenAI streams tool-call deltas with an `index` field; we accumulate
-    // arguments JSON across deltas under that index until finish_reason fires.
-    const partialToolCalls: Record<
-      number,
-      { id?: string; name?: string; argumentsJson: string }
-    > = {};
+    // Providers stream tool calls differently. Gemini 2.5 Flash often omits
+    // index and sends `{}` plus the real arguments object. Replaying the raw
+    // concatenation is invalid JSON and the next request comes back 400.
+    const partialToolCalls: Record<number, PartialToolCall> = {};
     let finishReason: string | null = null;
 
     for await (const chunk of stream) {
       if (signal?.aborted) {
         yield { type: "text", content: "\n\n[Task cancelled by user.]" };
+        yield { type: "done" };
         return;
       }
 
@@ -276,24 +314,26 @@ export async function* streamChatCompletion(
 
       if (delta.tool_calls) {
         for (const tc of delta.tool_calls) {
-          const idx = tc.index;
-          if (!partialToolCalls[idx]) {
-            partialToolCalls[idx] = { argumentsJson: "" };
-          }
-          if (tc.id) partialToolCalls[idx].id = tc.id;
-          if (tc.function?.name) partialToolCalls[idx].name = tc.function.name;
-          if (tc.function?.arguments)
-            partialToolCalls[idx].argumentsJson += tc.function.arguments;
+          const raw = tc as typeof tc & { extra_content?: unknown; function?: { name?: string; arguments?: unknown } };
+          applyToolCallDelta(partialToolCalls, {
+            index: tc.index,
+            id: tc.id,
+            function: raw.function,
+            extra_content: raw.extra_content,
+          });
         }
       }
 
       if (choice.finish_reason) finishReason = choice.finish_reason;
     }
 
-    const completedToolCalls = Object.values(partialToolCalls).filter((tc) => tc.id);
+    const completedToolCalls = Object.values(partialToolCalls).filter((tc) => tc.name?.trim() || tc.argumentsJson.trim());
+    for (let i = 0; i < completedToolCalls.length; i++) {
+      if (!completedToolCalls[i].id) completedToolCalls[i].id = `call_${round}_${i}`;
+    }
 
     // Record this round's assistant turn so the next round (if any) has it
-    // in conversation history.
+    // in conversation history. Arguments are canonical JSON, never the raw stream.
     if (completedToolCalls.length > 0) {
       openaiMessages.push({
         role: "assistant",
@@ -301,9 +341,13 @@ export async function* streamChatCompletion(
         tool_calls: completedToolCalls.map((tc) => ({
           id: tc.id!,
           type: "function" as const,
-          function: { name: tc.name || "unnamed", arguments: tc.argumentsJson || "{}" },
+          function: {
+            name: tc.name || "unnamed",
+            arguments: canonicalToolArguments(tc.argumentsJson || "{}"),
+          },
+          ...(tc.extra ? { extra_content: tc.extra } : {}),
         })),
-      });
+      } as ChatMessage);
     } else {
       openaiMessages.push({ role: "assistant", content: accumulatedText });
     }
@@ -325,12 +369,15 @@ export async function* streamChatCompletion(
 
       const resolved = resolveToolCall(tc.name, knownTools, intent);
       const visibleName = resolved.name || tc.name || "unnamed";
-      const parsed = parseToolArguments(tc.argumentsJson || "{}");
+      const parsed = argumentsForTool(tc.argumentsJson || "{}", resolved.name, intent);
       const historyName = resolved.name || (knownTools.includes("brain_recall") ? "brain_recall" : knownTools[0] || "brain_recall");
       const assistantTurn = openaiMessages[openaiMessages.length - 1];
       if (assistantTurn && assistantTurn.role === "assistant" && "tool_calls" in assistantTurn && assistantTurn.tool_calls) {
         const recorded = assistantTurn.tool_calls.find((call) => call.id === tc.id);
-        if (recorded && recorded.type === "function") recorded.function.name = historyName;
+        if (recorded && recorded.type === "function") {
+          recorded.function.name = historyName;
+          recorded.function.arguments = JSON.stringify(parsed.ok ? parsed.value : {});
+        }
       }
       yield {
         type: "tool_call",

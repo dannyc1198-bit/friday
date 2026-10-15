@@ -1,3 +1,4 @@
+import { isUnapprovedExternalAction } from "../intent-router.js";
 import { runCommand } from "./command.js";
 import { createClaudeAdapter } from "./claude.js";
 import { createCodexAdapter } from "./codex.js";
@@ -45,6 +46,13 @@ export function createAgentService(overrides?: Partial<AgentDeps>) {
     async dispatch(agentId: string, task: string, extra?: Omit<DispatchRequest, "task">): Promise<DispatchResult> {
       const trimmed = task.trim();
       if (!trimmed) return { ok: false, state: "offline", summary: "task is required" };
+      if (isUnapprovedExternalAction(trimmed)) {
+        return {
+          ok: false,
+          state: "offline",
+          summary: "Draft only. I will not send that message, spend money, or trade live unless Danny approves that exact action.",
+        };
+      }
       const request: DispatchRequest = { task: trimmed, ...extra };
       const adapter = adapters.find((a) => agentId === a.id || agentId.startsWith(`${a.id}:`));
       if (!adapter) return { ok: false, state: "offline", summary: `Unknown agent ${agentId}` };

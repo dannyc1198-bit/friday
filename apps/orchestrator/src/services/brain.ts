@@ -27,6 +27,7 @@ import MiniSearch from "minisearch";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+import { isInsideRoot } from "./safe-path.js";
 import { getEntitiesDir, getObsidianVaultPath } from "./vault-config.js";
 
 function vaultPath(): string {
@@ -341,7 +342,7 @@ const ENTITY_TYPES = ["person", "client", "project", "preference", "place", "too
 const OBS_CATEGORIES = ["fact", "decision", "preference", "insight", "question", "event"] as const;
 
 function sanitizeEntityName(name: string): string {
-  return name.replace(/[<>:"/\\|?*#^[\]]/g, "-").replace(/\s+/g, " ").trim().slice(0, 80);
+  return name.replace(/[<>:"/\\|?*#^[\]\u0000]/g, "-").replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
 function today(): string {
@@ -376,6 +377,7 @@ export async function rememberFact(input: RememberInput): Promise<RememberResult
 
   if (!existsSync(entitiesDir())) mkdirSync(entitiesDir(), { recursive: true });
   const file = path.join(entitiesDir(), `${name}.md`);
+  if (!isInsideRoot(entitiesDir(), file)) throw new Error("Entity name is not a safe file name");
   const obsLine = `- [${category}] ${observation} *(as of ${today()}, ${source})*`;
 
   let created = false;

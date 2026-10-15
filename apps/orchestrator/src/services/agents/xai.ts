@@ -1,4 +1,5 @@
 import type { AgentAdapter, AgentDeps, AgentStatus, DispatchResult } from "./types.js";
+import { redactSecrets } from "../redact.js";
 
 const DEFAULT_MODEL = "grok-4";
 const DEFAULT_BASE = "https://api.x.ai/v1/chat/completions";
@@ -40,7 +41,7 @@ export function createXaiAdapter(deps: AgentDeps): AgentAdapter {
           }),
           signal: AbortSignal.timeout(request.timeoutMs ?? 60_000),
         });
-        const text = await response.text();
+        const text = redactSecrets(await response.text()).replaceAll(key, "…");
         if (!response.ok) {
           return {
             ok: false,

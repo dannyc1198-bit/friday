@@ -62,11 +62,11 @@ function loadOrGenerateApiKey(): string {
 
     envContent += `\n# FRIDAY API Authentication Key (auto-generated)\nFRIDAY_API_KEY=${newKey}\n`;
     writeFileSync(ENV_PATH, envContent, "utf-8");
-    console.log("[Auth] Generated new API key and saved to .env");
-    console.log(`[Auth] Your API key: ${newKey}`);
-    console.log("[Auth] Use this in requests: Authorization: Bearer <key>");
+    console.log("[Auth] Generated FRIDAY_API_KEY and saved it to .env.");
+    console.log("[Auth] Copy that line into apps/web/.env.local. The key is not printed here.");
   } catch (error) {
     console.warn("[Auth] Could not save API key to .env — using in-memory only");
+    console.warn(`[Auth] In-memory API key: ${newKey}`);
   }
 
   process.env.FRIDAY_API_KEY = newKey;
@@ -132,7 +132,8 @@ export async function authMiddleware(
     return;
   }
 
-  // Allow VAPI webhooks (validated by webhook secret separately)
+  // Phone routes do not use FRIDAY_API_KEY. The route handlers require
+  // VAPI_WEBHOOK_SECRET or RECEPTIONIST_WEBHOOK_SECRET before any tool runs.
   if (path.startsWith("/api/receptionist")) {
     return;
   }
@@ -140,7 +141,7 @@ export async function authMiddleware(
     return;
   }
 
-  // Allow VAPI custom LLM calls — VAPI doesn't send our auth token
+  // VAPI custom LLM calls. The route requires the webhook secret.
   if (path.startsWith("/vapi/llm")) {
     return;
   }

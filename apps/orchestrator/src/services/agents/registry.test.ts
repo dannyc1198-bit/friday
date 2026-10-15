@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAgentService } from "./registry.js";
 import { parseGrokBots } from "./grok-bots.js";
+import { assertCommandArgs } from "./command.js";
+import { claudeArgs } from "./claude.js";
 import type { CommandResult } from "./types.js";
 
 const missing: CommandResult = { code: null, stdout: "", stderr: "", error: "spawn codex ENOENT" };
@@ -68,6 +70,30 @@ test("grok bot dots follow the status URL and xAI stays offline without a key", 
   const sent = await service.dispatch("grok-bot:nexus", "check the lights");
   assert.equal(sent.ok, true);
   assert.equal(calls[1], "http://127.0.0.1:9/dispatch");
+});
+
+test("command arguments cannot carry shell metacharacters and tasks stay off the command line", () => {
+  assert.equal(assertCommandArgs("claude", claudeArgs("opus")), null);
+  assert.equal(assertCommandArgs("codex", ["exec", "--skip-git-repo-check"]), null);
+  assert.match(assertCommandArgs("claude", ["--print", "hello & calc.exe"]) || "", /metacharacters/);
+  assert.match(assertCommandArgs("claude & calc", []) || "", /bare executable/);
+});
+
+test("dispatch refuses send, spend, and trade tasks", async () => {
+  let ran = false;
+  const service = createAgentService({
+    env: {},
+    run: async () => {
+      ran = true;
+      return { code: 0, stdout: "sent", stderr: "" };
+    },
+  });
+  const email = await service.dispatch("codex", "send the invoice to Russell");
+  assert.equal(email.ok, false);
+  assert.match(email.summary, /Draft only/);
+  const trade = await service.dispatch("claude-code", "trade live the Enagic account");
+  assert.equal(trade.ok, false);
+  assert.equal(ran, false);
 });
 
 test("codex dispatch is refused outside the allowed roots", async () => {

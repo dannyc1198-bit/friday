@@ -4,6 +4,20 @@ import type { CommandResult, CommandRunner } from "./types.js";
 const MAX_STDOUT = 80_000;
 const MAX_STDERR = 20_000;
 
+// cmd.exe metacharacters. The task is written to stdin and must never be an argument.
+const SHELL_META = /[&|<>^%\u0000\r\n"]/;
+
+/** Refuse a command line that could break out of the Windows .cmd shim. */
+export function assertCommandArgs(cmd: string, args: string[]): string | null {
+  if (!/^[A-Za-z0-9._-]+$/.test(cmd || "")) return "command name is not a bare executable";
+  for (const arg of args) {
+    if (typeof arg !== "string" || SHELL_META.test(arg)) {
+      return "refusing shell metacharacters in command arguments";
+    }
+  }
+  return null;
+}
+
 /** Spawn a CLI. shell is only enabled on Windows so .cmd shims resolve; the task itself goes on stdin, not the command line. */
 export const runCommand: CommandRunner = (cmd, args, opts) => {
   return new Promise((resolve) => {
@@ -16,6 +30,12 @@ export const runCommand: CommandRunner = (cmd, args, opts) => {
       resolve(result);
     };
 
+    const unsafe = assertCommandArgs(cmd, args);
+    if (unsafe) {
+      finish({ code: null, stdout: "", stderr: "", error: unsafe });
+      return;
+    }
+
     let child;
     try {
       child = spawn(cmd, args, {
@@ -23,6 +43,7 @@ export const runCommand: CommandRunner = (cmd, args, opts) => {
         env: process.env,
         shell: process.platform === "win32",
         windowsHide: true,
+        windowsVerbatimArguments: false,
       });
     } catch (err) {
       finish({ code: null, stdout: "", stderr: "", error: (err as Error).message });
