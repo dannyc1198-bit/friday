@@ -1,7 +1,7 @@
 // Adapter surface for the HUD agent panel. Every method must resolve;
 // a missing credential or binary is an offline status, never an exception.
 
-export type AgentKind = "grok-bot" | "codex" | "claude-code" | "xai-grok";
+export type AgentKind = "grok-bot" | "codex" | "xai-grok";
 export type AgentState = "online" | "offline" | "degraded";
 
 export interface AgentStatus {
@@ -18,7 +18,6 @@ export interface AgentStatus {
 export interface DispatchRequest {
   task: string;
   workingDirectory?: string;
-  /** Claude model alias: fable | opus | sonnet | haiku. Ignored by other adapters. */
   model?: string;
   timeoutMs?: number;
 }
@@ -49,7 +48,7 @@ export interface CommandRunner {
   (
     cmd: string,
     args: string[],
-    opts: { cwd?: string; input?: string; timeoutMs: number }
+    opts: { cwd?: string; input?: string; timeoutMs: number; stdin?: "pipe" | "ignore" }
   ): Promise<CommandResult>;
 }
 

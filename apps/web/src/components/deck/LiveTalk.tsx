@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { noticesFromRealtimeEvent } from "@/lib/realtime-notices";
+import { handsFreeStatus } from "@/lib/voice-status";
 
 interface TranscriptLine {
   id: string;
@@ -20,24 +21,27 @@ export function LiveTalk({
   onAgent: (connected: boolean) => void;
 }) {
   const [note, setNote] = useState("Checking the live voice.");
-  const [engine, setEngine] = useState<"elevenlabs" | "realtime" | "browser" | "">("");
+  const [engine, setEngine] = useState<"elevenlabs" | "realtime" | "speak" | "">("");
   const [lines, setLines] = useState<TranscriptLine[]>([]);
-  const [problem, setProblem] = useState("");
+  const [hasElevenKey, setHasElevenKey] = useState(false);
+  const [hasOpenAI, setHasOpenAI] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/voice/live", { cache: "no-store" })
       .then((res) => res.json())
-      .then((data: { mode?: string; note?: string }) => {
+      .then((data: { mode?: string; note?: string; hasElevenKey?: boolean; hasOpenAI?: boolean }) => {
         if (cancelled) return;
-        setNote(data.note || "Live voice ready.");
-        const mode = data.mode === "elevenlabs" || data.mode === "realtime" ? data.mode : "browser";
+        setHasElevenKey(Boolean(data.hasElevenKey));
+        setHasOpenAI(Boolean(data.hasOpenAI));
+        setNote(data.note || handsFreeStatus({ connected: null, failed: null, hasElevenKey: Boolean(data.hasElevenKey) }));
+        const mode = data.mode === "elevenlabs" || data.mode === "realtime" ? data.mode : "speak";
         setEngine(mode);
       })
       .catch(() => {
         if (!cancelled) {
-          setEngine("browser");
-          setNote("Voice plan unavailable. The browser voice still speaks.");
+          setEngine("speak");
+          setNote(handsFreeStatus({ connected: null, failed: null, hasElevenKey: false }));
         }
       });
     return () => {
@@ -60,9 +64,8 @@ export function LiveTalk({
   return (
     <section className="mx-auto w-full max-w-3xl px-5 pt-4" aria-live="polite">
       <p className="font-deckmono text-xs uppercase tracking-[0.22em] text-deck-hot">{note}</p>
-      {problem && <p className="mt-2 text-sm text-deck-gold">{problem}</p>}
       <ul className="mt-3 grid gap-2">
-        {lines.length === 0 && engine !== "browser" && (
+        {lines.length === 0 && engine !== "speak" && (
           <li className="text-sm text-deck-dim">Transcript shows here as soon as someone speaks.</li>
         )}
         {lines.map((line) => (
@@ -76,21 +79,34 @@ export function LiveTalk({
       </ul>
       {engine === "elevenlabs" && (
         <ConversationProvider
-          onConnect={() => onAgent(true)}
+          onConnect={() => {
+            onAgent(true);
+            setNote(handsFreeStatus({ connected: "elevenlabs", failed: null, hasElevenKey }));
+          }}
           onDisconnect={() => onAgent(false)}
           onMessage={(payload) => push(payload.role === "user" ? "user" : "agent", payload.message)}
           onError={() => {
-            setProblem("ElevenLabs did not connect. Trying OpenAI Realtime.");
-            setEngine("realtime");
             onAgent(false);
+            if (hasOpenAI) {
+              setNote("The ElevenLabs agent did not connect. Trying OpenAI Realtime.");
+              setEngine("realtime");
+              return;
+            }
+            setNote(handsFreeStatus({ connected: null, failed: "elevenlabs", hasElevenKey }));
+            setEngine("speak");
           }}
         >
           <ElevenSession
             active={active}
             muted={muted}
             onFail={() => {
-              setProblem("ElevenLabs did not connect. Trying OpenAI Realtime.");
-              setEngine("realtime");
+              if (hasOpenAI) {
+                setNote("The ElevenLabs agent did not connect. Trying OpenAI Realtime.");
+                setEngine("realtime");
+                return;
+              }
+              setNote(handsFreeStatus({ connected: null, failed: "elevenlabs", hasElevenKey }));
+              setEngine("speak");
             }}
           />
         </ConversationProvider>
@@ -100,18 +116,16 @@ export function LiveTalk({
           active={active}
           muted={muted}
           onLine={push}
-          onAgent={onAgent}
+          onAgent={(connected) => {
+            onAgent(connected);
+            if (connected) setNote(handsFreeStatus({ connected: "realtime", failed: null, hasElevenKey }));
+          }}
           onFail={() => {
-            setProblem("Realtime voice did not connect. The browser voice will speak each reply.");
-            setEngine("browser");
+            setNote(handsFreeStatus({ connected: null, failed: "realtime", hasElevenKey }));
+            setEngine("speak");
             onAgent(false);
           }}
         />
-      )}
-      {engine === "browser" && (
-        <p className="mt-2 text-sm text-deck-dim">
-          Hands-free is listening in the browser. Friday answers out loud, and the chat is the transcript.
-        </p>
       )}
     </section>
   );

@@ -1,5 +1,5 @@
 import type { AgentAdapter, AgentDeps, AgentStatus, DispatchResult } from "./types.js";
-import { binaryMissing } from "./command.js";
+import { binaryMissing, codexExecArgs } from "./command.js";
 import { resolveWorkdir } from "./workdir.js";
 
 const PREVIEW = 240;
@@ -36,11 +36,13 @@ export function createCodexAdapter(deps: AgentDeps): AgentAdapter {
       const timeoutMs = request.timeoutMs ?? 120_000;
       let result;
       try {
-        result = await deps.run(
-          "codex",
-          ["exec", "--skip-git-repo-check", "--color", "never"],
-          { cwd: cwd.cwd, input: request.task, timeoutMs }
-        );
+        // The task is one argv. Stdin is closed so Codex does not wait on
+        // "Reading additional input from stdin".
+        result = await deps.run("codex", codexExecArgs(request.task), {
+          cwd: cwd.cwd,
+          timeoutMs,
+          stdin: "ignore",
+        });
       } catch (err) {
         return { ok: false, state: "offline", summary: `Failed to spawn codex: ${(err as Error).message}` };
       }

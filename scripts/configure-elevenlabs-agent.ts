@@ -17,6 +17,8 @@ const apiKey = process.env.ELEVENLABS_API_KEY || "";
 const publicUrl = (process.env.FRIDAY_PUBLIC_URL || "").replace(/\/$/, "");
 const voiceId = process.env.ELEVENLABS_VOICE_ID || process.env.FRIDAY_VOICE_ID_JARVIS || DANIEL_VOICE_ID;
 const secretId = process.env.ELEVENLABS_SECRET_ID || "";
+const builtinLlm = (process.env.ELEVENLABS_AGENT_LLM || "").trim();
+const useBuiltin = Boolean(builtinLlm) && builtinLlm !== "custom-llm";
 
 function fail(message: string): never {
   console.error(message);
@@ -25,15 +27,17 @@ function fail(message: string): never {
 
 if (!apiKey) fail("Set ELEVENLABS_API_KEY.");
 if (!agentId) fail("Set ELEVENLABS_AGENT_ID (same value as NEXT_PUBLIC_ELEVENLABS_AGENT_ID).");
-if (!publicUrl.startsWith("https://")) {
-  fail("Set FRIDAY_PUBLIC_URL to the public https origin of this orchestrator. ElevenLabs cannot reach localhost.");
+if (!useBuiltin && !publicUrl.startsWith("https://")) {
+  fail("Set FRIDAY_PUBLIC_URL to the public https origin of this orchestrator, or set ELEVENLABS_AGENT_LLM to an ElevenLabs built-in model id.");
 }
 
-const patch = buildElevenLabsAgentPatch({
-  voiceId,
-  customLlmUrl: `${publicUrl}/v1/chat/completions`,
-  secretId: secretId || undefined,
-});
+const patch = useBuiltin
+  ? buildElevenLabsAgentPatch({ voiceId, builtinLlm })
+  : buildElevenLabsAgentPatch({
+      voiceId,
+      customLlmUrl: `${publicUrl}/v1/chat/completions`,
+      secretId: secretId || undefined,
+    });
 
 const response = await fetch(`https://api.elevenlabs.io/v1/convai/agents/${encodeURIComponent(agentId)}`, {
   method: "PATCH",

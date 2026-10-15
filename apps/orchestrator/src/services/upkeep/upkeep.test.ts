@@ -63,7 +63,7 @@ test("a repair cannot push or merge until approval, and a bad health check rolls
   const service = createRepairService({
     storeFile: store,
     git,
-    listAgents: async () => [{ id: "claude-code", canDispatch: true }],
+    listAgents: async () => [{ id: "codex", canDispatch: true }],
     dispatch: async () => ({ ok: true, summary: "edited brain.ts" }),
     runTests: async () => ({ ok: true, summary: "tests passed" }),
     runHealth: async () => ({ ok: false, summary: "health endpoint failed" }),
@@ -94,7 +94,7 @@ test("a base branch that moves during health is left unmerged", async () => {
   const service = createRepairService({
     storeFile: path.join(mkdtempSync(path.join(tmpdir(), "friday-repairs-")), "moved.json"),
     git,
-    listAgents: async () => [{ id: "claude-code", canDispatch: true }],
+    listAgents: async () => [{ id: "codex", canDispatch: true }],
     dispatch: async () => ({ ok: true, summary: "edited brain.ts" }),
     runTests: async () => ({ ok: true, summary: "tests passed" }),
     runHealth: async () => ({ ok: true, summary: "ok" }),
@@ -128,7 +128,7 @@ test("approval never merges into main, and a secret diff aborts before commit", 
   const secretService = createRepairService({
     storeFile: path.join(dir, "secret.json"),
     git: secretGit,
-    listAgents: async () => [{ id: "claude-code", canDispatch: true }],
+    listAgents: async () => [{ id: "codex", canDispatch: true }],
     dispatch: async () => ({ ok: true, summary: "wrote .env" }),
     runTests: async () => ({ ok: true, summary: "should not run" }),
     runHealth: async () => ({ ok: true, summary: "ok" }),
@@ -145,7 +145,7 @@ test("reject leaves the branch unpushed", async () => {
   const service = createRepairService({
     storeFile: path.join(mkdtempSync(path.join(tmpdir(), "friday-repairs-")), "repairs.json"),
     git,
-    listAgents: async () => [{ id: "claude-code", canDispatch: true }],
+    listAgents: async () => [{ id: "codex", canDispatch: true }],
     dispatch: async () => ({ ok: true, summary: "ok" }),
     runTests: async () => ({ ok: true, summary: "tests passed" }),
     runHealth: async () => ({ ok: true, summary: "ok" }),

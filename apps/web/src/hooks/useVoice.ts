@@ -213,7 +213,7 @@ export function useVoice({
 
     setError(null);
 
-    if (ttsAvailable) {
+    if (ttsAvailable !== false || isLiveMode) {
       const success = await speakWithElevenLabs(text);
       if (success) return;
     }
@@ -293,7 +293,7 @@ export function useVoice({
     prevIsLoadingRef.current = isLoading;
 
     if (!wasLoading || isLoading) return; // Only trigger on true → false
-    if (isMuted || !enabled) return;
+    if (isMuted || !enabled || suppressMic) return;
 
     // Find the last assistant message
     const lastMessage = messages[messages.length - 1];
@@ -305,7 +305,7 @@ export function useVoice({
     // Mark as spoken and play
     spokenMessageIds.current.add(lastMessage.id);
     speakResponse(lastMessage.content);
-  }, [isLoading, messages, isMuted, enabled, speakResponse]);
+  }, [isLoading, messages, isMuted, enabled, suppressMic, speakResponse]);
 
   // ─── Stop speaking when user starts talking ─────────────
 

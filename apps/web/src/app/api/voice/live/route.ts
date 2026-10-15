@@ -5,9 +5,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const res = await fetch(`${ORCHESTRATOR_URL}/api/voice/live`, { cache: "no-store" });
-    const data = await res.json().catch(() => ({ mode: "browser", note: "Voice plan unavailable." }));
+    const data = await res.json().catch(() => ({ mode: "speak", note: "The Edge voice is speaking every reply." }));
     return Response.json(data);
   } catch {
-    return Response.json({ mode: "browser", note: "Voice plan unavailable. The browser voice still speaks." }, { status: 502 });
+    return Response.json({ mode: "speak", note: "The Edge voice is speaking every reply." }, { status: 502 });
   }
 }

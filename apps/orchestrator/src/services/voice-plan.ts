@@ -1,11 +1,13 @@
 // Which live engine the Talk tab should start.
-// ElevenLabs Agents is the voice. OpenAI Realtime is the fallback.
-// The browser voice is the last resort so a live turn is never text-only.
+// ElevenLabs Agents when an agent id is set.
+// OpenAI Realtime is the next try.
+// If that cannot speak, hands-free uses ElevenLabs TTS, then the Edge voice.
+// The plan returns one status line.
 
 import { DANIEL_VOICE_ID } from "./elevenlabs-agent.js";
 import { resolveModelRoles } from "./model-roles.js";
 
-export type LiveVoiceMode = "elevenlabs" | "realtime" | "browser";
+export type LiveVoiceMode = "elevenlabs" | "realtime" | "speak";
 
 export interface LiveVoicePlan {
   mode: LiveVoiceMode;
@@ -13,7 +15,16 @@ export interface LiveVoicePlan {
   voiceId: string;
   realtimeModel: string;
   realtimeVoice: string;
+  hasElevenKey: boolean;
+  hasOpenAI: boolean;
+  builtinLlm: string;
   note: string;
+}
+
+function speakNote(hasElevenKey: boolean): string {
+  return hasElevenKey
+    ? "ElevenLabs voice is speaking every reply, then Edge."
+    : "The Edge voice is speaking every reply.";
 }
 
 export function selectLiveVoice(env: NodeJS.ProcessEnv = process.env): LiveVoicePlan {
@@ -22,36 +33,30 @@ export function selectLiveVoice(env: NodeJS.ProcessEnv = process.env): LiveVoice
   const voiceId = (env.ELEVENLABS_VOICE_ID || env.FRIDAY_VOICE_ID_JARVIS || DANIEL_VOICE_ID).trim();
   const realtimeModel = resolveModelRoles(env).realtime;
   const realtimeVoice = (env.FRIDAY_REALTIME_VOICE || "cedar").trim();
-  const hasAgent = Boolean(env.ELEVENLABS_API_KEY && agentId);
-  const hasOpenAI = Boolean(env.OPENAI_API_KEY);
-  const base = { agentId, voiceId, realtimeModel, realtimeVoice };
+  const hasElevenKey = Boolean(env.ELEVENLABS_API_KEY?.trim());
+  const hasOpenAI = Boolean(env.OPENAI_API_KEY?.trim());
+  const llm = (env.ELEVENLABS_AGENT_LLM || "").trim();
+  const builtinLlm = llm && llm !== "custom-llm" ? llm : "";
+  const hasAgent = Boolean(hasElevenKey && agentId);
+  const base = { agentId, voiceId, realtimeModel, realtimeVoice, hasElevenKey, hasOpenAI, builtinLlm };
 
-  if (requested === "browser") {
-    return { ...base, mode: "browser", note: "Browser voice. Every live reply is spoken." };
+  if (requested === "speak" || requested === "browser") {
+    return { ...base, mode: "speak", note: speakNote(hasElevenKey) };
   }
   if (requested === "realtime") {
     if (hasOpenAI) {
-      return { ...base, mode: "realtime", note: "OpenAI Realtime is the selected voice. ElevenLabs stays available for typed chat." };
+      return { ...base, mode: "realtime", note: "Trying OpenAI Realtime." };
     }
-    return { ...base, mode: "browser", note: "Realtime was requested. OPENAI_API_KEY is missing, so the browser voice speaks." };
+    return { ...base, mode: "speak", note: speakNote(hasElevenKey) };
   }
   if (hasAgent) {
-    return {
-      ...base,
-      mode: "elevenlabs",
-      note: "ElevenLabs Agents. Scribe v2 Realtime listens. eleven_v3_conversational speaks, with barge-in.",
-    };
+    const brain = builtinLlm
+      ? `ElevenLabs agent on its built-in model (${builtinLlm}). No public URL.`
+      : "ElevenLabs Agents. Scribe v2 Realtime listens. eleven_v3_conversational speaks, with barge-in.";
+    return { ...base, mode: "elevenlabs", note: brain };
   }
   if (hasOpenAI) {
-    return {
-      ...base,
-      mode: "realtime",
-      note: "ElevenLabs agent is not ready. OpenAI Realtime is speaking instead.",
-    };
+    return { ...base, mode: "realtime", note: "No ElevenLabs agent. Trying OpenAI Realtime." };
   }
-  return {
-    ...base,
-    mode: "browser",
-    note: "No ElevenLabs agent and no OpenAI key. The browser voice speaks every live reply.",
-  };
+  return { ...base, mode: "speak", note: speakNote(hasElevenKey) };
 }

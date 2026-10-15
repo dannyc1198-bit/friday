@@ -1,8 +1,12 @@
 import type { AgentAdapter, AgentDeps, AgentStatus, DispatchResult } from "./types.js";
 import { redactSecrets } from "../redact.js";
 
-const DEFAULT_MODEL = "grok-4.7";
+const DEFAULT_CODE_MODEL = "grok-code-fast-1";
 const DEFAULT_BASE = "https://api.x.ai/v1/chat/completions";
+
+function codeModel(env: NodeJS.ProcessEnv): string {
+  return env.XAI_CODE_MODEL?.trim() || DEFAULT_CODE_MODEL;
+}
 
 export function createXaiAdapter(deps: AgentDeps): AgentAdapter {
   return {
@@ -13,13 +17,13 @@ export function createXaiAdapter(deps: AgentDeps): AgentAdapter {
       if (!key) {
         return [row("offline", "needs key — set XAI_API_KEY", false)];
       }
-      const model = deps.env.XAI_MODEL?.trim() || DEFAULT_MODEL;
+      const model = codeModel(deps.env);
       return [row("online", `credential present · ${model}`, true)];
     },
     async dispatch(_id, request): Promise<DispatchResult> {
       const key = deps.env.XAI_API_KEY?.trim();
       if (!key) return { ok: false, state: "offline", summary: "needs key — set XAI_API_KEY" };
-      const model = deps.env.XAI_MODEL?.trim() || DEFAULT_MODEL;
+      const model = codeModel(deps.env);
       const url = deps.env.XAI_BASE_URL?.trim() || DEFAULT_BASE;
       try {
         const response = await deps.fetchImpl(url, {
@@ -34,7 +38,7 @@ export function createXaiAdapter(deps: AgentDeps): AgentAdapter {
             messages: [
               {
                 role: "system",
-                content: "You are a Grok agent assisting Danny. Be concise and concrete. Do not invent tools.",
+                content: "You are the Grok code model assisting Danny. Edit code only inside the task. Do not invent tools, send messages, spend money, or trade.",
               },
               { role: "user", content: request.task },
             ],
@@ -69,7 +73,7 @@ export function createXaiAdapter(deps: AgentDeps): AgentAdapter {
 function row(state: AgentStatus["state"], detail: string, canDispatch: boolean): AgentStatus {
   return {
     id: "xai-grok",
-    name: "xAI Grok",
+    name: "Grok code",
     kind: "xai-grok",
     state,
     detail,

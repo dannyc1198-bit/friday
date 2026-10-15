@@ -18,8 +18,8 @@ import { registerTaskTools } from "./task-manager.js";
 import { registerVaultTools } from "./vault-tools.js";
 import { registerBrowserTools } from "./browser-control.js";
 import { registerObsidianTools } from "./obsidian.js";
-import { registerClaudeCodeTools } from "./claude-code.js";
 import { registerAgentRouterTools } from "./agent-router.js";
+import { registerBrainProviderTools } from "./brain-provider.js";
 import { registerBrainTools } from "./brain-tools.js";
 import { registerCreativeTools } from "./creative.js";
 import { registerAppControlTools } from "./app-control.js";
@@ -51,9 +51,9 @@ export function initializeTools(): void {
   registerCreativeTools();
   console.log("  ✓ Creative (Meshy, Blender, Higgsfield)");
 
-  registerClaudeCodeTools();
   registerAgentRouterTools();
-  console.log("  ✓ Claude Code + agent router (codex / claude / xAI / grok bots)");
+  registerBrainProviderTools();
+  console.log("  ✓ Agents (Codex, Grok code) + brain provider");
 
   registerAppControlTools();
   console.log("  ✓ App Control (fleet status/launch/stop/logs + market + intel)");
@@ -68,5 +68,4 @@ export { registerTaskTools } from "./task-manager.js";
 export { registerVaultTools } from "./vault-tools.js";
 export { registerBrowserTools } from "./browser-control.js";
 export { registerObsidianTools } from "./obsidian.js";
-export { registerClaudeCodeTools } from "./claude-code.js";
 export { registerAppControlTools } from "./app-control.js";

@@ -2,7 +2,7 @@
 
 Checked against vendor docs on **2026-10-15**. Prices are USD per 1M tokens unless noted. Defaults live in `apps/orchestrator/src/services/model-roles.ts` and can be overridden without a code change.
 
-OpenAI stays the primary brain. xAI Grok is the fallback on quota, billing, 5xx, and network errors. A 400 or 422 stays on the provider that rejected it. Gemini and Claude are used only when `FRIDAY_LLM_PROVIDER` names them. There is no silent multi-provider router.
+The brain order is OpenAI, then xAI, then Gemini. A saved choice in `data/settings.json` (or `set_brain_provider`) is tried first and overrides `FRIDAY_LLM_PROVIDER`. A provider with no key is skipped. Quota and `429` responses, including `insufficient_quota` and `credit_balance_exhausted`, fall through to the next provider immediately. A 400 or 422 stays on the provider that rejected it.
 
 ## Roles
 
@@ -24,7 +24,11 @@ OpenAI stays the primary brain. xAI Grok is the fallback on quota, billing, 5xx,
 
 ## Voice
 
-The live voice layer is ElevenLabs Agents: TTS `eleven_v3_conversational`, speech-to-text `scribe_realtime` (Scribe v2 Realtime), turn-taking `turn_v3`. The agent's custom LLM is Friday's `/v1/chat/completions`, so the spoken brain is still `gpt-5.4` with the Grok fallback. `ELEVENLABS_VOICE_ID` selects the voice. OpenAI Realtime is the fallback, voice `cedar` via `FRIDAY_REALTIME_VOICE`.
+The live voice layer is ElevenLabs Agents: TTS `eleven_v3_conversational`, speech-to-text `scribe_realtime` (Scribe v2 Realtime), turn-taking `turn_v3`. The agent's custom LLM is Friday's `/v1/chat/completions`, so the spoken brain is still the provider chain above. Set `ELEVENLABS_AGENT_LLM` to an ElevenLabs model id such as `gemini-2.5-flash` to use ElevenLabs' built-in LLM with no public URL. `ELEVENLABS_VOICE_ID` selects the voice. OpenAI Realtime is the next try, voice `cedar` via `FRIDAY_REALTIME_VOICE`. If the agent id is missing and Realtime cannot speak, hands-free uses ElevenLabs TTS and then the Edge voice.
+
+## Coding
+
+Coding delegation is the Codex CLI (`codex exec`, stdin closed) and then the xAI code model `grok-code-fast-1` (`XAI_CODE_MODEL`). Claude Code is not registered.
 
 ## Embeddings and the vault
 

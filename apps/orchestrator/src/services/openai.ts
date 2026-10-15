@@ -30,6 +30,8 @@ import {
   activeEndpoint,
   describeChain,
   endpointClient,
+  exhaustedBrainMessage,
+  failoverReason,
   resolveLlmChain,
   shouldFailover,
   type LlmEndpoint,
@@ -42,8 +44,9 @@ const MAX_TOKENS = 4096;
 const MAX_TOOL_ROUNDS = 5;
 
 const bootChain = resolveLlmChain(process.env);
+const bootHead = bootChain.endpoints[0];
 console.log(
-  `[FRIDAY LLM] provider=${bootChain.primary.label} model=${bootChain.primary.model} failover=${bootChain.fallback ? `${bootChain.fallback.label}:${bootChain.fallback.model}` : "none"}`
+  `[FRIDAY LLM] provider=${bootHead?.label || "none"} model=${bootHead?.model || "none"} next=${bootChain.endpoints.slice(1).map((item) => `${item.label}:${item.model}`).join(",") || "none"}`
 );
 
 // ─── Tool schema conversion (FRIDAY registry → OpenAI function tools) ─
@@ -191,17 +194,18 @@ export async function* streamChatCompletion(
   }
 
   const chain = resolveLlmChain(process.env);
-  const picked = activeEndpoint(chain);
-  let endpoint: LlmEndpoint = picked?.endpoint ?? chain.primary;
-  let failedOver = picked?.failedOver ?? false;
-  let active = picked ? endpointClient(endpoint) : null;
+  let cursor = 0;
+  let endpoint: LlmEndpoint | null = chain.endpoints[0] || null;
+  let active = endpoint ? endpointClient(endpoint) : null;
+  const tried: Array<{ label: string; reason: string }> = [];
 
-  if (!active) {
+  if (!active || !endpoint) {
+    const missing = chain.missing.map((item) => item.env).join(", ") || "OPENAI_API_KEY, XAI_API_KEY, or GEMINI_API_KEY";
     yield {
       type: "text",
       content: intentSummary
-        ? `${intentSummary.replace(/\.$/, "")}. The language model is offline until OPENAI_API_KEY is in apps/orchestrator/.env.`
-        : "I'm offline at the moment, boss — set OPENAI_API_KEY. xAI is the fallback once XAI_API_KEY is set.",
+        ? `${intentSummary.replace(/\.$/, "")}. The language model is offline until ${missing} is set.`
+        : `I'm offline at the moment, boss — set ${missing}.`,
     };
     return;
   }
@@ -232,18 +236,20 @@ export async function* streamChatCompletion(
       }
       const status = err?.status ?? err?.response?.status;
       const msg = err?.message || "";
-      if (!failedOver && chain.fallback?.apiKey && shouldFailover(status, msg)) {
-        failedOver = true;
-        endpoint = chain.fallback;
+      const reason = failoverReason(status, msg);
+      tried.push({ label: endpoint.label, reason });
+      const next = chain.endpoints[cursor + 1];
+      if (next && shouldFailover(status, msg)) {
+        console.warn(`[FRIDAY LLM] ${endpoint.label} ${reason}. Using ${next.label}.`);
+        cursor += 1;
+        endpoint = next;
         active = endpointClient(endpoint);
-        console.warn(`[FRIDAY LLM] ${chain.primary.label} unavailable (${status || "network"}). Using ${endpoint.label}.`);
         round -= 1;
         continue;
       }
-      if (status === 429 || /rate.?limit|quota/i.test(msg)) {
-        yield { type: "text", content: "Hang on a tick, boss — I'm being rate-limited. Try me again in a few seconds." };
-      } else if (status === 401 || status === 403 || /credit|billing|insufficient/i.test(msg)) {
-        yield { type: "text", content: `My ${endpoint.label} key's out of credits, boss. Top it up and I'm back.` };
+      if (shouldFailover(status, msg)) {
+        const notice = exhaustedBrainMessage(tried, chain.missing.map((item) => item.env));
+        yield { type: "text", content: notice };
       } else {
         if ((status === 400 || status === 422) && round > 0) {
           const spoken = speechFromToolMessages(openaiMessages);
@@ -474,20 +480,22 @@ export async function simpleCompletion(
   options?: { model?: string; allowFailover?: boolean }
 ): Promise<string> {
   const chain = resolveLlmChain(process.env);
-  const picked = activeEndpoint(chain);
-  if (!picked) throw new Error("No LLM API key configured");
-  const endpoint = options?.model ? { ...picked.endpoint, model: options.model } : picked.endpoint;
-  try {
-    return await completeOnce(endpointClient(endpoint), endpoint, systemPrompt, userPrompt, maxTokens);
-  } catch (err) {
-    const status = (err as { status?: number }).status;
-    const message = (err as Error).message || "";
-    const allowFailover = options?.allowFailover !== false && !options?.model;
-    if (allowFailover && !picked.failedOver && chain.fallback?.apiKey && shouldFailover(status, message)) {
-      return completeOnce(endpointClient(chain.fallback), chain.fallback, systemPrompt, userPrompt, maxTokens);
+  if (!chain.endpoints.length) throw new Error("No LLM API key configured");
+  const allowFailover = options?.allowFailover !== false && !options?.model;
+  const list = allowFailover ? chain.endpoints : [chain.endpoints[0]];
+  let lastError: unknown;
+  for (const endpoint of list) {
+    const target = options?.model ? { ...endpoint, model: options.model } : endpoint;
+    try {
+      return await completeOnce(endpointClient(target), target, systemPrompt, userPrompt, maxTokens);
+    } catch (err) {
+      lastError = err;
+      const status = (err as { status?: number }).status;
+      const message = (err as Error).message || "";
+      if (!shouldFailover(status, message)) throw err;
     }
-    throw err;
   }
+  throw lastError instanceof Error ? lastError : new Error("No LLM API key configured");
 }
 
 export function getLLMInfo(): {

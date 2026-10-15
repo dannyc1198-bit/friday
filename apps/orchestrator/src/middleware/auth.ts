@@ -104,6 +104,7 @@ const LOCALHOST_READ_PREFIXES = [
   "/api/upkeep",
   "/api/neural",
   "/api/setup",
+  "/api/settings",
   "/api/voice/live",
   "/api/voice/elevenlabs",
   "/api/learning/",

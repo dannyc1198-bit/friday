@@ -5,10 +5,12 @@
 //   (changelog 2026-06-08: default moved off the deprecated elevenlabs provider)
 // - turn_model turn_v3 is the built-in turn-taking / barge-in stack
 // - Custom LLM is an OpenAI chat-completions URL, llm value custom-llm
+// - builtinLlm uses an ElevenLabs-hosted model and does not need a public URL
 
 export const CONVERSATIONAL_TTS_MODEL = "eleven_v3_conversational";
 export const SCRIBE_V2_REALTIME_PROVIDER = "scribe_realtime";
 export const DANIEL_VOICE_ID = "onwK4e9ZLuTAKqWW03F9";
+export const ELEVENLABS_BUILTIN_LLM = "gemini-2.5-flash";
 
 const BUTLER_PROMPT = [
   "You are Friday, Daniel's assistant.",
@@ -17,19 +19,13 @@ const BUTLER_PROMPT = [
   "Never send a message, spend money, or place a live trade. Those stay drafts.",
 ].join(" ");
 
-export function buildElevenLabsAgentPatch(input: {
-  voiceId: string;
-  customLlmUrl: string;
-  secretId?: string;
-  modelId?: string;
-}): Record<string, unknown> {
-  const customLlm: Record<string, unknown> = {
-    url: input.customLlmUrl,
-    model_id: input.modelId || "friday",
-    api_type: "chat_completions",
-  };
-  if (input.secretId) customLlm.api_key = { secret_id: input.secretId };
+const BUILTIN_PROMPT = [
+  "You are Friday, Daniel's assistant.",
+  "Speak as a refined British butler: calm, brief, and concrete.",
+  "Never send a message, spend money, or place a live trade. Those stay drafts.",
+].join(" ");
 
+function conversationShell(voiceId: string, prompt: Record<string, unknown>): Record<string, unknown> {
   return {
     conversation_config: {
       asr: {
@@ -42,7 +38,7 @@ export function buildElevenLabsAgentPatch(input: {
       },
       tts: {
         model_id: CONVERSATIONAL_TTS_MODEL,
-        voice_id: input.voiceId,
+        voice_id: voiceId,
         expressive_mode: true,
       },
       conversation: {
@@ -58,12 +54,37 @@ export function buildElevenLabsAgentPatch(input: {
       agent: {
         first_message: "",
         language: "en",
-        prompt: {
-          prompt: BUTLER_PROMPT,
-          llm: "custom-llm",
-          custom_llm: customLlm,
-        },
+        prompt,
       },
     },
   };
+}
+
+export function buildElevenLabsAgentPatch(input: {
+  voiceId: string;
+  customLlmUrl?: string;
+  secretId?: string;
+  modelId?: string;
+  /** ElevenLabs-hosted model id. When set, no public custom-LLM URL is sent. */
+  builtinLlm?: string;
+}): Record<string, unknown> {
+  if (input.builtinLlm) {
+    return conversationShell(input.voiceId, {
+      prompt: BUILTIN_PROMPT,
+      llm: input.builtinLlm,
+    });
+  }
+
+  const customLlm: Record<string, unknown> = {
+    url: input.customLlmUrl || "",
+    model_id: input.modelId || "friday",
+    api_type: "chat_completions",
+  };
+  if (input.secretId) customLlm.api_key = { secret_id: input.secretId };
+
+  return conversationShell(input.voiceId, {
+    prompt: BUTLER_PROMPT,
+    llm: "custom-llm",
+    custom_llm: customLlm,
+  });
 }

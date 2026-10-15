@@ -35,6 +35,7 @@ import { upkeepRoutes } from "./routes/upkeep.js";
 import { liveVoiceRoutes } from "./routes/live-voice.js";
 import { neuralRoutes } from "./routes/neural.js";
 import { setupRoutes } from "./routes/setup.js";
+import { brainSettingsRoutes } from "./routes/brain-settings.js";
 import { recordIncident } from "./services/upkeep/runtime.js";
 import { isMisfire } from "./services/upkeep/guards.js";
 import { getBootId } from "./services/greeting.js";
@@ -232,6 +233,7 @@ await app.register(upkeepRoutes);
 await app.register(liveVoiceRoutes);
 await app.register(neuralRoutes);
 await app.register(setupRoutes);
+await app.register(brainSettingsRoutes);
 await app.register(proactiveAlertsRoutes);
 
 initializeTools();

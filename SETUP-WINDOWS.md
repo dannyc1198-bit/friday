@@ -32,7 +32,7 @@ Secrets live only in gitignored env files.
 | `GROK_BOTS` | No | See the exact format below. Dots on the Agents tab |
 | `GROK_BOT_TOKEN` | No | Optional bearer sent to those bot URLs |
 | `OPENAI_API_KEY` | Brain and Realtime voice | Codex CLI can use its own `codex` login instead. Brain model override: `OPENAI_MODEL` (default `gpt-5.4`). Reflection override: `FRIDAY_REFLECT_MODEL` (default `gpt-5.4-mini`). See `docs/MODELS.md` |
-| `ANTHROPIC_API_KEY` | No | Claude Code CLI can use its own `claude` login instead |
+| `ANTHROPIC_API_KEY` | No | Unused. Coding goes to Codex, then the Grok code model. |
 | `XAI_API_KEY` | Fallback brain | xAI Grok API. Model override: `XAI_MODEL` (default `grok-4.7`). Needs key until set |
 | `MESHY_API_KEY` | No | Text-to-3D and image-to-3D. HUD shows needs key until set |
 | `HF_API_KEY_ID` and `HF_API_KEY_SECRET` | No | Higgsfield. Or one line `HIGGSFIELD_API_KEY=id:secret` |
@@ -88,7 +88,7 @@ npm run dev
 
 Health: http://127.0.0.1:3001/api/health
 
-The **Agents** tab lists Grok bots as dots plus Codex, Claude Code, and xAI. Integrations that still need a key are listed on Today and Agents. The older roster page is still http://127.0.0.1:3000/hud/agent-roster
+The **Agents** tab lists Grok bots as dots plus Codex and the Grok code model. Integrations that still need a key are listed on Today and Agents. The older roster page is still http://127.0.0.1:3000/hud/agent-roster
 
 ## 4. Voice
 
@@ -123,7 +123,7 @@ Do not commit commercial music. Startup no longer plays the old boot voice clip.
 
 The vault is the memory. `FRIDAY_BRAIN/DANNY-PROFILE.md` is pinned into every prompt (who Danny is, businesses, rules). Other `FRIDAY_BRAIN/` root notes are loaded too. Search prefers current notes over `archive/`. `brain_remember` writes entity notes under `FRIDAY_BRAIN/entities/`. After a conversation, stated goals, preferences, and decisions are written back, dated and deduped. Identity lines such as a business or a name are proposed in `FRIDAY_BRAIN/proposals/DANNY-PROFILE.md` and are not copied into the profile. Anything that would send, spend, or trade is appended to `FRIDAY_BRAIN/drafts/pending-approval.md` and not executed. Nightly reflection at 21:30 writes what was learned and what Friday should improve.
 
-The **Learn** tab shows that feed and the self-repair queue. The **Neural Core** tab is a live graph of real activity: notes `brain_recall` found, tools that ran, facts written, and repair events. It is a reading of that activity. The language model and the vault do the reasoning. A small copy of the graph sits on Today. The thinking loop is off until you press **Arm thinking**. It reviews recent chats at most 4 times a day, 30 minutes apart, writes dated notes to `FRIDAY_BRAIN/insights/`, and proposes profile lines in `FRIDAY_BRAIN/proposals/DANNY-PROFILE.md`. It does not edit `DANNY-PROFILE.md`, and it does not send, spend, or trade. `FRIDAY_THINKING=1` arms the loop at boot. Runtime errors, failed tools, and reported misfires are journaled in `FRIDAY_BRAIN/health/`. The third identical failure asks Claude Code or Codex for a fix on a new `friday/fix-` branch. Tests have to pass. Approve or Reject is on that tab. Friday does not merge into `main` or `master`, does not push before approval, and does not commit `.env` or other secrets. A failed health check after a merge resets that branch tip back to the recorded commit. At most three repair attempts per day. Set `FRIDAY_HEALTHCHECK=1` before the nightly check will run `npx tsc --noEmit`. `FRIDAY_HEALTHCHECK_TESTS=1` adds `npm test`.
+The **Learn** tab shows that feed and the self-repair queue. The **Neural Core** tab is a live graph of real activity: notes `brain_recall` found, tools that ran, facts written, and repair events. It is a reading of that activity. The language model and the vault do the reasoning. A small copy of the graph sits on Today. The thinking loop is off until you press **Arm thinking**. It reviews recent chats at most 4 times a day, 30 minutes apart, writes dated notes to `FRIDAY_BRAIN/insights/`, and proposes profile lines in `FRIDAY_BRAIN/proposals/DANNY-PROFILE.md`. It does not edit `DANNY-PROFILE.md`, and it does not send, spend, or trade. `FRIDAY_THINKING=1` arms the loop at boot. Runtime errors, failed tools, and reported misfires are journaled in `FRIDAY_BRAIN/health/`. The third identical failure asks Codex for a fix on a new `friday/fix-` branch. Tests have to pass. Approve or Reject is on that tab. Friday does not merge into `main` or `master`, does not push before approval, and does not commit `.env` or other secrets. A failed health check after a merge resets that branch tip back to the recorded commit. At most three repair attempts per day. Set `FRIDAY_HEALTHCHECK=1` before the nightly check will run `npx tsc --noEmit`. `FRIDAY_HEALTHCHECK_TESTS=1` adds `npm test`.
 
 Chat memory does not need Chroma. Leave `CHROMA_ENABLED` empty. A file under `apps\orchestrator\data\memory` holds chat snippets. The boot log says which backend is in use.
 

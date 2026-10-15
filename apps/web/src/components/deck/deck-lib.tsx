@@ -62,7 +62,8 @@ export function toolLabel(tool: string): string {
   if (tool.startsWith("browser")) return "BROWSER";
   if (tool.startsWith("task")) return "TASKS";
   if (tool.startsWith("vault")) return "KEYS";
-  if (tool === "delegate_to_claude_code") return "CODE AGENT";
+  if (tool === "route_agent_task") return "CODE AGENT";
+  if (tool === "set_brain_provider") return "BRAIN";
   return tool.replace(/_/g, " ").toUpperCase().slice(0, 18);
 }
 

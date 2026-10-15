@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "os";
 import path from "path";
 import { spawn } from "node:child_process";
+import { gitResetHardArgs } from "../agents/command.js";
 import {
   canMergeInto,
   fixTaskPrompt,
@@ -129,8 +130,8 @@ export function createRepairService(deps: RepairDeps) {
     const baseBranch = await deps.git.currentBranch();
     const baseSha = await deps.git.headSha();
     const agents = await deps.listAgents();
-    const agent = agents.find((item) => (item.id === "claude-code" || item.id === "codex") && item.canDispatch);
-    if (!agent) return blocked("blocked", "Claude Code and Codex are offline. Nothing was branched.", baseBranch, baseSha);
+    const agent = agents.find((item) => item.id === "codex" && item.canDispatch);
+    if (!agent) return blocked("blocked", "Codex is offline. Nothing was branched.", baseBranch, baseSha);
 
     const repair: Repair = {
       id: `repair-${Date.now()}`,
@@ -362,8 +363,7 @@ export function gitOps(cwd: string): GitOps {
       await git(["merge", "--no-ff", "--no-edit", branch]);
     },
     resetHard: async (sha) => {
-      if (!/^[0-9a-f]{7,40}$/i.test(sha)) throw new Error("Refusing to reset to an unexpected sha.");
-      await git(["reset", "--hard", sha]);
+      await git(gitResetHardArgs(sha));
     },
     push: async (branch) => {
       if (!isFixBranch(branch)) throw new Error("Refusing to push anything except a friday/fix- branch.");

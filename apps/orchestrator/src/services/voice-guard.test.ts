@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveLlmChain, shouldFailover, xaiBaseUrl } from "./llm-chain.js";
+import { exhaustedBrainMessage, resolveLlmChain, shouldFailover, xaiBaseUrl } from "./llm-chain.js";
 import { resolveModelRoles } from "./model-roles.js";
 import { buildSetupChecks } from "./setup-status.js";
 import { buildElevenLabsAgentPatch, CONVERSATIONAL_TTS_MODEL, SCRIBE_V2_REALTIME_PROVIDER } from "./elevenlabs-agent.js";
@@ -8,23 +8,34 @@ import { selectLiveVoice } from "./voice-plan.js";
 import { realtimeClientSecretBody } from "../routes/live-voice.js";
 import { noticesFromRealtimeEvent } from "./realtime-events.js";
 
-test("the default brain is OpenAI with an xAI fallback, and a 400 stays put", () => {
-  const chain = resolveLlmChain({ OPENAI_API_KEY: "sk-test", XAI_API_KEY: "xai-test" });
-  assert.equal(chain.primary.id, "openai");
-  assert.equal(chain.primary.model, "gpt-5.4");
-  assert.equal(chain.fallback?.id, "xai");
-  assert.equal(chain.fallback?.model, "grok-4.7");
-  assert.equal(chain.fallback?.baseURL, "https://api.x.ai/v1");
+test("the default brain is OpenAI, then xAI, then Gemini, and a 400 stays put", () => {
+  const chain = resolveLlmChain(
+    { OPENAI_API_KEY: "sk-test", XAI_API_KEY: "xai-test", GEMINI_API_KEY: "gem-test" },
+    { settingsFile: null }
+  );
+  assert.deepEqual(chain.endpoints.map((item) => item.id), ["openai", "xai", "gemini"]);
+  assert.equal(chain.endpoints[0].model, "gpt-5.4");
+  assert.equal(chain.endpoints[1].model, "grok-4.7");
+  assert.equal(chain.endpoints[1].baseURL, "https://api.x.ai/v1");
   assert.equal(shouldFailover(400, "invalid json"), false);
   assert.equal(shouldFailover(422, "bad request"), false);
   assert.equal(shouldFailover(429, "insufficient_quota"), true);
+  assert.equal(shouldFailover(429, "credit_balance_exhausted"), true);
   assert.equal(shouldFailover(503, "unavailable"), true);
   assert.equal(shouldFailover(undefined, "bad request 400"), false);
 
-  const gemini = resolveLlmChain({ FRIDAY_LLM_PROVIDER: "gemini", GEMINI_API_KEY: "gem" });
-  assert.equal(gemini.primary.id, "gemini");
-  assert.equal(gemini.fallback, null);
+  const pinned = resolveLlmChain(
+    { FRIDAY_LLM_PROVIDER: "gemini", GEMINI_API_KEY: "gem", OPENAI_API_KEY: "sk-test" },
+    { settingsFile: null }
+  );
+  assert.equal(pinned.endpoints[0].id, "gemini");
+  assert.equal(pinned.endpoints[1].id, "openai");
   assert.equal(xaiBaseUrl({ XAI_BASE_URL: "https://api.x.ai/v1/chat/completions" }), "https://api.x.ai/v1");
+
+  const skipped = resolveLlmChain({ XAI_API_KEY: "xai-test" }, { settingsFile: null });
+  assert.deepEqual(skipped.endpoints.map((item) => item.id), ["xai"]);
+  assert.ok(skipped.missing.some((item) => item.env === "OPENAI_API_KEY"));
+  assert.ok(skipped.missing.some((item) => item.env === "GEMINI_API_KEY"));
 });
 
 test("the ElevenLabs agent patch keeps Friday's brain and does not embed a key", () => {
@@ -49,6 +60,14 @@ test("the ElevenLabs agent patch keeps Friday's brain and does not embed a key",
   assert.equal(config.agent.prompt.custom_llm.url, "https://friday.example/v1/chat/completions");
   assert.equal(config.agent.prompt.custom_llm.api_key.secret_id, "secret_123");
   assert.equal(JSON.stringify(patch).includes("sk-"), false);
+
+  const builtin = buildElevenLabsAgentPatch({
+    voiceId: "onwK4e9ZLuTAKqWW03F9",
+    builtinLlm: "gemini-2.5-flash",
+  }) as { conversation_config: { agent: { prompt: { llm: string; custom_llm?: unknown } } } };
+  assert.equal(builtin.conversation_config.agent.prompt.llm, "gemini-2.5-flash");
+  assert.equal(builtin.conversation_config.agent.prompt.custom_llm, undefined);
+  assert.equal(JSON.stringify(builtin).includes("http"), false);
 });
 
 test("live voice prefers ElevenLabs and falls back to realtime, then the browser", () => {
@@ -65,9 +84,23 @@ test("live voice prefers ElevenLabs and falls back to realtime, then the browser
   assert.equal(realtime.realtimeModel, "gpt-realtime-2.1");
   assert.equal(realtime.realtimeVoice, "cedar");
 
-  const browser = selectLiveVoice({});
-  assert.equal(browser.mode, "browser");
-  assert.match(browser.note, /speaks/);
+  const spoken = selectLiveVoice({ ELEVENLABS_API_KEY: "el" });
+  assert.equal(spoken.mode, "speak");
+  assert.match(spoken.note, /ElevenLabs voice/);
+  assert.match(spoken.note, /Edge/);
+  assert.doesNotMatch(spoken.note, /browser/);
+
+  const edge = selectLiveVoice({});
+  assert.equal(edge.mode, "speak");
+  assert.match(edge.note, /Edge/);
+
+  const quota = exhaustedBrainMessage(
+    [{ label: "OpenAI", reason: "quota exhausted" }],
+    ["XAI_API_KEY", "GEMINI_API_KEY"]
+  );
+  assert.match(quota, /quota exhausted/);
+  assert.match(quota, /OPENAI|XAI_API_KEY/);
+  assert.doesNotMatch(quota, /try me again/i);
 });
 
 test("realtime notices keep the transcript and the tool call, and the session asks for speech", () => {
