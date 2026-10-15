@@ -21,6 +21,7 @@ import { registerObsidianTools } from "./obsidian.js";
 import { registerClaudeCodeTools } from "./claude-code.js";
 import { registerAgentRouterTools } from "./agent-router.js";
 import { registerBrainTools } from "./brain-tools.js";
+import { registerCreativeTools } from "./creative.js";
 import { registerAppControlTools } from "./app-control.js";
 import { registerProceduralSkillTools } from "./procedural-skills.js";
 import { toolRegistry } from "./registry.js";
@@ -46,6 +47,9 @@ export function initializeTools(): void {
   registerBrainTools();
   registerProceduralSkillTools();
   console.log("  ✓ Brain (recall / remember / reflect — the learning loop)");
+
+  registerCreativeTools();
+  console.log("  ✓ Creative (Meshy, Blender, Higgsfield)");
 
   registerClaudeCodeTools();
   registerAgentRouterTools();

@@ -96,6 +96,10 @@ function safeCompare(a: string, b: string): boolean {
 const LOCALHOST_READ_PREFIXES = [
   "/api/system/",
   "/api/agents/",
+  "/api/media",
+  "/api/greeting",
+  "/api/today",
+  "/api/integrations",
   "/api/learning/",
   "/api/proactive/",
   "/api/market/",
@@ -149,12 +153,17 @@ export async function authMiddleware(
     return;
   }
 
+  // The HUD claims the boot greeting and marks it heard from localhost.
+  if (isLocalhost(request) && (path === "/api/greeting" || path === "/api/greeting/heard")) {
+    return;
+  }
+
   // Allow same-machine HUD reads on whitelisted prefixes.
   // Method must be GET (no mutations); IP must be local loopback.
   if (
     request.method === "GET" &&
     isLocalhost(request) &&
-    (path === "/api/agents" || LOCALHOST_READ_PREFIXES.some((p) => path.startsWith(p)))
+    (path === "/api/agents" || path === "/api/greeting" || LOCALHOST_READ_PREFIXES.some((p) => path.startsWith(p)))
   ) {
     return;
   }

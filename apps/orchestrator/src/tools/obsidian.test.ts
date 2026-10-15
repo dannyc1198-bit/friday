@@ -19,6 +19,7 @@ process.env.OBSIDIAN_VAULT_PATH = root;
 const { toolRegistry } = await import("./registry.js");
 const { registerObsidianTools } = await import("./obsidian.js");
 const brain = await import("../services/brain.js");
+const { loadCoreProfile } = await import("../services/profile.js");
 
 registerObsidianTools();
 
@@ -68,4 +69,18 @@ test("brain indexes the fixture vault and writes an entity note", async () => {
   assert.equal(remembered.created, true);
   const entity = readFileSync(path.join(root, "FRIDAY_BRAIN", "entities", "Fixture Relay.md"), "utf8");
   assert.match(entity, /fixture vault accepts write-back/);
+
+  const profile = loadCoreProfile();
+  assert.equal(profile.found, true);
+  assert.match(profile.text, /Wavelength Solutions/);
+  assert.match(profile.text, /Ally Wellness Group/);
+  assert.match(profile.text, /Drafts only/);
+
+  const businesses = brain.searchBrain("What are my businesses and products?");
+  assert.ok(businesses.length > 0);
+  assert.equal(businesses.some((hit) => hit.notePath.includes("archive/")), false);
+  assert.ok(businesses.some((hit) => hit.notePath === "FRIDAY_BRAIN/entities/wavelength.md"));
+
+  const enagic = brain.searchBrain("Who is Russell Ally and what is my Enagic goal?");
+  assert.equal(enagic[0]?.notePath, "FRIDAY_BRAIN/entities/enagic.md");
 });

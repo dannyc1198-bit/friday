@@ -12,6 +12,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "fs";
 import { join } from "path";
 import { DATA_DIR } from "./runtime-paths.js";
+import { collapseAlerts, isDuplicateAlert } from "./alert-dedupe.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ interface QuietMode {
 }
 
 class ProactiveMonitor {
-  private alertQueue: ProactiveAlert[] = this.loadAlerts();
+  private alertQueue: ProactiveAlert[] = collapseAlerts(this.loadAlerts());
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private alertsThisHour = 0;
   private hourResetTime = Date.now() + 60 * 60 * 1000;
@@ -172,6 +173,7 @@ class ProactiveMonitor {
     alert: Omit<ProactiveAlert, "id" | "timestamp" | "read">,
     checkKey: string
   ): void {
+    if (isDuplicateAlert(this.alertQueue, alert.title, new Date().toISOString())) return;
     if (!this.canAlert()) return;
     if (!this.passesQuietFilter(alert.priority)) {
       console.log(`[Proactive Monitor] Suppressed by quiet mode: [${alert.priority}] ${alert.title}`);

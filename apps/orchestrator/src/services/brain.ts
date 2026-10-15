@@ -131,6 +131,10 @@ function isAlwaysLoadedCore(rel: string): boolean {
   return rel.startsWith("FRIDAY_BRAIN/") && !rel.slice("FRIDAY_BRAIN/".length).includes("/");
 }
 
+export function isArchivePath(notePath: string): boolean {
+  return /(^|\/)archive\//i.test(notePath.replace(/\\/g, "/"));
+}
+
 /** Split a note into heading-scoped chunks (smart-connections style). */
 export function chunkNote(rel: string, raw: string): BrainChunk[] {
   const noteName = path.basename(rel, ".md");
@@ -275,17 +279,34 @@ export function stopBrain(): void {
 
 // ─── Retrieval ──────────────────────────────────────────────────
 
+export function rankBrainHits(hits: BrainHit[], query: string, limit = 6): BrainHit[] {
+  const wantArchive = /\b(archive|history|historical|used to|old notes?)\b/i.test(query);
+  const ranked = hits.map((hit) => {
+    let score = hit.score;
+    if (isArchivePath(hit.notePath)) score *= wantArchive ? 1.1 : 0.15;
+    else score *= 1.25;
+    const notePath = hit.notePath.replace(/\\/g, "/");
+    if (notePath.startsWith("FRIDAY_BRAIN/entities/")) score *= 1.15;
+    return { ...hit, score: Math.round(score * 100) / 100 };
+  });
+  ranked.sort((a, b) => b.score - a.score);
+  const fresh = ranked.filter((hit) => !isArchivePath(hit.notePath));
+  const pool = !wantArchive && fresh.length > 0 ? fresh : ranked;
+  return pool.slice(0, Math.min(Math.max(1, limit), 20));
+}
+
 export function searchBrain(query: string, limit = 6): BrainHit[] {
   const q = (query || "").trim();
   if (q.length < 2) return [];
-  const results = mini.search(q).slice(0, Math.min(Math.max(1, limit), 20));
-  return results.map((r) => ({
+  const results = mini.search(q).slice(0, 40);
+  const hits = results.map((r) => ({
     notePath: r.notePath as string,
     noteName: r.noteName as string,
     heading: (r.heading as string) || "",
     snippet: ((r.text as string) || "").slice(0, 400),
     score: Math.round(r.score * 100) / 100,
   }));
+  return rankBrainHits(hits, q, limit);
 }
 
 /**

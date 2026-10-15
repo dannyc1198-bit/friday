@@ -17,7 +17,7 @@ import NeuralBrain from "./NeuralBrain";
 const BOOT_LINES = [
   "NEURAL CORE .............. ONLINE",
   "VAULT LINK ............... ESTABLISHED",
-  "TOOL MODULES ............. 54 LOADED",
+  "TOOL MODULES ............. REGISTERED",
   "VOICE SYNTHESIS .......... CALIBRATED",
   "SCHEDULER ................ ARMED",
   "SENSOR ARRAY ............. SWEEPING",
@@ -31,60 +31,120 @@ const FADE_MS = 900; // overlay fade-out duration
 
 type Phase = "pending" | "waiting" | "booting" | "fading" | "done";
 
-export default function BootSequence() {
+const GREETING = "Hey Daniel, how's it going boss? What do we need to do today?";
+
+export default function BootSequence({ onFinished }: { onFinished?: () => void }) {
   const [phase, setPhase] = useState<Phase>("pending");
   const [lineCount, setLineCount] = useState(0);
+  const [wakeBlob, setWakeBlob] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
   const started = useRef(false);
+  const finished = useRef(false);
+  const greetingKey = useRef("fridayGreeting:local");
+  const greetingAudio = useRef<HTMLAudioElement | null>(null);
+
+  const finish = useCallback(() => {
+    if (finished.current) return;
+    finished.current = true;
+    onFinished?.();
+  }, [onFinished]);
 
   useEffect(() => {
-    try {
-      setPhase(sessionStorage.getItem("fridayBooted") === "1" ? "done" : "waiting");
-    } catch {
-      setPhase("waiting");
-    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const meta = await fetch("/api/greeting", { cache: "no-store" }).then((res) => res.json());
+        const key = `fridayGreeting:${meta.bootId || "offline"}`;
+        greetingKey.current = key;
+        if (sessionStorage.getItem(key) === "heard" || meta.status === "heard") {
+          sessionStorage.setItem(key, "heard");
+          if (!cancelled) setPhase("done");
+          return;
+        }
+        const claimed = await fetch("/api/greeting", { method: "POST" });
+        if (cancelled) return;
+        if (claimed.status === 204) {
+          sessionStorage.setItem(key, "heard");
+          setPhase("done");
+          return;
+        }
+        const type = claimed.headers.get("content-type") || "";
+        if (!type.includes("audio")) {
+          setPhase("waiting");
+          return;
+        }
+        const url = URL.createObjectURL(await claimed.blob());
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        const audio = new Audio(url);
+        greetingAudio.current = audio;
+        audio.onended = () => URL.revokeObjectURL(url);
+        try {
+          await audio.play();
+          if (cancelled) {
+            audio.pause();
+            return;
+          }
+          sessionStorage.setItem(key, "heard");
+          fetch("/api/greeting/heard", { method: "POST" }).catch(() => {});
+          if (!cancelled) startVisual();
+        } catch {
+          if (!cancelled) {
+            setWakeBlob(url);
+            setPhase("waiting");
+          }
+        }
+      } catch {
+        if (!cancelled) setPhase("waiting");
+      }
+    })();
     const t = timers.current;
-    return () => t.forEach((id) => window.clearTimeout(id));
+    return () => {
+      cancelled = true;
+      greetingAudio.current?.pause();
+      t.forEach((id) => window.clearTimeout(id));
+    };
+    // startVisual is stable enough for this mount; the greeting must claim once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const begin = useCallback(() => {
-    if (started.current) return;
+  const startVisual = useCallback(() => {
+    if (started.current) {
+      finish();
+      return;
+    }
     started.current = true;
     setPhase("booting");
-
-    // Audio chain: SFX → (ended) → voice line. Every step failure-tolerant.
-    const sfx = new Audio("/audio/friday-boot-sfx.mp3");
-    const voice = new Audio("/audio/friday-boot-voice.mp3");
-    let voiceStarted = false;
-    const startVoice = () => {
-      if (voiceStarted) return;
-      voiceStarted = true;
-      voice.play().catch(() => {});
-    };
-    sfx.addEventListener("ended", startVoice);
-    sfx.addEventListener("error", startVoice);
-    sfx.play().catch(startVoice);
-
-    // Cascading boot log
     BOOT_LINES.forEach((_, i) => {
-      timers.current.push(
-        window.setTimeout(() => setLineCount(i + 1), FIRST_LINE_MS + i * LINE_MS)
-      );
+      timers.current.push(window.setTimeout(() => setLineCount(i + 1), FIRST_LINE_MS + i * LINE_MS));
     });
-
     const total = FIRST_LINE_MS + BOOT_LINES.length * LINE_MS + HOLD_MS;
-    timers.current.push(
-      window.setTimeout(() => {
-        try {
-          sessionStorage.setItem("fridayBooted", "1");
-        } catch {
-          /* private mode — boot will just replay next load */
-        }
-        setPhase("fading");
-      }, total)
-    );
-    timers.current.push(window.setTimeout(() => setPhase("done"), total + FADE_MS));
-  }, []);
+    timers.current.push(window.setTimeout(() => setPhase("fading"), total));
+    timers.current.push(window.setTimeout(() => {
+      setPhase("done");
+      finish();
+    }, total + FADE_MS));
+  }, [finish]);
+
+  const wake = useCallback(() => {
+    if (!wakeBlob) {
+      startVisual();
+      return;
+    }
+    const audio = new Audio(wakeBlob);
+    audio.onended = () => URL.revokeObjectURL(wakeBlob);
+    audio.play().then(() => {
+      try {
+        sessionStorage.setItem(greetingKey.current, "heard");
+      } catch { /* private mode */ }
+      fetch("/api/greeting/heard", { method: "POST" }).catch(() => {});
+      startVisual();
+    }).catch(() => {
+      startVisual();
+    });
+  }, [startVisual, wakeBlob]);
 
   if (phase === "done") return null;
 
@@ -96,9 +156,9 @@ export default function BootSequence() {
         phase === "fading" ? "opacity-0" : "opacity-100"
       }`}
       style={{ background: "#020a14", transitionDuration: `${FADE_MS}ms` }}
-      onClick={phase === "waiting" ? begin : undefined}
+      onClick={phase === "waiting" ? wake : undefined}
       role={phase === "waiting" ? "button" : undefined}
-      aria-label={phase === "waiting" ? "Initialize FRIDAY" : undefined}
+      aria-label={phase === "waiting" ? "Wake Friday" : undefined}
     >
       {/* Neural web fades in behind the boot log */}
       <div
@@ -154,7 +214,10 @@ export default function BootSequence() {
             className="animate-pulse font-mono text-xs uppercase tracking-[0.4em]"
             style={{ color: "var(--fri-accent)" }}
           >
-            Tap to initialize
+            Wake Friday
+          </p>
+          <p className="max-w-md text-center font-body text-sm" style={{ color: "var(--fri-text-dim)" }}>
+            {GREETING}
           </p>
         </div>
       )}

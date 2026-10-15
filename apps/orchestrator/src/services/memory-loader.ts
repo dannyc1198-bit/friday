@@ -7,6 +7,7 @@ import { join, basename } from "path";
 import { DATA_DIR, REPO_ROOT, localDateKey } from "./runtime-paths.js";
 
 import { getBrainDir } from "./vault-config.js";
+import { PROFILE_FILENAME, formatCoreProfile } from "./profile.js";
 
 // ─── OBSIDIAN BRAIN (Danny's living second brain) ────────────
 // Replaces MASTER_MEMORY.md as of 2026-05-04. Source of truth lives in
@@ -31,7 +32,7 @@ function loadObsidianBrain(): string {
 
   try {
     const files = readdirSync(getBrainDir())
-      .filter((f) => f.endsWith(".md"))
+      .filter((f) => f.endsWith(".md") && f !== PROFILE_FILENAME)
       .sort();
 
     const sections: string[] = [];
@@ -245,6 +246,9 @@ function loadRecentFacts(days: number): string {
 
 export function buildFullMemoryContext(): string {
   const parts: string[] = [];
+
+  // 0. Pinned identity. Current businesses live here, not in archive/.
+  parts.push(formatCoreProfile());
 
   // 1. Obsidian brain (Danny's living second brain — FRIDAY_BRAIN/*.md)
   const brain = loadObsidianBrain();

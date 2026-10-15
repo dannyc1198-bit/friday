@@ -16,6 +16,7 @@ import OpenAI from "openai";
 import { FRIDAY_SYSTEM_PROMPT } from "../config/index.js";
 import type { Message, StreamChunk } from "../types/index.js";
 import { toolRegistry } from "../tools/registry.js";
+import { classifyIntent, parseToolArguments, resolveToolCall } from "./intent-router.js";
 
 // ─── Provider selection ─────────────────────────────────────────────
 // Order of resolution:
@@ -162,6 +163,14 @@ function toOpenAIMessages(messages: Message[], systemPrompt: string): ChatMessag
   return result;
 }
 
+function publicLlmError(status: number | undefined, message: string): string {
+  const clean = (message || "the model connection failed")
+    .replace(/sk-[a-zA-Z0-9_-]+/g, "sk-…")
+    .replace(/Bearer\s+\S+/gi, "Bearer …")
+    .slice(0, 180);
+  return `I couldn't finish that${status ? ` (${status})` : ""}: ${clean}`;
+}
+
 // ─── Streaming chat completion with agentic tool loop ─
 
 export async function* streamChatCompletion(
@@ -169,20 +178,44 @@ export async function* streamChatCompletion(
   signal?: AbortSignal,
   systemPromptExtras?: string
 ): AsyncGenerator<StreamChunk> {
-  if (!apiKey) {
-    yield {
-      type: "text",
-      content: "I'm offline at the moment, boss — no API key set. Add one to apps/orchestrator/.env.",
-    };
-    return;
-  }
-
   const systemPrompt =
     FRIDAY_SYSTEM_PROMPT +
     (systemPromptExtras && systemPromptExtras.trim() ? "\n\n" + systemPromptExtras : "");
   const openaiMessages = toOpenAIMessages(messages, systemPrompt);
   const tools = getOpenAITools();
+  const knownTools = tools.map((tool) => tool.function.name);
+  const lastUser = [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
+  const intent = classifyIntent(typeof lastUser === "string" ? lastUser : "");
   let endedWantingTools = false;
+  let intentSummary: string | null = null;
+
+  if (intent.autoRun && intent.tool && knownTools.includes(intent.tool)) {
+    const result = await toolRegistry.execute(intent.tool, intent.args);
+    const data = result.data as { message?: string } | undefined;
+    intentSummary = data?.message || result.error || "Done.";
+    yield {
+      type: "tool_call",
+      toolCall: { id: "intent-0", toolName: intent.tool, parameters: intent.args },
+    };
+    yield {
+      type: "tool_result",
+      toolResult: { toolCallId: "intent-0", success: result.success, data: result.data, error: result.error },
+    };
+    openaiMessages.push({
+      role: "system",
+      content: `INTENT ROUTER already ran ${intent.tool}. ${JSON.stringify(result.data ?? result.error)}. Do not call it again. One sentence for Danny. Drafts only — do not send, spend, or trade.`,
+    });
+  }
+
+  if (!apiKey) {
+    yield {
+      type: "text",
+      content: intentSummary
+        ? `${intentSummary.replace(/\.$/, "")}. The language model is offline until an API key is in apps/orchestrator/.env.`
+        : "I'm offline at the moment, boss — no API key set. Add one to apps/orchestrator/.env.",
+    };
+    return;
+  }
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     if (signal?.aborted) {
@@ -209,7 +242,9 @@ export async function* streamChatCompletion(
       } else if (status === 401 || status === 403 || /credit|billing|insufficient/i.test(msg)) {
         yield { type: "text", content: `My ${PROVIDER_LABEL} key's out of credits, boss. Top it up and I'm back.` };
       } else {
-        yield { type: "text", content: "Connection's a bit rough right now, boss. Try that again." };
+        const reason = publicLlmError(status, msg);
+        yield { type: "error", content: reason };
+        yield { type: "text", content: reason };
         console.error("[FRIDAY LLM] stream error:", status, msg);
       }
       return;
@@ -255,9 +290,7 @@ export async function* streamChatCompletion(
       if (choice.finish_reason) finishReason = choice.finish_reason;
     }
 
-    const completedToolCalls = Object.values(partialToolCalls).filter(
-      (tc) => tc.id && tc.name
-    );
+    const completedToolCalls = Object.values(partialToolCalls).filter((tc) => tc.id);
 
     // Record this round's assistant turn so the next round (if any) has it
     // in conversation history.
@@ -268,7 +301,7 @@ export async function* streamChatCompletion(
         tool_calls: completedToolCalls.map((tc) => ({
           id: tc.id!,
           type: "function" as const,
-          function: { name: tc.name!, arguments: tc.argumentsJson || "{}" },
+          function: { name: tc.name || "unnamed", arguments: tc.argumentsJson || "{}" },
         })),
       });
     } else {
@@ -290,34 +323,36 @@ export async function* streamChatCompletion(
         return;
       }
 
-      let parsedInput: Record<string, unknown> = {};
-      try {
-        parsedInput = JSON.parse(tc.argumentsJson || "{}");
-      } catch {
-        // Protocol invariant: EVERY tool_call_id must get a role:"tool" reply,
-        // even on garbage JSON — otherwise the next round 400s on strict
-        // OpenAI-compat validators (Gemini/Anthropic). Tell the model so it
-        // can retry with valid arguments instead of looping blind.
-        console.error(`[FRIDAY] Malformed tool input JSON for ${tc.name}`);
+      const resolved = resolveToolCall(tc.name, knownTools, intent);
+      const visibleName = resolved.name || tc.name || "unnamed";
+      const parsed = parseToolArguments(tc.argumentsJson || "{}");
+      const historyName = resolved.name || (knownTools.includes("brain_recall") ? "brain_recall" : knownTools[0] || "brain_recall");
+      const assistantTurn = openaiMessages[openaiMessages.length - 1];
+      if (assistantTurn && assistantTurn.role === "assistant" && "tool_calls" in assistantTurn && assistantTurn.tool_calls) {
+        const recorded = assistantTurn.tool_calls.find((call) => call.id === tc.id);
+        if (recorded && recorded.type === "function") recorded.function.name = historyName;
+      }
+      yield {
+        type: "tool_call",
+        toolCall: { id: tc.id!, toolName: visibleName, parameters: parsed.ok ? parsed.value : {} },
+      };
+      if (!parsed.ok || !resolved.name) {
+        const error = !parsed.ok ? `${visibleName}: ${parsed.error}` : resolved.reason;
+        console.error(`[FRIDAY] ${error}`);
         yield {
           type: "tool_result",
-          toolResult: { toolCallId: tc.id!, success: false, error: "Malformed tool arguments JSON" },
+          toolResult: { toolCallId: tc.id!, success: false, error },
         };
         openaiMessages.push({
           role: "tool",
           tool_call_id: tc.id!,
-          content: JSON.stringify({ error: "Your tool arguments were not valid JSON. Retry this tool call with corrected arguments." }),
+          content: JSON.stringify({ error }),
         });
         continue;
       }
 
-      yield {
-        type: "tool_call",
-        toolCall: { id: tc.id!, toolName: tc.name!, parameters: parsedInput },
-      };
-
       try {
-        const result = await toolRegistry.execute(tc.name!, parsedInput);
+        const result = await toolRegistry.execute(resolved.name, parsed.value);
         yield {
           type: "tool_result",
           toolResult: {

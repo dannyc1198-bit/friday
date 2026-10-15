@@ -27,6 +27,12 @@ import { textToSpeech, isTTSAvailable } from "./services/tts.js";
 import { getActiveVoice } from "./services/voice-registry.js";
 import { resolveSpeechPlan } from "./services/speech-plan.js";
 import { agentRoutes } from "./routes/agents.js";
+import { mediaRoutes } from "./routes/media.js";
+import { greetingRoutes } from "./routes/greeting.js";
+import { todayRoutes } from "./routes/today.js";
+import { integrationRoutes } from "./routes/integrations.js";
+import { getBootId } from "./services/greeting.js";
+import { writeLearningsFromTurn } from "./services/learning-writeback.js";
 import {
   initializeMCPClients,
   shutdownMCPClients,
@@ -186,6 +192,10 @@ await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
 await app.register(brainRoutes, { prefix: "/api/brain" });
 await app.register(skillRoutes, { prefix: "/api/skills" });
 await app.register(agentRoutes);
+await app.register(mediaRoutes);
+await app.register(greetingRoutes);
+await app.register(todayRoutes);
+await app.register(integrationRoutes);
 await app.register(proactiveAlertsRoutes);
 
 initializeTools();
@@ -211,7 +221,8 @@ void permissionManager;
 void marketMonitor;
 
 memoryService.initialize().then((connected) => {
-  console.log(connected ? "  ✓ Long-term memory (ChromaDB) connected" : "  ⚠ Running without long-term memory");
+  const report = memoryService.getMemoryReport();
+  console.log(connected ? `  ✓ Chat memory: ${report.detail}` : `  ⚠ Chat memory unavailable. ${report.detail}`);
 });
 
 // OpenClaw sync is opt-in (OPENCLAW_SYNC=true). Default = local-only memory.
@@ -235,6 +246,7 @@ app.get("/api/health", async () => {
     timestamp: new Date().toISOString(),
     service: "FRIDAY-orchestrator",
     version: "2.2.0-brain",
+    bootId: getBootId(),
     llm: { provider: llm.provider, model: llm.model, configured: llm.hasKey },
     tools: toolRegistry.getToolCount(),
     tts: isTTSAvailable(),
@@ -360,9 +372,11 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
               type: "tool_call",
               tool: chunk.toolCall.toolName,
               parameters: chunk.toolCall.parameters,
+              error: undefined,
             })}\n\n`
           );
         } else if (chunk.type === "tool_result" && chunk.toolResult) {
+          const toolName = toolCalls[toolCalls.length - 1]?.name || "unnamed";
           toolResults.push({
             toolCallId: chunk.toolResult.toolCallId,
             success: chunk.toolResult.success,
@@ -372,9 +386,10 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
           reply.raw.write(
             `data: ${JSON.stringify({
               type: "tool_result",
-              tool: toolCalls[toolCalls.length - 1]?.name || "unknown",
+              tool: toolName,
               result: chunk.toolResult.data,
               success: chunk.toolResult.success,
+              error: chunk.toolResult.error,
             })}\n\n`
           );
         } else if (chunk.type === "error") {
@@ -425,6 +440,10 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
       } catch (err) {
         app.log.warn({ err }, "learning-engine record failed");
       }
+
+      writeLearningsFromTurn(message).catch((err) => {
+        app.log.warn({ err }, "brain write-back failed");
+      });
 
       reply.raw.write(`data: ${JSON.stringify({ type: "done", conversationId: conversation.id })}\n\n`);
     } catch (error) {

@@ -4,7 +4,6 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "
 import { join } from "path";
 import { proactiveMonitor } from "./proactive-monitor.js";
 import { getMorningBriefing } from "./morning-briefing.js";
-import { textToSpeech, isTTSAvailable } from "./tts.js";
 import { runReflection } from "./reflection.js";
 import { DATA_DIR, localDateKey } from "./runtime-paths.js";
 
@@ -101,13 +100,8 @@ async function fireMorningBriefing(): Promise<void> {
     message: briefing.script,
   });
 
-  if (!isTTSAvailable()) return;
-  try {
-    const audio = await textToSpeech(briefing.script);
-    if (audio) console.log(`[Scheduler] Morning briefing TTS ready (${audio.length} bytes)`);
-  } catch (err) {
-    console.warn("[Scheduler] TTS for briefing failed:", (err as Error).message);
-  }
+  // Alert delivery speaks this once. Generating audio here as well
+  // stacked a second copy, and restarts replayed every unread copy.
 }
 
 export async function runSchedulerTick(now = new Date()): Promise<void> {

@@ -24,11 +24,13 @@ export function DeckInput({
   isLoading,
   onStop,
   voice,
+  focusSignal = 0,
 }: {
   onSend: (text: string) => void;
   isLoading: boolean;
   onStop: () => void;
   voice: DeckVoice;
+  focusSignal?: number;
 }) {
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -40,6 +42,11 @@ export function DeckInput({
     el.style.height = "0px";
     el.style.height = Math.min(el.scrollHeight, 132) + "px";
   }, [text]);
+
+  useEffect(() => {
+    if (!focusSignal) return;
+    areaRef.current?.focus();
+  }, [focusSignal]);
 
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
@@ -78,6 +85,7 @@ export function DeckInput({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
           rows={1}
+          data-friday-input="true"
           placeholder="Talk to FRIDAY…"
           aria-label="Message FRIDAY"
           className="min-h-[36px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] leading-relaxed text-deck-ink placeholder:text-deck-faint focus:outline-none"

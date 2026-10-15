@@ -28,49 +28,49 @@ interface MemoryClient {
 // Main Memory Service for JARVIS
 class MemoryService {
   private initialized: boolean = false;
+  private backend: "file" | "chroma" = "file";
   private userPreferences: Map<string, UserPreference> = new Map();
   private client: MemoryClient = fileMemoryClient;
 
   // Initialize the memory service
   async initialize(): Promise<boolean> {
-    if (!config.chroma.enabled) {
-      console.log("[MemoryService] Long-term memory is disabled");
-      return false;
-    }
+    console.log("[Memory] Local file memory is the default. Chroma is optional.");
+    const fileOk = await fileMemoryClient.connect();
+    this.client = fileMemoryClient;
+    this.backend = "file";
 
-    console.log("[MemoryService] Initializing long-term memory...");
-
-    // Try ChromaDB first, fall back to file-based
-    let connected = false;
-
-    try {
-      connected = await chromaClient.connect();
+    if (config.chroma.enabled) {
+      const connected = await Promise.race([
+        chromaClient.connect(1),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2500)),
+      ]);
       if (connected) {
         this.client = chromaClient;
-        console.log("[MemoryService] ✓ Using ChromaDB backend");
+        this.backend = "chroma";
+        console.log("[Memory] Chroma is up. Using it for chat memory.");
+      } else {
+        console.log(
+          `[Memory] Chroma unreachable at ${config.chroma.host}:${config.chroma.port}. Using file memory (${fileMemoryClient.getStatus().documentCount} items). Set CHROMA_ENABLED=false to skip this probe.`
+        );
       }
-    } catch (error) {
-      console.log("[MemoryService] ChromaDB unavailable, using file-based...");
-    }
-
-    if (!connected) {
-      connected = await fileMemoryClient.connect();
-      if (connected) {
-        this.client = fileMemoryClient;
-        console.log("[MemoryService] ✓ Using file-based memory backend");
-      }
-    }
-
-    this.initialized = connected;
-
-    if (connected) {
-      console.log("[MemoryService] Long-term memory initialized successfully");
-      this.scheduleCleanup();
     } else {
-      console.log("[MemoryService] Running without long-term memory");
+      console.log(
+        `[Memory] Chroma is off. File memory has ${fileMemoryClient.getStatus().documentCount} items. The Obsidian vault is the brain; this store is chat memory only.`
+      );
     }
 
-    return connected;
+    this.initialized = fileOk || this.backend === "chroma";
+    if (this.initialized) this.scheduleCleanup();
+    return this.initialized;
+  }
+
+  getMemoryReport(): { backend: string; count: number; detail: string } {
+    const status = this.client.getStatus();
+    const count = status.documentCount ?? 0;
+    const detail = this.backend === "chroma"
+      ? `Chroma ${status.host}:${status.port} (${count})`
+      : `file memory (${count}). Chroma ${config.chroma.enabled ? "unreachable" : "off"}.`;
+    return { backend: this.backend, count, detail };
   }
 
   isAvailable(): boolean {
@@ -98,7 +98,12 @@ class MemoryService {
         return null;
       }
 
-      const embedding = await embed(content);
+      let embedding: number[] = [];
+      try {
+        embedding = await embed(content);
+      } catch {
+        embedding = [];
+      }
 
       const document: MemoryDocument = {
         id: uuidv4(),
@@ -135,7 +140,15 @@ class MemoryService {
     }
 
     try {
-      const embedding = await embed(query);
+      let embedding: number[] = [];
+      try {
+        embedding = await embed(query);
+      } catch {
+        embedding = [];
+      }
+      if (!embedding.length && this.client === fileMemoryClient) {
+        return fileMemoryClient.searchByText(query, options.limit || config.chroma.contextMemoryLimit);
+      }
       const limit = options.limit || config.chroma.contextMemoryLimit;
       const minSimilarity = options.minSimilarity || config.chroma.minSimilarity;
 

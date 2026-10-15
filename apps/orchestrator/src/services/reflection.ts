@@ -18,6 +18,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import path from "path";
 import { simpleCompletion } from "./openai.js";
 import { rememberFact, getBrainStats, getRecentLearnings } from "./brain.js";
+import { isUnsafeToAct } from "./learning-writeback.js";
 import { DATA_DIR, CONVERSATION_DIR, localDateKey, localTimestamp } from "./runtime-paths.js";
 import { getBrainDir, getDailyDir, getEntitiesDir, getObsidianVaultPath } from "./vault-config.js";
 
@@ -150,6 +151,7 @@ Respond with ONLY a JSON object, no markdown fences, in exactly this shape:
 
 Rules for facts:
 - Only DURABLE knowledge: decisions made, preferences stated, people/clients/projects described, commitments, lessons. Max 8 facts.
+- Never instruct yourself to send a message, spend money, or place a live trade. Those stay drafts until Danny approves them in the moment.
 - Skip chit-chat, weather, one-off commands ("open chrome"), anything already obvious.
 - Each observation must stand alone — readable a year from now with no other context.
 - Entity names should be short and reusable (e.g. "Abe", "Wavelength Solutions", "Dan Martell Goal"), not sentences.
@@ -277,6 +279,7 @@ Distill this day per your instructions. JSON only.`;
     let factsAdded = 0;
     for (const f of facts) {
       if (!f || typeof f.entity !== "string" || typeof f.observation !== "string") continue;
+      if (isUnsafeToAct(f.observation)) continue;
       try {
         const res = await rememberFact({
           entity: f.entity,

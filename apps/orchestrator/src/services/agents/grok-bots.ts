@@ -67,7 +67,7 @@ export function createGrokBotAdapter(deps: AgentDeps): AgentAdapter {
           name: "Grok Bots",
           kind: "grok-bot",
           state: "offline",
-          detail: "Set GROK_BOTS (Name|statusUrl|dispatchUrl). No crash — nothing is configured.",
+          detail: "needs GROK_BOTS — Name|http://127.0.0.1:port/health|http://127.0.0.1:port/dispatch",
           render: "dot",
           canDispatch: false,
         }];

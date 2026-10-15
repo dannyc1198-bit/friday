@@ -10,14 +10,14 @@ export function createXaiAdapter(deps: AgentDeps): AgentAdapter {
     async list(): Promise<AgentStatus[]> {
       const key = deps.env.XAI_API_KEY?.trim();
       if (!key) {
-        return [row("offline", "XAI_API_KEY is not set.", false)];
+        return [row("offline", "needs key — set XAI_API_KEY", false)];
       }
       const model = deps.env.XAI_MODEL?.trim() || DEFAULT_MODEL;
       return [row("online", `credential present · ${model}`, true)];
     },
     async dispatch(_id, request): Promise<DispatchResult> {
       const key = deps.env.XAI_API_KEY?.trim();
-      if (!key) return { ok: false, state: "offline", summary: "XAI_API_KEY is not set." };
+      if (!key) return { ok: false, state: "offline", summary: "needs key — set XAI_API_KEY" };
       const model = deps.env.XAI_MODEL?.trim() || DEFAULT_MODEL;
       const url = deps.env.XAI_BASE_URL?.trim() || DEFAULT_BASE;
       try {
