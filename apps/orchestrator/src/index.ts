@@ -242,7 +242,7 @@ initializeTools();
 // 5-min incremental rescan running. Non-fatal if the vault is missing.
 initBrain().catch((err) => console.warn("  ⚠ Brain index failed:", (err as Error).message));
 
-// Time-based jobs: 5 AM briefing + 9:30 PM nightly reflection.
+// Time-based jobs: briefing and reflection wait 2 minutes after boot, then one at a time.
 startScheduler();
 
 await initializeMCPClients();

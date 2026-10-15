@@ -12,6 +12,10 @@ import { maybeRunScheduledThinking } from "./thinking-loop.js";
 const STATE_FILE = join(DATA_DIR, "scheduler-state.json");
 const CHECK_INTERVAL_MS = 60_000;
 const RETRY_INTERVAL_MS = 15 * 60_000;
+/** First chat after a restart gets the free-tier minute. */
+export const STARTUP_LLM_GRACE_MS = 120_000;
+/** One non-urgent LLM job per minute so reflection does not follow briefing immediately. */
+export const LLM_JOB_GAP_MS = 60_000;
 const BRIEFING_HOUR = 5;
 const REFLECTION_HOUR = 21;
 const REFLECTION_MINUTE = 30;
@@ -101,8 +105,27 @@ export function isQuietHours(date = new Date()): boolean {
   return hour >= QUIET_HOUR_START || hour < QUIET_HOUR_END;
 }
 
+export function llmSlotOpen(timing: { nowMs: number; bootAtMs: number; lastLlmJobAtMs: number | null }): boolean {
+  if (timing.nowMs - timing.bootAtMs < STARTUP_LLM_GRACE_MS) return false;
+  if (timing.lastLlmJobAtMs != null && timing.nowMs - timing.lastLlmJobAtMs < LLM_JOB_GAP_MS) return false;
+  return true;
+}
+
+/** Which due job may run now. Briefing wins, then reflection. Null while the slot is closed. */
+export function pickDeferredLlmJob(
+  due: { briefingDate: string | null; reflectionDate: string | null },
+  timing: { nowMs: number; bootAtMs: number; lastLlmJobAtMs: number | null }
+): "briefing" | "reflection" | null {
+  if (!llmSlotOpen(timing)) return null;
+  if (due.briefingDate) return "briefing";
+  if (due.reflectionDate) return "reflection";
+  return null;
+}
+
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 let tickRunning = false;
+let bootAtMs = 0;
+let lastLlmJobAtMs: number | null = null;
 
 async function fireMorningBriefing(): Promise<void> {
   const briefing = await getMorningBriefing();
@@ -123,8 +146,12 @@ export async function runSchedulerTick(now = new Date()): Promise<void> {
   try {
     const state = loadState();
     const due = getDueJobs(now, state);
+    if (!bootAtMs) bootAtMs = now.getTime();
+    const timing = { nowMs: now.getTime(), bootAtMs, lastLlmJobAtMs };
+    const job = pickDeferredLlmJob(due, timing);
 
-    if (due.briefingDate) {
+    if (job === "briefing" && due.briefingDate) {
+      lastLlmJobAtMs = now.getTime();
       try {
         await fireMorningBriefing();
         state.lastBriefingDate = due.briefingDate;
@@ -132,9 +159,8 @@ export async function runSchedulerTick(now = new Date()): Promise<void> {
       } catch (err) {
         console.error("[Scheduler] Morning briefing failed:", (err as Error).message);
       }
-    }
-
-    if (due.reflectionDate) {
+    } else if (job === "reflection" && due.reflectionDate) {
+      lastLlmJobAtMs = now.getTime();
       state.lastReflectionAttemptAt = now.toISOString();
       saveState(state);
       const result = await runReflection(due.reflectionDate);
@@ -171,10 +197,12 @@ export async function runSchedulerTick(now = new Date()): Promise<void> {
       }
     }
 
-    try {
-      await maybeRunScheduledThinking(now);
-    } catch (err) {
-      console.warn("[Scheduler] Thinking loop failed:", (err as Error).message);
+    if (!job && llmSlotOpen({ nowMs: now.getTime(), bootAtMs, lastLlmJobAtMs })) {
+      try {
+        await maybeRunScheduledThinking(now);
+      } catch (err) {
+        console.warn("[Scheduler] Thinking loop failed:", (err as Error).message);
+      }
     }
   } finally {
     tickRunning = false;
@@ -183,7 +211,8 @@ export async function runSchedulerTick(now = new Date()): Promise<void> {
 
 export function startScheduler(): void {
   if (intervalHandle) return;
-  console.log("[Scheduler] Started - every minute with missed-job catch-up");
+  bootAtMs = Date.now();
+  console.log("[Scheduler] Started — briefing and reflection wait 2 minutes after boot, then one at a time");
   runSchedulerTick().catch((err) => console.warn("[Scheduler] tick error:", err));
   intervalHandle = setInterval(() => {
     runSchedulerTick().catch((err) => console.warn("[Scheduler] tick error:", err));

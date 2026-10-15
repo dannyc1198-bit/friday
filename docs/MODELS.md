@@ -2,7 +2,7 @@
 
 Checked against vendor docs on **2026-10-15**. Prices are USD per 1M tokens unless noted. Defaults live in `apps/orchestrator/src/services/model-roles.ts` and can be overridden without a code change.
 
-The brain order is OpenAI, then xAI, then Gemini. A saved choice in `data/settings.json` (or `set_brain_provider`) is tried first and overrides `FRIDAY_LLM_PROVIDER`. A provider with no key is skipped. Quota and `429` responses, including `insufficient_quota` and `credit_balance_exhausted`, fall through to the next provider immediately. A 400 or 422 stays on the provider that rejected it.
+The brain order is OpenAI, then xAI, then Gemini. A saved choice in `data/settings.json` (or `set_brain_provider`) is tried first and overrides `FRIDAY_LLM_PROVIDER`. A provider with no key is skipped. OpenAI credit exhaustion (`insufficient_quota`, `credit_balance_exhausted`, `billing_hard_limit`) is remembered for about five minutes so the next turn skips that provider. A Gemini per-minute 429 waits for Retry-After (capped at eight seconds), retries `gemini-2.5-flash` once, then tries `gemini-2.5-flash-lite` on the same key. A 400 or 422 stays on the provider that rejected it. Briefing and reflection wait two minutes after boot and then run one at a time so they do not spend the chat quota.
 
 ## Roles
 

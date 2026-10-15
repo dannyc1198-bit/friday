@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getDueJobs, isHealthDue, type SchedulerState } from "./scheduler.js";
+import {
+  LLM_JOB_GAP_MS,
+  STARTUP_LLM_GRACE_MS,
+  getDueJobs,
+  isHealthDue,
+  pickDeferredLlmJob,
+  type SchedulerState,
+} from "./scheduler.js";
 import { localDateKey } from "./runtime-paths.js";
 
 const blank: SchedulerState = { lastBriefingDate: null, lastReflectionDate: null };
@@ -28,6 +35,38 @@ test("scheduler processes today after 21:30 and respects retry cooldown", () => 
   assert.equal(
     getDueJobs(now, { ...blank, lastReflectionAttemptAt: new Date(now.getTime() - 5 * 60_000).toISOString() }).reflectionDate,
     null
+  );
+});
+
+test("startup holds briefing and reflection, then spaces them a minute apart", () => {
+  const boot = Date.parse("2026-08-10T07:00:00");
+  const both = { briefingDate: "2026-08-10", reflectionDate: "2026-08-09" };
+  assert.equal(pickDeferredLlmJob(both, { nowMs: boot + 10_000, bootAtMs: boot, lastLlmJobAtMs: null }), null);
+  assert.equal(
+    pickDeferredLlmJob(both, { nowMs: boot + STARTUP_LLM_GRACE_MS, bootAtMs: boot, lastLlmJobAtMs: null }),
+    "briefing"
+  );
+  assert.equal(
+    pickDeferredLlmJob(both, {
+      nowMs: boot + STARTUP_LLM_GRACE_MS + 10_000,
+      bootAtMs: boot,
+      lastLlmJobAtMs: boot + STARTUP_LLM_GRACE_MS,
+    }),
+    null
+  );
+  assert.equal(
+    pickDeferredLlmJob(
+      { briefingDate: null, reflectionDate: "2026-08-09" },
+      { nowMs: boot + STARTUP_LLM_GRACE_MS + LLM_JOB_GAP_MS, bootAtMs: boot, lastLlmJobAtMs: boot + STARTUP_LLM_GRACE_MS }
+    ),
+    "reflection"
+  );
+  assert.equal(
+    pickDeferredLlmJob(
+      { briefingDate: null, reflectionDate: "2026-08-09" },
+      { nowMs: boot + STARTUP_LLM_GRACE_MS, bootAtMs: boot, lastLlmJobAtMs: null }
+    ),
+    "reflection"
   );
 });
 

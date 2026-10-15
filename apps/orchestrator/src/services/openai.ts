@@ -1,12 +1,8 @@
 // FRIDAY LLM Service — provider-agnostic via OpenAI-compatible endpoints.
 //
-// Picks Gemini / OpenAI / Anthropic based on which API key has credits.
-// Switch providers by setting FRIDAY_LLM_PROVIDER in .env to "gemini" (default),
-// "openai", or "anthropic". Or set the explicit FRIDAY_LLM_* env vars.
-//
-// Free-tier survival: defaults to gemini-2.5-flash-lite (30 RPM / 1500 RPD —
-// 3× the headroom of gemini-2.5-flash on free tier) and gracefully degrades on
-// 429s so the user hears a spoken excuse instead of dead silence.
+// Order is OpenAI, then xAI, then Gemini, with a saved provider tried first.
+// Credit exhaustion is remembered for a few minutes. A Gemini 429 retries once,
+// then uses gemini-2.5-flash-lite on the same key.
 //
 // Exports kept stable:
 //   streamChatCompletion(messages, signal?, systemPromptExtras?) → AsyncGenerator<StreamChunk>
@@ -31,11 +27,11 @@ import {
   describeChain,
   endpointClient,
   exhaustedBrainMessage,
-  failoverReason,
   resolveLlmChain,
   shouldFailover,
   type LlmEndpoint,
 } from "./llm-chain.js";
+import { callWithRecovery, geminiLiteModel, isProviderExhausted } from "./llm-quota.js";
 
 // Tool-argument assembly below is the reviewer's Gemini 400 fix.
 // Provider choice sits outside that loop. A 400 does not fail over.
@@ -194,13 +190,13 @@ export async function* streamChatCompletion(
   }
 
   const chain = resolveLlmChain(process.env);
-  let cursor = 0;
-  let endpoint: LlmEndpoint | null = chain.endpoints[0] || null;
-  let active = endpoint ? endpointClient(endpoint) : null;
-  const tried: Array<{ label: string; reason: string }> = [];
+  const endpoints = chain.endpoints.map((item) => ({ ...item }));
+  const missingEnvs = chain.missing.map((item) => item.env);
+  let cursor = Math.max(0, endpoints.findIndex((item) => !isProviderExhausted(item.id)));
+  let endpoint: LlmEndpoint | null = endpoints[cursor] || null;
 
-  if (!active || !endpoint) {
-    const missing = chain.missing.map((item) => item.env).join(", ") || "OPENAI_API_KEY, XAI_API_KEY, or GEMINI_API_KEY";
+  if (!endpoint) {
+    const missing = missingEnvs.join(", ") || "OPENAI_API_KEY, XAI_API_KEY, or GEMINI_API_KEY";
     yield {
       type: "text",
       content: intentSummary
@@ -210,47 +206,50 @@ export async function* streamChatCompletion(
     return;
   }
 
+  if (endpoints.every((item) => isProviderExhausted(item.id))) {
+    yield {
+      type: "text",
+      content: exhaustedBrainMessage(
+        endpoints.map((item) => ({ label: item.label, reason: "quota exhausted (cached)" })),
+        missingEnvs
+      ),
+    };
+    yield { type: "done" };
+    return;
+  }
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     if (signal?.aborted) {
       yield { type: "text", content: "\n\n[Task cancelled by user.]" };
       break;
     }
 
-    let stream;
-    try {
-      stream = await active.chat.completions.create(
+    const recovered = await callWithRecovery({
+      endpoints,
+      startIndex: cursor,
+      signal,
+      liteModel: geminiLiteModel(),
+      call: (target) => endpointClient(target).chat.completions.create(
         {
-          model: endpoint.model,
+          model: target.model,
           max_tokens: MAX_TOKENS,
           messages: openaiMessages,
           ...(tools.length > 0 ? { tools, tool_choice: "auto" as const } : {}),
           stream: true,
         },
         { signal }
-      );
-    } catch (err: any) {
-      if (signal?.aborted || err?.name === "AbortError" || err?.name === "APIUserAbortError") {
+      ),
+    });
+    if (!recovered.ok) {
+      if (recovered.aborted || signal?.aborted) {
         yield { type: "text", content: "\n\n[Task cancelled by user.]" };
         yield { type: "done" };
         return;
       }
-      const status = err?.status ?? err?.response?.status;
-      const msg = err?.message || "";
-      const reason = failoverReason(status, msg);
-      tried.push({ label: endpoint.label, reason });
-      const next = chain.endpoints[cursor + 1];
-      if (next && shouldFailover(status, msg)) {
-        console.warn(`[FRIDAY LLM] ${endpoint.label} ${reason}. Using ${next.label}.`);
-        cursor += 1;
-        endpoint = next;
-        active = endpointClient(endpoint);
-        round -= 1;
-        continue;
-      }
-      if (shouldFailover(status, msg)) {
-        const notice = exhaustedBrainMessage(tried, chain.missing.map((item) => item.env));
-        yield { type: "text", content: notice };
-      } else {
+      const status = recovered.status;
+      const msg = recovered.message || "";
+      const rejected = status === 400 || status === 422 || /\binvalid_request\b|\bbad request\b/i.test(msg);
+      if (rejected) {
         if ((status === 400 || status === 422) && round > 0) {
           const spoken = speechFromToolMessages(openaiMessages);
           console.error("[FRIDAY LLM] provider rejected the tool follow-up:", status, redactSecrets(msg));
@@ -264,10 +263,17 @@ export async function* streamChatCompletion(
         yield { type: "error", content: reason };
         yield { type: "text", content: reason };
         console.error("[FRIDAY LLM] stream error:", status, redactSecrets(msg));
+      } else {
+        yield { type: "text", content: exhaustedBrainMessage(recovered.tried, missingEnvs) };
       }
       yield { type: "done" };
       return;
     }
+
+    endpoint = recovered.endpoint;
+    cursor = recovered.index;
+    endpoints[cursor] = endpoint;
+    const stream = recovered.value;
 
     let accumulatedText = "";
     // Providers stream tool calls differently. Gemini 2.5 Flash often omits
@@ -423,10 +429,14 @@ export async function* streamChatCompletion(
   // wanted tools, the last thing the user saw was raw tool results with no
   // closing answer. Force one final text-only completion so FRIDAY always
   // speaks a conclusion.
-  if (endedWantingTools && !signal?.aborted) {
-    try {
-      const wrapUp = await active.chat.completions.create({
-        model: endpoint.model,
+  if (endedWantingTools && !signal?.aborted && endpoint) {
+    const wrapUp = await callWithRecovery({
+      endpoints,
+      startIndex: cursor,
+      signal,
+      liteModel: geminiLiteModel(),
+      call: (target) => endpointClient(target).chat.completions.create({
+        model: target.model,
         max_tokens: MAX_TOKENS,
         messages: [
           ...openaiMessages,
@@ -437,14 +447,16 @@ export async function* streamChatCompletion(
           },
         ],
         stream: true,
-      });
-      for await (const chunk of wrapUp) {
+      }),
+    });
+    if (!wrapUp.ok) {
+      console.error("[FRIDAY LLM] wrap-up call failed:", wrapUp.message);
+      yield { type: "text", content: "I ran out of tool budget mid-task, boss — here's where I got to. Ask me to continue if you want the rest." };
+    } else {
+      for await (const chunk of wrapUp.value) {
         const delta = chunk.choices[0]?.delta;
         if (delta?.content) yield { type: "text", content: delta.content };
       }
-    } catch (err) {
-      console.error("[FRIDAY LLM] wrap-up call failed:", (err as Error)?.message);
-      yield { type: "text", content: "I ran out of tool budget mid-task, boss — here's where I got to. Ask me to continue if you want the rest." };
     }
   }
 
@@ -482,20 +494,18 @@ export async function simpleCompletion(
   const chain = resolveLlmChain(process.env);
   if (!chain.endpoints.length) throw new Error("No LLM API key configured");
   const allowFailover = options?.allowFailover !== false && !options?.model;
-  const list = allowFailover ? chain.endpoints : [chain.endpoints[0]];
-  let lastError: unknown;
-  for (const endpoint of list) {
-    const target = options?.model ? { ...endpoint, model: options.model } : endpoint;
-    try {
-      return await completeOnce(endpointClient(target), target, systemPrompt, userPrompt, maxTokens);
-    } catch (err) {
-      lastError = err;
-      const status = (err as { status?: number }).status;
-      const message = (err as Error).message || "";
-      if (!shouldFailover(status, message)) throw err;
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("No LLM API key configured");
+  const list = (allowFailover ? chain.endpoints : [chain.endpoints[0]]).map((endpoint) =>
+    options?.model ? { ...endpoint, model: options.model } : { ...endpoint }
+  );
+  const result = await callWithRecovery({
+    endpoints: list,
+    liteModel: geminiLiteModel(),
+    call: (endpoint) => completeOnce(endpointClient(endpoint), endpoint, systemPrompt, userPrompt, maxTokens),
+  });
+  if (result.ok) return result.value;
+  if (result.aborted) throw new Error("aborted");
+  if (!shouldFailover(result.status, result.message)) throw new Error(result.message || "request rejected");
+  throw new Error(result.message || "No LLM API key configured");
 }
 
 export function getLLMInfo(): {
