@@ -156,7 +156,7 @@ export function TodayBoard({ onAct }: { onAct: (prompt: string) => void }) {
   );
   const task = data?.task;
   return (
-    <Shell kicker="One thing" title="Today" note="One task. Finish it or hand it to Friday. Nothing else is on this screen.">
+    <Shell kicker="One thing" title="Today" note="One task. Finish it or hand it to Friday. The neural reading under it is live activity.">
       <div className="rounded border border-deck-gold/70 bg-deck-panel p-5">
         <p className="font-deckmono text-xs uppercase tracking-wider text-deck-gold">Next</p>
         <p className="mt-2 font-deckdisplay text-3xl leading-tight text-deck-ink">
