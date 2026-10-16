@@ -68,3 +68,38 @@ export async function liveAppsStatus(fetchImpl: typeof fetch = fetch, now = Date
   cache = { at: now, apps };
   return apps;
 }
+const APP_WORDS: Array<[LiveAppDef["id"], RegExp]> = [
+  ["gods-eye", /god'?s eye|gods eye|god eye/i],
+  ["osiris", /osiris/i],
+  ["anatomy", /anatomy|body atlas/i],
+  ["sports", /sports?( dashboard| app)?\b/i],
+];
+
+// "Is God's Eye up?", "open anatomy", "status of the apps". Answered from the
+// live probe, never from a model guess. Returns null for anything else.
+export function appsQuestion(message: string): { ids: string[]; open: boolean } | null {
+  const text = message.toLowerCase();
+  const ids = APP_WORDS.filter(([, re]) => re.test(text)).map(([id]) => id);
+  const allApps = /\b(the |my |all )?(live )?apps\b/.test(text);
+  const open = /^\s*(friday,? )?(open|show( me)?|go to|bring up)\b/.test(text);
+  const status = /\b(up|down|running|online|offline|working|status|live)\b/.test(text);
+  if ((ids.length || allApps) && (open || status) && text.split(/\s+/).length <= 14) {
+    return { ids: ids.length ? ids : LIVE_APPS.map((app) => app.id), open };
+  }
+  return null;
+}
+
+export function describeApps(apps: LiveAppStatus[], open: boolean): string {
+  const lines = apps.map((app) => {
+    const state = app.up ? `up${app.headline ? `, ${app.headline}` : ""}` : "down (not answering)";
+    return open ? `${app.name} is ${state}. It's on the ${app.page} tab.` : `${app.name} is ${state}.`;
+  });
+  return lines.join(" ");
+}
+
+export async function liveAppsAnswer(message: string): Promise<string | null> {
+  const question = appsQuestion(message);
+  if (!question) return null;
+  const apps = (await liveAppsStatus()).filter((app) => question.ids.includes(app.id));
+  return describeApps(apps, question.open);
+}
