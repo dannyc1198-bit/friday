@@ -1,6 +1,5 @@
 import { isUnapprovedExternalAction } from "../intent-router.js";
 import { runCommand } from "./command.js";
-import { createClaudeAdapter } from "./claude.js";
 import { createCodexAdapter } from "./codex.js";
 import { createGrokBotAdapter } from "./grok-bots.js";
 import type { AgentDeps, AgentStatus, DispatchRequest, DispatchResult } from "./types.js";
@@ -19,7 +18,6 @@ export function createAgentService(overrides?: Partial<AgentDeps>) {
   const adapters = [
     createGrokBotAdapter(deps),
     createCodexAdapter(deps),
-    createClaudeAdapter(deps),
     createXaiAdapter(deps),
   ];
 

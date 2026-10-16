@@ -9,10 +9,18 @@ import { writeFileSync, readdirSync, unlinkSync, mkdirSync, existsSync } from "f
 import { join } from "path";
 import { vault } from "../services/vault.js";
 import { permissionManager } from "../services/permission-manager.js";
+import { noteBrowserPage, setBrowserUrlLocator } from "../services/effect-gate.js";
 
 // ── State ──────────────────────────────────────────────────────────
 let browser: Browser | null = null;
 let activePage: Page | null = null;
+setBrowserUrlLocator(() => {
+  try {
+    return activePage?.url() || "unknown page";
+  } catch {
+    return "unknown page";
+  }
+});
 const CDP_PORT = 18800;
 const SCREENSHOT_DIR = join(process.cwd(), "data", "screenshots");
 const MAX_SCREENSHOTS = 20;
@@ -203,6 +211,7 @@ const browserNavigateTool: Tool = {
         default:
           return { toolCallId: "", success: false, error: `Unknown action "${action}". Use open, back, forward, or refresh.` };
       }
+      noteBrowserPage(page.url());
       return { toolCallId: "", success: true, data: { action, url: page.url(), title: await page.title() } };
     } catch (error) {
       return { toolCallId: "", success: false, error: `Navigation (${action}) failed: ${error instanceof Error ? error.message : "Unknown error"}` };

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Chakra_Petch, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Chakra_Petch, IBM_Plex_Sans, IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
 // Flight-deck faces — exposed as CSS variables so legacy pages (which use the
@@ -19,10 +19,14 @@ const deckMono = IBM_Plex_Mono({
   subsets: ["latin"],
   variable: "--font-deck-mono",
 });
+const sans = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
-  title: "FRIDAY — Flight Deck",
-  description: "Female Replacement Intelligent Digital Assistant Youth",
+  title: "Friday",
+  description: "Friday — personal operating system",
 };
 
 export default function RootLayout({
@@ -33,9 +37,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${deckDisplay.variable} ${deckBody.variable} ${deckMono.variable}`}
+      className={`dark ${sans.variable} ${deckDisplay.variable} ${deckBody.variable} ${deckMono.variable}`}
     >
-      <body className="font-body antialiased">{children}</body>
+      <body className="font-body antialiased">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "try{var t=localStorage.getItem('friday-theme');if(t==='light'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('light')}}catch(e){}",
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

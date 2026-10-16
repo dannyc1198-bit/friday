@@ -3,24 +3,26 @@
 import { Message } from "@/types";
 import { formatTime } from "@/lib/utils";
 import { toolLabel } from "./deck-lib";
+import { messageSegments, obsidianOpenHref } from "@/lib/message-segments";
 
 // Transcript entries, not chat bubbles. A flight deck keeps a log:
 // speaker tag, timestamp, cognition chips, then the words.
 
-export function DeckMessage({ message }: { message: Message }) {
+export function DeckMessage({ message, tone = "deck" }: { message: Message; tone?: "deck" | "console" }) {
   const isUser = message.role === "user";
+  const plain = tone === "console";
 
   return (
-    <article className="border-b border-deck-line py-3.5 first:pt-1 last:border-b-0">
+    <article className={plain ? "border-b border-line py-4" : "border-b border-deck-line py-3.5 first:pt-1 last:border-b-0"}>
       <header className="flex items-baseline gap-2">
         <span
-          className={`font-deckdisplay text-[10px] font-semibold uppercase tracking-[0.24em] ${
-            isUser ? "text-deck-dim" : "text-deck-amber"
+          className={`${plain ? "text-xs font-semibold" : "font-deckdisplay text-[10px] font-semibold uppercase tracking-[0.24em]"} ${
+            isUser ? (plain ? "text-muted" : "text-deck-dim") : plain ? "text-accent" : "text-deck-amber"
           }`}
         >
           {isUser ? "You" : "Friday"}
         </span>
-        <time className="font-deckmono text-[9px] text-deck-faint">
+        <time className={plain ? "font-mono text-[10px] text-faint" : "font-deckmono text-[9px] text-deck-faint"}>
           {formatTime(new Date(message.timestamp))}
         </time>
       </header>
@@ -56,10 +58,26 @@ export function DeckMessage({ message }: { message: Message }) {
 
       <div
         className={`mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed ${
-          isUser ? "text-deck-dim" : "text-deck-ink"
+          plain ? (isUser ? "text-muted" : "text-ink") : isUser ? "text-deck-dim" : "text-deck-ink"
         }`}
       >
-        {message.content}
+        {messageSegments(message.content || "").map((segment, index) => {
+          if (segment.type === "link") {
+            return (
+              <a key={index} href={segment.href} target="_blank" rel="noreferrer" className="underline decoration-deck-line-bright underline-offset-2">
+                {segment.label}
+              </a>
+            );
+          }
+          if (segment.type === "note") {
+            return (
+              <a key={index} href={obsidianOpenHref(segment.note)} className="mx-0.5 inline-flex rounded border border-deck-line px-1.5 py-0.5 font-deckmono text-[10px] uppercase tracking-wider text-deck-hot">
+                {segment.label}
+              </a>
+            );
+          }
+          return <span key={index}>{segment.text}</span>;
+        })}
         {message.isStreaming && (
           <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse bg-deck-amber align-middle" />
         )}

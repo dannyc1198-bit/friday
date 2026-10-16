@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import { noticesFromRealtimeEvent } from "@/lib/realtime-notices";
+import { handsFreeStatus } from "@/lib/voice-status";
 
 interface TranscriptLine {
   id: string;
@@ -20,24 +21,27 @@ export function LiveTalk({
   onAgent: (connected: boolean) => void;
 }) {
   const [note, setNote] = useState("Checking the live voice.");
-  const [engine, setEngine] = useState<"elevenlabs" | "realtime" | "browser" | "">("");
+  const [engine, setEngine] = useState<"elevenlabs" | "realtime" | "speak" | "">("");
   const [lines, setLines] = useState<TranscriptLine[]>([]);
-  const [problem, setProblem] = useState("");
+  const [hasElevenKey, setHasElevenKey] = useState(false);
+  const [hasOpenAI, setHasOpenAI] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/voice/live", { cache: "no-store" })
       .then((res) => res.json())
-      .then((data: { mode?: string; note?: string }) => {
+      .then((data: { mode?: string; note?: string; hasElevenKey?: boolean; hasOpenAI?: boolean }) => {
         if (cancelled) return;
-        setNote(data.note || "Live voice ready.");
-        const mode = data.mode === "elevenlabs" || data.mode === "realtime" ? data.mode : "browser";
+        setHasElevenKey(Boolean(data.hasElevenKey));
+        setHasOpenAI(Boolean(data.hasOpenAI));
+        setNote(data.note || handsFreeStatus({ connected: null, failed: null, hasElevenKey: Boolean(data.hasElevenKey) }));
+        const mode = data.mode === "elevenlabs" || data.mode === "realtime" ? data.mode : "speak";
         setEngine(mode);
       })
       .catch(() => {
         if (!cancelled) {
-          setEngine("browser");
-          setNote("Voice plan unavailable. The browser voice still speaks.");
+          setEngine("speak");
+          setNote(handsFreeStatus({ connected: null, failed: null, hasElevenKey: false }));
         }
       });
     return () => {
@@ -60,9 +64,8 @@ export function LiveTalk({
   return (
     <section className="mx-auto w-full max-w-3xl px-5 pt-4" aria-live="polite">
       <p className="font-deckmono text-xs uppercase tracking-[0.22em] text-deck-hot">{note}</p>
-      {problem && <p className="mt-2 text-sm text-deck-gold">{problem}</p>}
       <ul className="mt-3 grid gap-2">
-        {lines.length === 0 && engine !== "browser" && (
+        {lines.length === 0 && engine !== "speak" && (
           <li className="text-sm text-deck-dim">Transcript shows here as soon as someone speaks.</li>
         )}
         {lines.map((line) => (
@@ -76,21 +79,34 @@ export function LiveTalk({
       </ul>
       {engine === "elevenlabs" && (
         <ConversationProvider
-          onConnect={() => onAgent(true)}
+          onConnect={() => {
+            onAgent(true);
+            setNote(handsFreeStatus({ connected: "elevenlabs", failed: null, hasElevenKey }));
+          }}
           onDisconnect={() => onAgent(false)}
           onMessage={(payload) => push(payload.role === "user" ? "user" : "agent", payload.message)}
           onError={() => {
-            setProblem("ElevenLabs did not connect. Trying OpenAI Realtime.");
-            setEngine("realtime");
             onAgent(false);
+            if (hasOpenAI) {
+              setNote("The ElevenLabs agent did not connect. Trying OpenAI Realtime.");
+              setEngine("realtime");
+              return;
+            }
+            setNote(handsFreeStatus({ connected: null, failed: "elevenlabs", hasElevenKey }));
+            setEngine("speak");
           }}
         >
           <ElevenSession
             active={active}
             muted={muted}
             onFail={() => {
-              setProblem("ElevenLabs did not connect. Trying OpenAI Realtime.");
-              setEngine("realtime");
+              if (hasOpenAI) {
+                setNote("The ElevenLabs agent did not connect. Trying OpenAI Realtime.");
+                setEngine("realtime");
+                return;
+              }
+              setNote(handsFreeStatus({ connected: null, failed: "elevenlabs", hasElevenKey }));
+              setEngine("speak");
             }}
           />
         </ConversationProvider>
@@ -100,18 +116,16 @@ export function LiveTalk({
           active={active}
           muted={muted}
           onLine={push}
-          onAgent={onAgent}
+          onAgent={(connected) => {
+            onAgent(connected);
+            if (connected) setNote(handsFreeStatus({ connected: "realtime", failed: null, hasElevenKey }));
+          }}
           onFail={() => {
-            setProblem("Realtime voice did not connect. The browser voice will speak each reply.");
-            setEngine("browser");
+            setNote(handsFreeStatus({ connected: null, failed: "realtime", hasElevenKey }));
+            setEngine("speak");
             onAgent(false);
           }}
         />
-      )}
-      {engine === "browser" && (
-        <p className="mt-2 text-sm text-deck-dim">
-          Hands-free is listening in the browser. Friday answers out loud, and the chat is the transcript.
-        </p>
       )}
     </section>
   );
@@ -185,24 +199,51 @@ function RealtimeSession({
 
   useEffect(() => {
     if (!active) return;
-    let closed = false;
+    const session = { disposed: false };
+    const abort = new AbortController();
     let pc: RTCPeerConnection | null = null;
     let local: MediaStream | null = null;
     const audio = new Audio();
     audio.autoplay = true;
     audioRef.current = audio;
 
+    const release = () => {
+      session.disposed = true;
+      abort.abort();
+      local?.getTracks().forEach((track) => track.stop());
+      local = null;
+      pc?.close();
+      pc = null;
+      audio.srcObject = null;
+      onAgentRef.current(false);
+    };
+
     (async () => {
-      const sessionRes = await fetch("/api/voice/realtime/session", { method: "POST" });
-      const session = (await sessionRes.json()) as { token?: string; error?: string };
-      if (!sessionRes.ok || !session.token) throw new Error(session.error || "no session");
+      const sessionRes = await fetch("/api/voice/realtime/session", { method: "POST", signal: abort.signal });
+      if (session.disposed) return;
+      const body = (await sessionRes.json()) as { token?: string; error?: string };
+      if (session.disposed) return;
+      if (!sessionRes.ok || !body.token) throw new Error(body.error || "no session");
       pc = new RTCPeerConnection();
+      if (session.disposed) {
+        pc.close();
+        pc = null;
+        return;
+      }
       pc.ontrack = (event) => {
+        if (session.disposed) return;
         audio.srcObject = event.streams[0];
         void audio.play().catch(() => undefined);
         onAgentRef.current(true);
       };
       local = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (session.disposed) {
+        local.getTracks().forEach((track) => track.stop());
+        local = null;
+        pc?.close();
+        pc = null;
+        return;
+      }
       pc.addTrack(local.getTracks()[0], local);
       const channel = pc.createDataChannel("oai-events");
       channel.onmessage = (event) => {
@@ -221,6 +262,7 @@ function RealtimeSession({
             })
               .then((res) => res.json())
               .then((body: { output?: string }) => {
+                if (session.disposed || channel.readyState !== "open") return;
                 channel.send(JSON.stringify({
                   type: "conversation.item.create",
                   item: {
@@ -238,30 +280,35 @@ function RealtimeSession({
         }
       };
       const offer = await pc.createOffer();
+      if (session.disposed) return;
       await pc.setLocalDescription(offer);
+      if (session.disposed) return;
       const sdp = await fetch("https://api.openai.com/v1/realtime/calls", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session.token}`,
+          Authorization: `Bearer ${body.token}`,
           "Content-Type": "application/sdp",
         },
         body: offer.sdp,
+        signal: abort.signal,
       });
+      if (session.disposed) return;
       if (!sdp.ok) throw new Error("realtime call failed");
       const answer = await sdp.text();
-      if (closed || !pc) return;
+      if (session.disposed || !pc) {
+        local?.getTracks().forEach((track) => track.stop());
+        local = null;
+        pc?.close();
+        pc = null;
+        return;
+      }
       await pc.setRemoteDescription({ type: "answer", sdp: answer });
-    })().catch(() => {
-      if (!closed) onFailRef.current();
+    })().catch((err: unknown) => {
+      if (session.disposed || (err instanceof DOMException && err.name === "AbortError")) return;
+      onFailRef.current();
     });
 
-    return () => {
-      closed = true;
-      local?.getTracks().forEach((track) => track.stop());
-      pc?.close();
-      audio.srcObject = null;
-      onAgentRef.current(false);
-    };
+    return release;
   }, [active]);
 
   return null;

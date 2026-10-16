@@ -24,7 +24,12 @@
 import type { FastifyInstance } from "fastify";
 import { streamChatCompletion } from "../services/openai.js";
 import { synthesizeUtterance, isVoiceSynthAvailable } from "../services/voice-service.js";
+import { voiceUpgradeDecision } from "../services/access-gate.js";
+import { getApiKey } from "../middleware/auth.js";
 import type { Message } from "../types/index.js";
+
+const VOICE_CHANNEL =
+  "CHANNEL: voice. One or two spoken sentences. No markdown. Do not read URLs or file paths aloud.";
 
 const MAX_TRANSCRIPT_LEN = 4_000;
 const MAX_HISTORY = 16; // last 8 turns — enough for short-context chat without runaway prompt size
@@ -48,7 +53,21 @@ function genId(prefix: string): string {
 }
 
 export async function voiceRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/v1/voice", { websocket: true }, (socket) => {
+  app.get("/v1/voice", { websocket: true }, (socket, request) => {
+    const origin = Array.isArray(request.headers.origin) ? request.headers.origin[0] : request.headers.origin;
+    const host = Array.isArray(request.headers.host) ? request.headers.host[0] : request.headers.host;
+    const query = request.query as { token?: unknown };
+    const decision = voiceUpgradeDecision({
+      origin,
+      host,
+      token: typeof query?.token === "string" ? query.token : "",
+      secret: getApiKey(),
+      now: Date.now(),
+    });
+    if (!decision.ok) {
+      socket.close(1008, "unauthorized");
+      return;
+    }
     const sessionId = genId("vs");
     const history: Message[] = [];
     // Each turn runs serially. If a new transcript arrives mid-turn we abort
@@ -91,7 +110,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
       let assistantText = "";
 
       try {
-        for await (const chunk of streamChatCompletion(history.slice(-MAX_HISTORY), signal)) {
+        for await (const chunk of streamChatCompletion(history.slice(-MAX_HISTORY), signal, VOICE_CHANNEL)) {
           if (signal.aborted) return;
 
           if (chunk.type === "text" && chunk.content) {

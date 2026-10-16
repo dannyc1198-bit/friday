@@ -32,11 +32,13 @@ const FADE_MS = 900; // overlay fade-out duration
 type Phase = "pending" | "waiting" | "booting" | "fading" | "done";
 
 const GREETING = "Hey Daniel, how's it going boss? What do we need to do today?";
+const SAMPLE_GREETING = "Sample deck is ready. This greeting is not from a live account.";
 
 export default function BootSequence({ onFinished }: { onFinished?: () => void }) {
   const [phase, setPhase] = useState<Phase>("pending");
   const [lineCount, setLineCount] = useState(0);
   const [wakeBlob, setWakeBlob] = useState<string | null>(null);
+  const [greetingLine, setGreetingLine] = useState(GREETING);
   const timers = useRef<number[]>([]);
   const started = useRef(false);
   const finished = useRef(false);
@@ -53,6 +55,13 @@ export default function BootSequence({ onFinished }: { onFinished?: () => void }
     let cancelled = false;
     (async () => {
       try {
+        if (window.localStorage.getItem("friday-demo") === "1") {
+          if (!cancelled) {
+            setGreetingLine(SAMPLE_GREETING);
+            setPhase("waiting");
+          }
+          return;
+        }
         const meta = await fetch("/api/greeting", { cache: "no-store" }).then((res) => res.json());
         const key = `fridayGreeting:${meta.bootId || "offline"}`;
         greetingKey.current = key;
@@ -217,7 +226,7 @@ export default function BootSequence({ onFinished }: { onFinished?: () => void }
             Wake Friday
           </p>
           <p className="max-w-md text-center font-body text-sm" style={{ color: "var(--fri-text-dim)" }}>
-            {GREETING}
+            {greetingLine}
           </p>
         </div>
       )}

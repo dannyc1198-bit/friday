@@ -104,3 +104,38 @@ test("brain indexes the fixture vault and writes an entity note", async () => {
   const enagic = brain.searchBrain("Who is Russell Ally and what is my Enagic goal?");
   assert.equal(enagic[0]?.notePath, "FRIDAY_BRAIN/entities/enagic.md");
 });
+
+test("a new vault fact is recallable immediately, and profile edits stay proposals", async () => {
+  await brain.initBrain();
+  const token = `relay-token-${Date.now()}`;
+  const observation = `The vault indexed ${token} on write so brain_recall can find this entity note immediately.`;
+  const remembered = await brain.rememberFact({
+    entity: "Immediate Relay",
+    observation,
+    type: "fact",
+    source: "manual",
+  });
+  assert.equal(remembered.duplicate, false);
+  const hits = brain.searchBrain(token);
+  assert.ok(hits.some((hit) => hit.notePath.endsWith("Immediate Relay.md")));
+
+  const { registerBrainTools } = await import("./brain-tools.js");
+  registerBrainTools();
+  const recalled = await toolRegistry.execute("brain_recall", { query: token, limit: 5 });
+  assert.equal(recalled.success, true);
+  const rows = (recalled.data as { results: Array<{ path: string; text: string }> }).results;
+  assert.ok(rows.some((row) => row.path.includes("Immediate Relay") && row.text.includes(token)));
+
+  const profilePath = path.join(root, "FRIDAY_BRAIN", "DANNY-PROFILE.md");
+  const before = readFileSync(profilePath, "utf8");
+  const { writeLearningsFromTurn } = await import("../services/learning-writeback.js");
+  await writeLearningsFromTurn("My business is Wavelength Solutions, websites and receptionists.");
+  assert.equal(readFileSync(profilePath, "utf8"), before);
+  const proposal = readFileSync(path.join(root, "FRIDAY_BRAIN", "proposals", "DANNY-PROFILE.md"), "utf8");
+  assert.match(proposal, /Wavelength Solutions/);
+  assert.match(proposal, /has been copied into DANNY-PROFILE/);
+  const danny = readFileSync(path.join(root, "FRIDAY_BRAIN", "entities", "Danny.md"), "utf8");
+  assert.match(danny, /Wavelength Solutions/);
+  const learned = brain.searchBrain("Wavelength Solutions websites and receptionists");
+  assert.ok(learned.some((hit) => hit.notePath.endsWith("Danny.md")));
+});

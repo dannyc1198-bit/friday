@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from "
 import { join } from "path";
 import { DATA_DIR } from "./runtime-paths.js";
 import { collapseAlerts, isDuplicateAlert } from "./alert-dedupe.js";
+import { overdueTasks, tasksFromStore } from "./task-store.js";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -251,17 +252,10 @@ class ProactiveMonitor {
     const tasksFile = join(DATA_DIR, "tasks.json");
     if (!existsSync(tasksFile)) return;
 
-    let tasks: Array<{
-      id: string;
-      title: string;
-      priority?: string;
-      completed?: boolean;
-      dueDate?: string;
-      createdAt?: string;
-    }> = [];
+    let tasks: ReturnType<typeof tasksFromStore> = [];
 
     try {
-      tasks = JSON.parse(readFileSync(tasksFile, "utf8"));
+      tasks = tasksFromStore(JSON.parse(readFileSync(tasksFile, "utf8")));
     } catch {
       return;
     }
@@ -270,11 +264,7 @@ class ProactiveMonitor {
     const highPriority = pending.filter((t) => t.priority === "high");
 
     // Alert on overdue tasks
-    const now_date = new Date();
-    const overdue = pending.filter((t) => {
-      if (!t.dueDate) return false;
-      return new Date(t.dueDate) < now_date;
-    });
+    const overdue = overdueTasks(pending, new Date());
 
     if (overdue.length > 0) {
       const titles = overdue.slice(0, 2).map((t) => `"${t.title}"`).join(" and ");

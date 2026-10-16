@@ -14,6 +14,8 @@ import {
   writeHealthSummary,
   type CheckResult,
 } from "./health-check.js";
+import { publishThought } from "../thought-bus.js";
+import type { Repair } from "./repairs.js";
 
 const CONFIG_MISS = /needs key|missing key|api key|not configured|no api key/i;
 
@@ -65,9 +67,16 @@ function repairService() {
         return { ok: result.ok, summary: result.summary };
       },
       runTests: () => runCommand(ORCHESTRATOR_ROOT, ["npm", "test"]),
-      runHealth: async () => {
+      runHealth: async (cwd?: string) => {
         const ping = await pingHealth();
         if (!ping.ok) return ping;
+        if (cwd && process.env.FRIDAY_HEALTHCHECK === "1") {
+          const results = [];
+          for (const command of healthCommands()) {
+            results.push(await runCommand(cwd, command));
+          }
+          return summarizeChecks(results);
+        }
         return runHealthCheck();
       },
     });
@@ -75,9 +84,15 @@ function repairService() {
   return repairs;
 }
 
+function announceRepair(repair: Repair | null | undefined): void {
+  if (!repair) return;
+  publishThought({ kind: "repair", label: repair.status, detail: repair.summary, source: repair.branch });
+}
+
 export function recordIncident(incident: Incident): void {
   try {
     const noted = noteIncident(healthDir(), incident);
+    publishThought({ kind: "repair", label: incident.kind, detail: incident.summary, source: incident.signature });
     const text = `${incident.summary} ${incident.detail || ""}`;
     if (shouldDiagnose(noted.count) && !CONFIG_MISS.test(text)) {
       void diagnoseRepeated(incident.summary);
@@ -91,7 +106,7 @@ async function diagnoseRepeated(summary: string): Promise<void> {
   try {
     const health = await runHealthCheck();
     const bug = health.ok ? summary : `${summary} Health: ${health.summary}`;
-    await repairService().start(bug);
+    announceRepair(await repairService().start(bug));
   } catch (err) {
     console.warn("[Upkeep] diagnosis failed:", (err as Error).message);
   }
@@ -104,10 +119,14 @@ export function getUpkeepSnapshot() {
   };
 }
 
-export function approveRepair(id: string) {
-  return repairService().approve(id);
+export async function approveRepair(id: string) {
+  const repair = await repairService().approve(id);
+  announceRepair(repair);
+  return repair;
 }
 
 export function rejectRepair(id: string) {
-  return repairService().reject(id);
+  const repair = repairService().reject(id);
+  announceRepair(repair);
+  return repair;
 }

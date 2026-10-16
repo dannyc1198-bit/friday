@@ -2,12 +2,9 @@
 // Hardened: allowlists, input sanitization, no raw PowerShell injection
 // Spec: mouse, keyboard, system tools via PowerShell (no robotjs dependency)
 
-import { exec } from "child_process";
-import { promisify } from "util";
 import type { Tool, ToolResult } from "../types/index.js";
+import { runPowershell } from "../services/powershell-runner.js";
 import { toolRegistry } from "./registry.js";
-
-const execAsync = promisify(exec);
 
 // ─── Security: Input Sanitization ────────────────────────────
 // Strip characters that could escape PowerShell strings.
@@ -149,14 +146,7 @@ const KEY_COMBO_MAP: Record<string, string> = {
 
 async function runPS(command: string): Promise<string> {
   try {
-    const { stdout, stderr } = await execAsync(
-      `powershell -NoProfile -NonInteractive -Command "${command.replace(/"/g, '\\"')}"`,
-      { timeout: 15000 }
-    );
-    if (stderr && !stderr.includes("WARNING")) {
-      console.warn("[PC Control] PS stderr:", stderr.substring(0, 200));
-    }
-    return stdout.trim();
+    return await runPowershell(command);
   } catch (error) {
     throw new Error(
       `PowerShell error: ${error instanceof Error ? error.message.substring(0, 200) : "Unknown"}`

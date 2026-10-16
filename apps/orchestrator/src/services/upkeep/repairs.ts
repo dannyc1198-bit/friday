@@ -1,9 +1,11 @@
 // Self-repair queue. A fix is attempted on a new branch. Merge and push
 // happen only after Danny approves, and never into main or master.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import path from "path";
 import { spawn } from "node:child_process";
+import { gitResetHardArgs } from "../agents/command.js";
 import {
   canMergeInto,
   fixTaskPrompt,
@@ -48,6 +50,11 @@ export interface GitOps {
   merge(branch: string): Promise<void>;
   resetHard(sha: string): Promise<void>;
   push(branch: string): Promise<void>;
+  isAncestor(ancestor: string, descendant: string): Promise<boolean>;
+  worktreeAdd(sha: string): Promise<string>;
+  worktreeRemove(dir: string): Promise<void>;
+  mergeIn(dir: string, branch: string): Promise<void>;
+  revertMerge(): Promise<void>;
 }
 
 export interface RepairDeps {
@@ -57,7 +64,7 @@ export interface RepairDeps {
   listAgents: () => Promise<Array<{ id: string; canDispatch: boolean }>>;
   dispatch: (agentId: string, task: string) => Promise<{ ok: boolean; summary: string }>;
   runTests: () => Promise<{ ok: boolean; summary: string }>;
-  runHealth: () => Promise<{ ok: boolean; summary: string }>;
+  runHealth: (cwd?: string) => Promise<{ ok: boolean; summary: string }>;
 }
 
 interface Store {
@@ -123,8 +130,8 @@ export function createRepairService(deps: RepairDeps) {
     const baseBranch = await deps.git.currentBranch();
     const baseSha = await deps.git.headSha();
     const agents = await deps.listAgents();
-    const agent = agents.find((item) => (item.id === "claude-code" || item.id === "codex") && item.canDispatch);
-    if (!agent) return blocked("blocked", "Claude Code and Codex are offline. Nothing was branched.", baseBranch, baseSha);
+    const agent = agents.find((item) => item.id === "codex" && item.canDispatch);
+    if (!agent) return blocked("blocked", "Codex is offline. Nothing was branched.", baseBranch, baseSha);
 
     const repair: Repair = {
       id: `repair-${Date.now()}`,
@@ -197,7 +204,31 @@ export function createRepairService(deps: RepairDeps) {
       return repair;
     }
     const merge = canMergeInto(repair.baseBranch);
+    let worktree = "";
+    let mergedToBranch = false;
     try {
+      const dirty = (await deps.git.statusPorcelain()).trim();
+      if (dirty) {
+        repair.status = "blocked";
+        repair.detail = "Working tree is dirty. The approved repair was not merged.";
+        save(deps.storeFile, loadAndReplace(deps.storeFile, repair));
+        return repair;
+      }
+      const here = await deps.git.currentBranch();
+      if (here !== repair.baseBranch) {
+        repair.status = "blocked";
+        repair.detail = `Checked out ${here}, not ${repair.baseBranch}. Nothing was merged.`;
+        save(deps.storeFile, loadAndReplace(deps.storeFile, repair));
+        return repair;
+      }
+      const pre = await deps.git.headSha();
+      const contains = pre === repair.baseSha || (await deps.git.isAncestor(repair.baseSha, pre));
+      if (!contains) {
+        repair.status = "blocked";
+        repair.detail = "The approved base revision is no longer in this branch. Nothing was merged.";
+        save(deps.storeFile, loadAndReplace(deps.storeFile, repair));
+        return repair;
+      }
       await deps.git.push(repair.branch);
       if (!merge.ok) {
         repair.status = "pushed";
@@ -206,20 +237,49 @@ export function createRepairService(deps: RepairDeps) {
         save(deps.storeFile, loadAndReplace(deps.storeFile, repair));
         return repair;
       }
-      await deps.git.checkout(repair.baseBranch);
-      await deps.git.merge(repair.branch);
-      const health = await deps.runHealth();
+      worktree = await deps.git.worktreeAdd(pre);
+      await deps.git.mergeIn(worktree, repair.branch);
+      const health = await deps.runHealth(worktree);
       if (!health.ok) {
-        await deps.git.resetHard(repair.baseSha);
+        await deps.git.worktreeRemove(worktree);
+        worktree = "";
         repair.status = "rolled_back";
-        repair.detail = `Health failed after merge (${health.summary}). Rolled back to ${repair.baseSha.slice(0, 7)}.`;
-      } else {
-        repair.status = "merged";
-        repair.detail = `Merged into ${repair.baseBranch}. ${health.summary}`;
+        repair.detail = `Health failed (${health.summary}). The repair merge stayed in a worktree and was discarded. ${repair.baseBranch} was not reset.`;
+        save(deps.storeFile, loadAndReplace(deps.storeFile, repair));
+        return repair;
       }
+      const again = await deps.git.headSha();
+      if (again !== pre) {
+        await deps.git.worktreeRemove(worktree);
+        worktree = "";
+        repair.status = "failed";
+        repair.detail = "The base branch moved while health ran. The repair was not merged.";
+        save(deps.storeFile, loadAndReplace(deps.storeFile, repair));
+        return repair;
+      }
+      await deps.git.merge(repair.branch);
+      mergedToBranch = true;
+      await deps.git.worktreeRemove(worktree);
+      worktree = "";
+      repair.status = "merged";
+      repair.detail = `Merged into ${repair.baseBranch}. ${health.summary}`;
     } catch (err) {
-      repair.status = "failed";
-      repair.detail = (err as Error).message || "Approve failed.";
+      if (worktree) {
+        try { await deps.git.worktreeRemove(worktree); } catch { /* the branch rollback still matters */ }
+      }
+      if (mergedToBranch) {
+        try {
+          await deps.git.revertMerge();
+          repair.status = "rolled_back";
+          repair.detail = `The repair merge was reverted. ${(err as Error).message || "Approve failed."}`;
+        } catch (revertErr) {
+          repair.status = "failed";
+          repair.detail = `The repair merge landed and revert failed. The branch was not hard-reset. ${(revertErr as Error).message}`;
+        }
+      } else {
+        repair.status = "failed";
+        repair.detail = (err as Error).message || "Approve failed.";
+      }
     }
     save(deps.storeFile, loadAndReplace(deps.storeFile, repair));
     return repair;
@@ -303,12 +363,44 @@ export function gitOps(cwd: string): GitOps {
       await git(["merge", "--no-ff", "--no-edit", branch]);
     },
     resetHard: async (sha) => {
-      if (!/^[0-9a-f]{7,40}$/i.test(sha)) throw new Error("Refusing to reset to an unexpected sha.");
-      await git(["reset", "--hard", sha]);
+      await git(gitResetHardArgs(sha));
     },
     push: async (branch) => {
       if (!isFixBranch(branch)) throw new Error("Refusing to push anything except a friday/fix- branch.");
       await git(["push", "-u", "origin", branch]);
+    },
+    isAncestor: async (ancestor, descendant) => {
+      if (!/^[0-9a-f]{7,40}$/i.test(ancestor) || !/^[0-9a-f]{7,40}$/i.test(descendant)) return false;
+      if (ancestor === descendant) return true;
+      try {
+        await git(["merge-base", "--is-ancestor", ancestor, descendant]);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    worktreeAdd: async (sha) => {
+      if (!/^[0-9a-f]{7,40}$/i.test(sha)) throw new Error("Refusing to check out an unexpected sha.");
+      const dir = mkdtempSync(path.join(tmpdir(), "friday-repair-"));
+      try {
+        await git(["worktree", "add", "--detach", dir, sha]);
+      } catch (err) {
+        rmSync(dir, { recursive: true, force: true });
+        throw err;
+      }
+      return dir;
+    },
+    worktreeRemove: async (dir) => {
+      if (!dir.includes(`${path.sep}friday-repair-`)) throw new Error("Refusing to remove an unexpected worktree.");
+      await git(["worktree", "remove", "--force", dir]);
+    },
+    mergeIn: async (dir, branch) => {
+      if (!dir.includes(`${path.sep}friday-repair-`)) throw new Error("Refusing to merge outside a repair worktree.");
+      if (!isFixBranch(branch)) throw new Error("Refusing to merge a branch Friday did not create.");
+      await runGit(dir, ["merge", "--no-ff", "--no-edit", branch]);
+    },
+    revertMerge: async () => {
+      await git(["revert", "-m", "1", "--no-edit", "HEAD"]);
     },
   };
 }

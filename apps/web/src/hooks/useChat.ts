@@ -3,6 +3,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Message, ToolActivity } from "@/types";
 import { generateId } from "@/lib/utils";
+import { SAMPLE_THREAD } from "@/lib/demo-boundary";
+import { readDemo } from "@/components/deck/demo";
+import { setMindspaceSpeaker } from "@/lib/mindspace-voice";
 
 // localStorage keys for persistence across reloads
 const ACTIVE_CONV_KEY = "FRIDAY_active_conversation_id";
@@ -27,15 +30,50 @@ export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [approval, setApproval] = useState<{ token: string; detail: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const conversationRef = useRef<string | null>(null);
+
+  const sampleMessages = useCallback((): Message[] => {
+    return SAMPLE_THREAD.map((item) => ({
+      id: item.id,
+      role: item.role,
+      content: item.content,
+      timestamp: new Date(item.timestamp),
+    }));
+  }, []);
 
   // ─── Hydrate from localStorage on mount ────────────────────
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const applyDemo = () => {
+      if (!readDemo()) return false;
+      setMessages(sampleMessages());
+      return true;
+    };
+    const onDemo = () => {
+      if (applyDemo()) return;
+      try {
+        const storedId = localStorage.getItem(ACTIVE_CONV_KEY);
+        setConversationId(storedId);
+        conversationRef.current = storedId;
+        if (!storedId) {
+          setMessages([]);
+          return;
+        }
+        const stored = localStorage.getItem(MESSAGES_KEY_PREFIX + storedId);
+        setMessages(stored ? (JSON.parse(stored) as Message[]).map((m) => ({ ...m, timestamp: new Date(m.timestamp) })) : []);
+      } catch {
+        setMessages([]);
+      }
+    };
+    window.addEventListener("friday-demo", onDemo);
+    if (applyDemo()) return () => window.removeEventListener("friday-demo", onDemo);
     try {
       const storedId = localStorage.getItem(ACTIVE_CONV_KEY);
       if (storedId) {
         setConversationId(storedId);
+        conversationRef.current = storedId;
         const stored = localStorage.getItem(MESSAGES_KEY_PREFIX + storedId);
         if (stored) {
           const parsed = JSON.parse(stored) as Message[];
@@ -45,11 +83,12 @@ export function useChat() {
     } catch {
       // localStorage may be unavailable (private mode, quota) — non-fatal
     }
-  }, []);
+    return () => window.removeEventListener("friday-demo", onDemo);
+  }, [sampleMessages]);
 
   // ─── Persist messages on every change ──────────────────────
   useEffect(() => {
-    if (typeof window === "undefined" || !conversationId) return;
+    if (typeof window === "undefined" || !conversationId || readDemo()) return;
     if (messages.length === 0) return;
     try {
       localStorage.setItem(MESSAGES_KEY_PREFIX + conversationId, JSON.stringify(messages));
@@ -63,6 +102,10 @@ export function useChat() {
   }, []);
 
   const sendMessage = useCallback(async (content: string) => {
+    if (readDemo()) {
+      setError("Demo mode does not send. Nothing left this browser.");
+      return;
+    }
     if (!content.trim() || isLoading) return;
 
     abortRef.current?.abort();
@@ -70,6 +113,7 @@ export function useChat() {
     abortRef.current = controller;
 
     setError(null);
+    setMindspaceSpeaker(null);
 
     const userMessage: Message = {
       id: generateId(),
@@ -118,6 +162,13 @@ export function useChat() {
         ];
         applyUpdate();
       } else if (type === "tool_result") {
+        const result = data.result as { needsApproval?: boolean; token?: string; action?: string; destination?: string; content?: string; amount?: string } | undefined;
+        if (result?.needsApproval && result.token) {
+          setApproval({
+            token: result.token,
+            detail: `${result.action || "submit"} · ${result.destination || "unknown page"} · ${result.content || ""} · ${result.amount || "unspecified"}`,
+          });
+        }
         const tool = String(data.tool || "");
         // Settle the most recent running chip for this tool.
         for (let i = activityAcc.length - 1; i >= 0; i--) {
@@ -129,6 +180,8 @@ export function useChat() {
           }
         }
         applyUpdate();
+      } else if (type === "voice" && typeof data.specialist === "string" && typeof data.edge === "string") {
+        setMindspaceSpeaker({ specialist: data.specialist, edge: data.edge });
       } else if (type === "error" && typeof data.content === "string") {
         setError(data.content);
         textAcc += (textAcc ? "\n\n" : "") + data.content;
@@ -150,6 +203,7 @@ export function useChat() {
       const serverConvId = response.headers.get("X-Conversation-Id");
       if (serverConvId && serverConvId !== conversationId) {
         setConversationId(serverConvId);
+        conversationRef.current = serverConvId;
         if (typeof window !== "undefined") {
           try { localStorage.setItem(ACTIVE_CONV_KEY, serverConvId); } catch {}
         }
@@ -209,16 +263,31 @@ export function useChat() {
   const stopTask = useCallback(async () => {
     abortRef.current?.abort();
     abortRef.current = null;
+    const id = conversationRef.current;
+    if (!id || readDemo()) return;
     try {
       await fetch("/api/stop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ conversationId: id }),
       });
     } catch (err) {
       console.warn("[useChat] Failed to send stop signal — server task may still be running:", err);
     }
   }, []);
+
+  const decideApproval = useCallback(async (approved: boolean) => {
+    const pending = approval;
+    setApproval(null);
+    if (!pending || !approved || readDemo()) return;
+    try {
+      const response = await fetch(`/api/effects/${encodeURIComponent(pending.token)}/approve`, { method: "POST" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) setError(body.error || "That browser submission was not approved.");
+    } catch {
+      setError("That browser submission was not approved.");
+    }
+  }, [approval]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -234,6 +303,7 @@ export function useChat() {
     setMessages([]);
     setError(null);
     setConversationId(null);
+    conversationRef.current = null;
     setIsLoading(false);
     if (typeof window !== "undefined") {
       try { localStorage.removeItem(ACTIVE_CONV_KEY); } catch {}
@@ -245,6 +315,7 @@ export function useChat() {
     abortRef.current?.abort();
     abortRef.current = null;
     setConversationId(id);
+    conversationRef.current = id;
     setMessages(msgs);
     setError(null);
     setIsLoading(false);
@@ -261,6 +332,8 @@ export function useChat() {
     error,
     sendMessage,
     stopTask,
+    approval,
+    decideApproval,
     clearMessages,
     newConversation,
     loadConversation,

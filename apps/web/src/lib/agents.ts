@@ -1,4 +1,4 @@
-export type AgentKind = "grok-bot" | "codex" | "claude-code" | "xai-grok";
+export type AgentKind = "grok-bot" | "codex" | "xai-grok";
 export type AgentState = "online" | "offline" | "degraded";
 
 export interface AgentStatus {

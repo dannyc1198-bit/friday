@@ -14,6 +14,7 @@ import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
 import { searchBrain, rememberFact, getBrainStats, getRecentLearnings } from "../services/brain.js";
 import { runReflection, loadReflectionState } from "../services/reflection.js";
+import { publishThought } from "../services/thought-bus.js";
 
 const brainRecallTool: Tool = {
   name: "brain_recall",
@@ -42,6 +43,9 @@ const brainRecallTool: Tool = {
     const limit = Math.min(Math.max(1, (params.limit as number) || 5), 10);
     try {
       const hits = searchBrain(query, limit);
+      for (const hit of hits) {
+        publishThought({ kind: "recall", label: hit.noteName, detail: hit.notePath, source: "brain_recall" });
+      }
       return {
         toolCallId: "",
         success: true,
@@ -113,6 +117,14 @@ const brainRememberTool: Tool = {
         relations,
         source: "chat",
       });
+      if (!result.duplicate) {
+        publishThought({
+          kind: "learning",
+          label: result.entity,
+          detail: (params.observation as string) || result.entity,
+          source: "brain_remember",
+        });
+      }
       return {
         toolCallId: "",
         success: true,

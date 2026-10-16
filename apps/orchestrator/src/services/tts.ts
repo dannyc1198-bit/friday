@@ -26,6 +26,11 @@ interface TTSOptions {
   useSpeakerBoost?: boolean;
 }
 
+interface VoiceOverride {
+  voiceId?: string;
+  edgeVoice?: string;
+}
+
 const DEFAULT_OPTIONS: TTSOptions = {
   stability: 0.5,
   similarityBoost: 0.8,
@@ -129,7 +134,7 @@ async function elevenLabsSpeech(
  */
 export async function textToSpeech(
   text: string,
-  options: TTSOptions = {}
+  options: TTSOptions & VoiceOverride = {}
 ): Promise<Buffer | null> {
   const cleaned = stripForTTS(text);
 
@@ -148,17 +153,19 @@ export async function textToSpeech(
     useSpeakerBoost: options.useSpeakerBoost ?? DEFAULT_OPTIONS.useSpeakerBoost ?? true,
   };
 
+  const voiceId = options.voiceId || active.voiceId;
+  const edgeVoice = options.edgeVoice || plan.edgeVoice;
   if (plan.provider === "elevenlabs") {
-    const audio = await elevenLabsSpeech(truncated, active.voiceId, opts);
+    const audio = await elevenLabsSpeech(truncated, voiceId, opts);
     if (audio) return audio;
     if (plan.fallbackEdge) {
-      console.warn("[TTS] ElevenLabs failed — falling back to Edge en-GB");
-      return synthesizeEdge(truncated, plan.edgeVoice);
+      console.warn("[TTS] ElevenLabs failed — falling back to Edge");
+      return synthesizeEdge(truncated, edgeVoice);
     }
     return null;
   }
 
-  return synthesizeEdge(truncated, plan.edgeVoice);
+  return synthesizeEdge(truncated, edgeVoice);
 }
 
 /**

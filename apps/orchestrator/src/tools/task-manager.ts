@@ -7,6 +7,7 @@ import path from "path";
 import type { Tool, ToolResult } from "../types/index.js";
 import { toolRegistry } from "./registry.js";
 import { DATA_DIR } from "../services/runtime-paths.js";
+import { resolveTaskIdentifier, sortTasksForDisplay, type StoredTask } from "../services/task-store.js";
 
 // ─── Interfaces ──────────────────────────────────────────────
 
@@ -57,22 +58,9 @@ function generateId(): string {
 function findTask(
   tasks: Task[],
   identifier: string
-): Task | undefined {
-  // By ID
-  if (identifier.startsWith("task_")) {
-    return tasks.find((t) => t.id === identifier);
-  }
-
-  // By number (1-indexed, among non-completed tasks)
-  const num = parseInt(identifier);
-  if (!isNaN(num) && num > 0) {
-    const pending = tasks.filter((t) => !t.completed);
-    return pending[num - 1];
-  }
-
-  // By partial title match
-  const search = identifier.toLowerCase();
-  return tasks.find((t) => t.text.toLowerCase().includes(search));
+): { task?: Task; error?: string } {
+  const resolved = resolveTaskIdentifier(tasks as StoredTask[], identifier);
+  return resolved;
 }
 
 // ─── Tool Definitions ────────────────────────────────────────
@@ -172,16 +160,7 @@ const taskListTool: Tool = {
       tasks = tasks.filter((t) => t.priority === params.priority);
     }
 
-    // Sort: urgent first, then high, medium, low
-    const priorityOrder: Record<string, number> = {
-      urgent: 0,
-      high: 1,
-      medium: 2,
-      low: 3,
-    };
-    tasks.sort(
-      (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]
-    );
+    tasks = sortTasksForDisplay(tasks);
 
     if (tasks.length === 0) {
       return {
@@ -222,13 +201,14 @@ const taskCompleteTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     const store = await loadTasks();
-    const task = findTask(store.tasks, params.identifier as string);
+    const found = findTask(store.tasks, params.identifier as string);
+    const task = found.task;
 
     if (!task) {
       return {
         toolCallId: "",
         success: false,
-        error: `Task not found: "${params.identifier}"`,
+        error: found.error || `Task not found: "${params.identifier}"`,
       };
     }
 
@@ -271,13 +251,14 @@ const taskDeleteTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     const store = await loadTasks();
-    const task = findTask(store.tasks, params.identifier as string);
+    const found = findTask(store.tasks, params.identifier as string);
+    const task = found.task;
 
     if (!task) {
       return {
         toolCallId: "",
         success: false,
-        error: `Task not found: "${params.identifier}"`,
+        error: found.error || `Task not found: "${params.identifier}"`,
       };
     }
 
@@ -366,13 +347,14 @@ const taskUpdateTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     const store = await loadTasks();
-    const task = findTask(store.tasks, params.identifier as string);
+    const found = findTask(store.tasks, params.identifier as string);
+    const task = found.task;
 
     if (!task) {
       return {
         toolCallId: "",
         success: false,
-        error: `Task not found: "${params.identifier}"`,
+        error: found.error || `Task not found: "${params.identifier}"`,
       };
     }
 

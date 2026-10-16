@@ -1,5 +1,12 @@
 import type { Tool, ToolResult } from "../types/index.js";
 import { isOutboundTool } from "../services/intent-router.js";
+import {
+  assessBrowserEffect,
+  browserEffectContext,
+  consumeGrantedEffect,
+  noteBrowserDraft,
+  stageEffect,
+} from "../services/effect-gate.js";
 
 class ToolRegistry {
   private tools: Map<string, Tool> = new Map();
@@ -28,15 +35,31 @@ class ToolRegistry {
   // Execute a tool
   async execute(
     toolName: string,
-    parameters: Record<string, unknown>
+    parameters: Record<string, unknown>,
+    signal?: AbortSignal
   ): Promise<ToolResult> {
     const tool = this.tools.get(toolName);
+
+    if (signal?.aborted) {
+      return { toolCallId: "", success: false, error: "Cancelled before the tool started." };
+    }
 
     if (isOutboundTool(toolName)) {
       return {
         toolCallId: "",
         success: false,
         error: `Refused "${toolName}". Messages, spending, and live trades stay drafts until Danny explicitly approves one.`,
+      };
+    }
+
+    const effect = assessBrowserEffect(toolName, parameters, browserEffectContext());
+    if (effect && !consumeGrantedEffect(effect)) {
+      const token = stageEffect(toolName, parameters, effect);
+      return {
+        toolCallId: "",
+        success: false,
+        error: `Approval required before this browser submission. Action: ${effect.action}. Destination: ${effect.destination}. Content: ${effect.content}. Amount: ${effect.amount}. Approve token ${token}. A model cannot approve this itself.`,
+        data: { needsApproval: true, token, ...effect },
       };
     }
 
@@ -50,7 +73,10 @@ class ToolRegistry {
 
     try {
       console.log(`[ToolRegistry] Executing tool: ${toolName}`);
-      const result = await tool.execute(parameters);
+      const result = await runWithStop(tool.execute(parameters), signal);
+      if (toolName === "browser_type" && result.success && typeof parameters.text === "string") {
+        noteBrowserDraft(parameters.text);
+      }
       console.log(`[ToolRegistry] Tool result: ${toolName} ${result.success ? "ok" : "failed"}`);
       return result;
     } catch (error) {
@@ -74,6 +100,35 @@ class ToolRegistry {
   getToolCount(): number {
     return this.tools.size;
   }
+}
+
+function runWithStop(pending: Promise<ToolResult>, signal?: AbortSignal): Promise<ToolResult> {
+  if (!signal) return pending;
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      resolve({
+        toolCallId: "",
+        success: false,
+        error: "Stop requested. This tool was already running and may not be interruptible.",
+        data: { uninterruptible: true },
+      });
+    };
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+    pending.then(
+      (result) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      },
+      (err) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(err);
+      }
+    );
+  });
 }
 
 // Singleton instance

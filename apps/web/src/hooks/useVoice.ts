@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePushToTalk, type STTMethod } from "./usePushToTalk";
 import type { Message } from "@/types";
-import { JARVIS_SPEECH_PITCH, JARVIS_SPEECH_RATE, pickJarvisVoice } from "@/lib/jarvis-voice";
+import { JARVIS_SPEECH_PITCH, JARVIS_SPEECH_RATE, pickJarvisVoice, pickNamedVoice } from "@/lib/jarvis-voice";
+import { takeMindspaceSpeaker } from "@/lib/mindspace-voice";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -127,7 +128,7 @@ export function useVoice({
 
   // ─── TTS Playback ──────────────────────────────────────
 
-  const speakWithElevenLabs = useCallback(async (text: string): Promise<boolean> => {
+  const speakWithElevenLabs = useCallback(async (text: string, specialist?: string): Promise<boolean> => {
     try {
       const truncated = text.length > TTS_MAX_LENGTH
         ? text.slice(0, TTS_MAX_LENGTH) + "..."
@@ -136,7 +137,7 @@ export function useVoice({
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: truncated }),
+        body: JSON.stringify({ text: truncated, specialist }),
       });
 
       // Check if we got audio back (not a JSON error)
@@ -177,21 +178,21 @@ export function useVoice({
     }
   }, []);
 
-  const speakWithBrowser = useCallback((text: string) => {
+  const speakWithBrowser = useCallback((text: string, edgeVoice?: string) => {
     if (!("speechSynthesis" in window)) return;
 
     // Cancel any existing speech
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-GB";
+    utterance.lang = edgeVoice?.toLowerCase().includes("en-us") ? "en-US" : edgeVoice?.toLowerCase().includes("en-au") ? "en-AU" : "en-GB";
     utterance.rate = JARVIS_SPEECH_RATE;
     utterance.pitch = JARVIS_SPEECH_PITCH;
     utterance.volume = 1.0;
 
-    // Free fallback: calm British male (Windows Ryan/George, or any en-GB male).
-    const britishVoice = pickJarvisVoice(window.speechSynthesis.getVoices());
-    if (britishVoice) utterance.voice = britishVoice;
+    const voices = window.speechSynthesis.getVoices();
+    const chosen = edgeVoice ? pickNamedVoice(voices, edgeVoice) : pickJarvisVoice(voices);
+    if (chosen) utterance.voice = chosen;
 
     synthUtteranceRef.current = utterance;
 
@@ -212,14 +213,15 @@ export function useVoice({
     if (!text.trim()) return;
 
     setError(null);
+    const speaker = takeMindspaceSpeaker();
 
-    if (ttsAvailable) {
-      const success = await speakWithElevenLabs(text);
+    if (ttsAvailable !== false || isLiveMode) {
+      const success = await speakWithElevenLabs(text, speaker?.specialist);
       if (success) return;
     }
 
     // Live mode must not stop at text. The browser voice is the last speaker.
-    speakWithBrowser(text);
+    speakWithBrowser(text, speaker?.edge);
     if (isLiveMode && !("speechSynthesis" in window)) {
       setError("Live voice has no speaker on this browser.");
     }
@@ -293,7 +295,7 @@ export function useVoice({
     prevIsLoadingRef.current = isLoading;
 
     if (!wasLoading || isLoading) return; // Only trigger on true → false
-    if (isMuted || !enabled) return;
+    if (isMuted || !enabled || suppressMic) return;
 
     // Find the last assistant message
     const lastMessage = messages[messages.length - 1];
@@ -305,7 +307,7 @@ export function useVoice({
     // Mark as spoken and play
     spokenMessageIds.current.add(lastMessage.id);
     speakResponse(lastMessage.content);
-  }, [isLoading, messages, isMuted, enabled, speakResponse]);
+  }, [isLoading, messages, isMuted, enabled, suppressMic, speakResponse]);
 
   // ─── Stop speaking when user starts talking ─────────────
 

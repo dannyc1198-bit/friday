@@ -9,6 +9,39 @@
    Design: Stark Industries aesthetic meets luxury automotive HUD
    ═══════════════════════════════════════════════════════════════ */
 
+:root,
+html.dark {
+  --c-app: 12 14 17;
+  --c-panel: 20 23 28;
+  --c-raised: 30 34 42;
+  --c-line: 46 52 62;
+  --c-line-strong: 78 86 99;
+  --c-ink: 236 238 241;
+  --c-muted: 176 184 194;
+  --c-faint: 146 154 166;
+  --c-accent: 198 161 91;
+  --c-ok: 72 190 128;
+  --c-warn: 214 168 55;
+  --c-danger: 229 96 90;
+  --c-info: 138 176 214;
+}
+
+html.light {
+  --c-app: 244 245 247;
+  --c-panel: 255 255 255;
+  --c-raised: 236 238 242;
+  --c-line: 214 218 224;
+  --c-line-strong: 160 168 180;
+  --c-ink: 22 24 28;
+  --c-muted: 62 70 82;
+  --c-faint: 92 100 112;
+  --c-accent: 110 78 22;
+  --c-ok: 16 112 64;
+  --c-warn: 122 78 8;
+  --c-danger: 158 36 36;
+  --c-info: 32 72 120;
+}
+
 :root {
   /* Core palette — deep space with electric cyan */
   --fri-bg: #020a14;
@@ -33,8 +66,8 @@
 
   /* Text hierarchy */
   --fri-text: #e0f0ff;
-  --fri-text-dim: #5a8aaa;
-  --fri-text-ultra-dim: #1e3a50;
+  --fri-text-dim: #9ec3d6;
+  --fri-text-ultra-dim: #7f9eb4;
   --fri-text-bright: #ffffff;
 
   /* Glass effect */
@@ -462,4 +495,22 @@ textarea { resize: none; }
   inset: 0;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
   animation: exec-sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes deck-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.deck-rise {
+  animation: deck-rise 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-rise,
+  .animate-pulse,
+  .animate-ping,
+  .exec-banner::after {
+    animation: none !important;
+  }
 }

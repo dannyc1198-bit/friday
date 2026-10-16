@@ -8,7 +8,7 @@ import {
   type DispatchResponse,
 } from "@/lib/agents";
 
-export function useAgents() {
+export function useAgents(enabled = true) {
   const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,10 +34,11 @@ export function useAgents() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     refreshTasks();
     const interval = setInterval(refreshTasks, 15_000);
     return () => clearInterval(interval);
-  }, [refreshTasks]);
+  }, [enabled, refreshTasks]);
 
   return { agents, loading, error, dispatchTask, refreshTasks };
 }

@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createAgentService } from "./registry.js";
 import { parseGrokBots } from "./grok-bots.js";
-import { assertCommandArgs } from "./command.js";
-import { claudeArgs } from "./claude.js";
+import { assertCommandArgs, codexExecArgs } from "./command.js";
 import type { CommandResult } from "./types.js";
 
 const missing: CommandResult = { code: null, stdout: "", stderr: "", error: "spawn codex ENOENT" };
@@ -33,7 +32,7 @@ test("missing credentials and binaries are offline and do not throw", async () =
   assert.equal(byId["grok-bot"].state, "offline");
   assert.equal(byId["grok-bot"].render, "dot");
   assert.equal(byId["codex"].state, "offline");
-  assert.equal(byId["claude-code"].state, "offline");
+  assert.equal(byId["claude-code"], undefined);
   assert.equal(byId["xai-grok"].state, "offline");
   assert.equal(byId["xai-grok"].detail.includes("XAI_API_KEY"), true);
 
@@ -72,11 +71,11 @@ test("grok bot dots follow the status URL and xAI stays offline without a key", 
   assert.equal(calls[1], "http://127.0.0.1:9/dispatch");
 });
 
-test("command arguments cannot carry shell metacharacters and tasks stay off the command line", () => {
-  assert.equal(assertCommandArgs("claude", claudeArgs("opus")), null);
+test("command arguments cannot carry shell metacharacters and tasks stay off a shell", () => {
+  assert.equal(assertCommandArgs("codex", codexExecArgs("reset --hard")), null);
   assert.equal(assertCommandArgs("codex", ["exec", "--skip-git-repo-check"]), null);
-  assert.match(assertCommandArgs("claude", ["--print", "hello & calc.exe"]) || "", /metacharacters/);
-  assert.match(assertCommandArgs("claude & calc", []) || "", /bare executable/);
+  assert.match(assertCommandArgs("codex", ["exec", "hello & calc.exe"], true) || "", /metacharacters/);
+  assert.match(assertCommandArgs("codex & calc", []) || "", /bare executable/);
 });
 
 test("dispatch refuses send, spend, and trade tasks", async () => {
@@ -91,7 +90,7 @@ test("dispatch refuses send, spend, and trade tasks", async () => {
   const email = await service.dispatch("codex", "send the invoice to Russell");
   assert.equal(email.ok, false);
   assert.match(email.summary, /Draft only/);
-  const trade = await service.dispatch("claude-code", "trade live the Enagic account");
+  const trade = await service.dispatch("xai-grok", "trade live the Enagic account");
   assert.equal(trade.ok, false);
   assert.equal(ran, false);
 });

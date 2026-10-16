@@ -1,3 +1,5 @@
+import { orchestratorAuth } from "@/lib/orchestrator";
+
 const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://127.0.0.1:3001";
 
 export const dynamic = "force-dynamic";
@@ -5,7 +7,7 @@ export const dynamic = "force-dynamic";
 async function forward(path: string, body?: string) {
   const res = await fetch(`${ORCHESTRATOR_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: orchestratorAuth({ "Content-Type": "application/json" }),
     body: body || "{}",
   });
   const data = await res.json().catch(() => ({ error: "Voice request failed." }));
