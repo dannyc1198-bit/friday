@@ -34,6 +34,7 @@ import { integrationRoutes } from "./routes/integrations.js";
 import { upkeepRoutes } from "./routes/upkeep.js";
 import { liveVoiceRoutes } from "./routes/live-voice.js";
 import { liveAppsRoutes } from "./routes/live-apps.js";
+import { liveAppsAnswer } from "./services/live-apps.js";
 import { neuralRoutes } from "./routes/neural.js";
 import { setupRoutes } from "./routes/setup.js";
 import { brainSettingsRoutes } from "./routes/brain-settings.js";
@@ -438,8 +439,12 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
     const toolResults: { toolCallId: string; success: boolean; data?: unknown; error?: string }[] = [];
 
     try {
-      const minded = await answerMindspace(message, { signal: abortController.signal });
-      if (minded) {
+      const appsAnswer = await liveAppsAnswer(message);
+      const minded = appsAnswer ? null : await answerMindspace(message, { signal: abortController.signal });
+      if (appsAnswer) {
+        fullContent = appsAnswer;
+        reply.raw.write(`data: ${JSON.stringify({ type: "text", content: appsAnswer })}\n\n`);
+      } else if (minded) {
         fullContent = minded.text;
         if (minded.voice) {
           reply.raw.write(`data: ${JSON.stringify({
