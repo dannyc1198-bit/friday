@@ -8,20 +8,21 @@ import { messageSegments, obsidianOpenHref } from "@/lib/message-segments";
 // Transcript entries, not chat bubbles. A flight deck keeps a log:
 // speaker tag, timestamp, cognition chips, then the words.
 
-export function DeckMessage({ message }: { message: Message }) {
+export function DeckMessage({ message, tone = "deck" }: { message: Message; tone?: "deck" | "console" }) {
   const isUser = message.role === "user";
+  const plain = tone === "console";
 
   return (
-    <article className="border-b border-deck-line py-3.5 first:pt-1 last:border-b-0">
+    <article className={plain ? "border-b border-line py-4" : "border-b border-deck-line py-3.5 first:pt-1 last:border-b-0"}>
       <header className="flex items-baseline gap-2">
         <span
-          className={`font-deckdisplay text-[10px] font-semibold uppercase tracking-[0.24em] ${
-            isUser ? "text-deck-dim" : "text-deck-amber"
+          className={`${plain ? "text-xs font-semibold" : "font-deckdisplay text-[10px] font-semibold uppercase tracking-[0.24em]"} ${
+            isUser ? (plain ? "text-muted" : "text-deck-dim") : plain ? "text-accent" : "text-deck-amber"
           }`}
         >
           {isUser ? "You" : "Friday"}
         </span>
-        <time className="font-deckmono text-[9px] text-deck-faint">
+        <time className={plain ? "font-mono text-[10px] text-faint" : "font-deckmono text-[9px] text-deck-faint"}>
           {formatTime(new Date(message.timestamp))}
         </time>
       </header>
@@ -57,7 +58,7 @@ export function DeckMessage({ message }: { message: Message }) {
 
       <div
         className={`mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed ${
-          isUser ? "text-deck-dim" : "text-deck-ink"
+          plain ? (isUser ? "text-muted" : "text-ink") : isUser ? "text-deck-dim" : "text-deck-ink"
         }`}
       >
         {messageSegments(message.content || "").map((segment, index) => {

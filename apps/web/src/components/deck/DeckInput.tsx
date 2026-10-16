@@ -27,6 +27,7 @@ export function DeckInput({
   focusSignal = 0,
   prefill = "",
   prefillKey = 0,
+  tone = "deck",
 }: {
   onSend: (text: string) => void;
   isLoading: boolean;
@@ -35,6 +36,7 @@ export function DeckInput({
   focusSignal?: number;
   prefill?: string;
   prefillKey?: number;
+  tone?: "deck" | "console";
 }) {
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -74,22 +76,24 @@ export function DeckInput({
     }
   };
 
-  const iconBtn =
-    "flex h-9 w-9 items-center justify-center rounded border border-deck-line text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber";
+  const plain = tone === "console";
+  const iconBtn = plain
+    ? "flex h-9 w-9 items-center justify-center rounded border border-line text-muted hover:border-line-strong hover:text-ink"
+    : "flex h-9 w-9 items-center justify-center rounded border border-deck-line text-deck-dim transition-colors hover:border-deck-line-bright hover:text-deck-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-deck-amber";
 
   return (
     <form
       onSubmit={submit}
-      className="rounded-hud border border-deck-line bg-deck-panel p-2"
+      className={plain ? "rounded-lg border border-line bg-panel p-2" : "rounded-hud border border-deck-line bg-deck-panel p-2"}
     >
       <div className="mb-2 grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={voice.toggleLiveMode}
-          className={`min-h-12 rounded border px-3 font-deckdisplay text-lg ${
+          className={`min-h-12 rounded border px-3 text-base ${plain ? "" : "font-deckdisplay text-lg"} ${
             voice.isLiveMode
-              ? "border-deck-hot bg-deck-raised text-deck-ink"
-              : "border-deck-line text-deck-dim"
+              ? plain ? "border-accent bg-raised text-ink" : "border-deck-hot bg-deck-raised text-deck-ink"
+              : plain ? "border-line text-muted" : "border-deck-line text-deck-dim"
           }`}
         >
           {voice.isLiveMode ? "End hands-free" : "Hands-free"}
@@ -99,15 +103,17 @@ export function DeckInput({
           onPointerDown={() => voice.startListening()}
           onPointerUp={() => voice.stopListening()}
           onPointerLeave={() => voice.isListening && voice.stopListening()}
-          className={`min-h-12 rounded border px-3 font-deckdisplay text-lg ${
-            voice.isListening ? "border-deck-hot text-deck-ink" : "border-deck-line text-deck-dim"
+          className={`min-h-12 rounded border px-3 text-base ${plain ? "" : "font-deckdisplay text-lg"} ${
+            voice.isListening
+              ? plain ? "border-accent text-ink" : "border-deck-hot text-deck-ink"
+              : plain ? "border-line text-muted" : "border-deck-line text-deck-dim"
           }`}
         >
           Hold to talk
         </button>
       </div>
       {voice.isListening && (
-        <p className="px-1 pb-1.5 font-deckmono text-[10px] uppercase tracking-wider text-deck-hot">
+        <p className={plain ? "px-1 pb-1.5 font-mono text-[10px] uppercase tracking-wider text-accent" : "px-1 pb-1.5 font-deckmono text-[10px] uppercase tracking-wider text-deck-hot"}>
           {voice.isLiveMode ? "live — " : ""}listening
           {voice.interimTranscript ? ` — ${voice.interimTranscript}` : "…"}
         </p>
@@ -122,7 +128,7 @@ export function DeckInput({
           data-friday-input="true"
           placeholder="Talk to FRIDAY…"
           aria-label="Message FRIDAY"
-          className="min-h-[36px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] leading-relaxed text-deck-ink placeholder:text-deck-faint focus:outline-none"
+          className={`min-h-[36px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] leading-relaxed focus:outline-none ${plain ? "text-ink placeholder:text-faint" : "text-deck-ink placeholder:text-deck-faint"}`}
         />
 
         {/* hear her / mute her */}

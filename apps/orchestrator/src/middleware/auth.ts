@@ -100,6 +100,7 @@ const LOCALHOST_READ_PREFIXES = [
   "/api/media",
   "/api/greeting",
   "/api/today",
+  "/api/tasks",
   "/api/integrations",
   "/api/upkeep",
   "/api/neural",

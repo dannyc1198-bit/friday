@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -16,6 +17,7 @@ const config: Config = {
         deckdisplay: ['var(--font-deck-display)', 'system-ui', 'sans-serif'],
         deckbody: ['var(--font-deck-body)', 'system-ui', 'sans-serif'],
         deckmono: ['var(--font-deck-mono)', 'ui-monospace', 'monospace'],
+        sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
         background: "#020a14",
@@ -45,6 +47,19 @@ const config: Config = {
         // ── Flight deck (new main window) — JARVIS blue instrument palette ──
         // (recolored 2026-07-09 from night-ops amber → arc-reactor blue, Danny's ask;
         //  token names kept so components didn't change)
+        app: "rgb(var(--c-app) / <alpha-value>)",
+        panel: "rgb(var(--c-panel) / <alpha-value>)",
+        raised: "rgb(var(--c-raised) / <alpha-value>)",
+        line: "rgb(var(--c-line) / <alpha-value>)",
+        "line-strong": "rgb(var(--c-line-strong) / <alpha-value>)",
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
+        muted: "rgb(var(--c-muted) / <alpha-value>)",
+        faint: "rgb(var(--c-faint) / <alpha-value>)",
+        brass: "rgb(var(--c-accent) / <alpha-value>)",
+        ok: "rgb(var(--c-ok) / <alpha-value>)",
+        warn: "rgb(var(--c-warn) / <alpha-value>)",
+        danger: "rgb(var(--c-danger) / <alpha-value>)",
+        info: "rgb(var(--c-info) / <alpha-value>)",
         deck: {
           void: "#020a14",        // page — deep space blue
           panel: "#071422",       // instrument panel surface
