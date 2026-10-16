@@ -1,4 +1,4 @@
-// The top tab strip: Overview, Agents, God's Eye, Body Anatomy, Sports.
+// The top tab strip: Overview, Agents, Brain, God's Eye, Body Anatomy, Sports.
 // Keyboard and voice both switch tabs through these helpers.
 
 export interface AppTab {
@@ -10,6 +10,7 @@ export interface AppTab {
 export const APP_TABS: AppTab[] = [
   { href: "/", label: "Overview", words: ["overview", "home", "dashboard"] },
   { href: "/agents", label: "Agents", words: ["agents", "agent", "team", "mindspace"] },
+  { href: "/brain-core", label: "Brain", words: ["brain", "neural core", "vault", "obsidian", "notes"] },
   { href: "/apps/gods-eye", label: "God's Eye", words: ["god's eye", "gods eye", "god eye", "osiris", "globe"] },
   { href: "/apps/anatomy", label: "Body Anatomy", words: ["anatomy", "body"] },
   { href: "/apps/sports", label: "Sports", words: ["sports", "sport", "games", "scores"] },

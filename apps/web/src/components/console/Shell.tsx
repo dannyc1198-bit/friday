@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  Activity,
   Bell,
   Bone,
   Globe2,
@@ -42,6 +43,7 @@ interface NavItem {
 const PRIMARY: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Users },
+  { href: "/brain-core", label: "Brain", icon: Activity },
   { href: "/mindspace", label: "Mindspace", icon: Hexagon },
   { href: "/talk", label: "Talk", icon: MessageSquare },
   { href: "/tasks", label: "Tasks", icon: ListTodo },

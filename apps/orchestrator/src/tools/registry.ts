@@ -1,5 +1,6 @@
 import type { Tool, ToolResult } from "../types/index.js";
 import { isOutboundTool } from "../services/intent-router.js";
+import { publishThought } from "../services/thought-bus.js";
 import {
   assessBrowserEffect,
   browserEffectContext,
@@ -76,6 +77,14 @@ class ToolRegistry {
       const result = await runWithStop(tool.execute(parameters), signal);
       if (toolName === "browser_type" && result.success && typeof parameters.text === "string") {
         noteBrowserDraft(parameters.text);
+      }
+      if (result.success && toolName.startsWith("obsidian_")) {
+        const raw = parameters.note ?? parameters.title ?? parameters.path;
+        if (typeof raw === "string" && raw.trim()) {
+          const writes = ["obsidian_create", "obsidian_edit", "obsidian_daily"].includes(toolName);
+          const notePath = raw.trim().toLowerCase().endsWith(".md") ? raw.trim() : `${raw.trim()}.md`;
+          publishThought({ kind: writes ? "learning" : "recall", label: raw.trim(), detail: notePath, source: toolName });
+        }
       }
       console.log(`[ToolRegistry] Tool result: ${toolName} ${result.success ? "ok" : "failed"}`);
       return result;

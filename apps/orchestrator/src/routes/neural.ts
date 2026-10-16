@@ -1,11 +1,31 @@
 import type { FastifyInstance } from "fastify";
 import { recentThoughts, subscribeThoughts } from "../services/thought-bus.js";
 import { thinkingStatus, updateThinkingEnabled } from "../services/thinking-loop.js";
+import { buildVaultGraph, readVaultNote } from "../services/vault-graph.js";
+import { config } from "../config/index.js";
 
 export async function neuralRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/neural/thoughts", async () => ({ thoughts: recentThoughts(40) }));
 
   app.get("/api/neural/thinking", async () => thinkingStatus());
+
+  app.get("/api/neural/graph", async (_request, reply) => {
+    const root = config.obsidianVaultPath;
+    if (!root) {
+      reply.code(503);
+      return { error: "OBSIDIAN_VAULT_PATH is not set." };
+    }
+    return buildVaultGraph(root);
+  });
+
+  app.get<{ Querystring: { path?: string } }>("/api/neural/note", async (request, reply) => {
+    const note = readVaultNote(config.obsidianVaultPath, String(request.query.path || ""));
+    if (!note) {
+      reply.code(404);
+      return { error: "That note is not in the vault." };
+    }
+    return note;
+  });
 
   app.post<{ Body: { enabled?: boolean } }>("/api/neural/thinking", async (request, reply) => {
     if (typeof request.body?.enabled !== "boolean") {
