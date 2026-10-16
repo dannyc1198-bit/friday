@@ -13,6 +13,7 @@ test("voice tab commands", () => {
 
 test("tab stepping wraps", () => {
   assert.equal(stepTab("/apps/sports", 1), "/");
-  assert.equal(tabIndex("/apps/anatomy"), 3);
+  assert.equal(tabIndex("/apps/anatomy"), 4);
+  assert.equal(parseTabCommand("show the brain", "/"), "/brain-core");
   assert.equal(tabIndex("/tasks"), -1);
 });

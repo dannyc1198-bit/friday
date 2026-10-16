@@ -11,6 +11,7 @@ import { DeckInput } from "@/components/deck/DeckInput";
 import { LiveTalk } from "@/components/deck/LiveTalk";
 import { readDemo, useDemo } from "@/components/deck/demo";
 import { PageHeader } from "./States";
+import { BrainGraph } from "./BrainGraph";
 
 export function TalkStudio() {
   const params = useSearchParams();
@@ -90,6 +91,7 @@ export function TalkStudio() {
   const suggestions = ["What's the fleet status?", "What have you learned about me lately?", "Anything I should know from the news?"];
 
   return (
+    <div className="flex h-full w-full">
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-4 py-6 md:px-8">
       <PageHeader kicker="Conversation" title="Talk" detail="Drafts stay drafts. Demo mode keeps the microphone off and does not send." />
       <LiveTalk active={voice.isLiveMode && !demo} muted={voice.isMuted} onAgent={setAgentLive} />
@@ -214,6 +216,10 @@ export function TalkStudio() {
         prefill={prefill}
         prefillKey={prefillKey}
       />
+    </div>
+    <aside className="hidden w-[38%] max-w-xl shrink-0 border-l border-line p-3 xl:block">
+      <BrainGraph compact />
+    </aside>
     </div>
   );
 }
