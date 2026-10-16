@@ -6,6 +6,7 @@ import { Activity, FileCheck2, ListTodo, Sparkles, Wrench } from "lucide-react";
 import { SAMPLE_AGENTS, SAMPLE_TASK, SAMPLE_THOUGHTS } from "@/components/deck/demo";
 import { bucketActivity, nextEiReport } from "@/lib/console";
 import { useResource } from "./useResource";
+import { LiveAppsTiles } from "./LiveAppsTiles";
 import { NeedsKey, PageHeader, StateBlock } from "./States";
 
 const ActivityChart = dynamic(() => import("./ActivityChart"), {
@@ -101,6 +102,8 @@ export function Overview() {
         <Kpi icon={Sparkles} label="Next EI report" value={nextEiReport(new Date())} href="/businesses/ally" note="Monday. Drafts only." />
         <Kpi icon={Activity} label="Agent activity" value={mind.loading ? "…" : `${working} live`} href="/mindspace" note={`${online} fleet online`} />
       </section>
+
+      <LiveAppsTiles />
 
       <section className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
         <div className="rounded-lg border border-line bg-panel p-4">

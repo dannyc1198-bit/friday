@@ -1,4 +1,4 @@
-// Authentication Middleware — Bearer token gating for all FRIDAY API endpoints
+// Authentication Middleware â€” Bearer token gating for all FRIDAY API endpoints
 // Auto-generates a secure API key on first run and stores it in .env
 //
 // Public endpoints (no auth): GET /api/health
@@ -10,7 +10,7 @@ import { join } from "path";
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { originAllowed, voiceUpgradeDecision } from "../services/access-gate.js";
 
-// ─── Config ─────────────────────────────────────────────────────
+// â”€â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ENV_PATH = join(
   import.meta.dirname || ".",
   "..",
@@ -23,7 +23,7 @@ const PUBLIC_PATHS = new Set([
   "/api/health",
 ]);
 
-// ─── Key Management ─────────────────────────────────────────────
+// â”€â”€â”€ Key Management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 let apiKey: string | null = null;
 
@@ -66,7 +66,7 @@ function loadOrGenerateApiKey(): string {
     console.log("[Auth] Generated FRIDAY_API_KEY and saved it to .env.");
     console.log("[Auth] Copy that line into apps/web/.env.local. The key is not printed here.");
   } catch (error) {
-    console.warn("[Auth] Could not save API key to .env — using in-memory only");
+    console.warn("[Auth] Could not save API key to .env â€” using in-memory only");
     console.warn(`[Auth] In-memory API key: ${newKey}`);
   }
 
@@ -87,9 +87,9 @@ function safeCompare(a: string, b: string): boolean {
   return timingSafeEqual(ha, hb);
 }
 
-// ─── Middleware ──────────────────────────────────────────────────
+// â”€â”€â”€ Middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// HUD read-only endpoints — safe to expose to same-origin localhost without auth.
+// HUD read-only endpoints â€” safe to expose to same-origin localhost without auth.
 // These are GET-only reads that the dashboard polls every few seconds; requiring
 // the bearer on every poll just floods the console with 401s. The orchestrator
 // binds to 127.0.0.1 (FRIDAY_BIND_HOST), so an unauthed GET from 127.0.0.1 is
@@ -108,6 +108,7 @@ const LOCALHOST_READ_PREFIXES = [
   "/api/settings",
   "/api/mindspace",
   "/api/voice/live",
+  "/api/live-apps",
   "/api/voice/elevenlabs",
   "/api/learning/",
   "/api/proactive/",
@@ -188,6 +189,7 @@ export async function authMiddleware(
     path === "/api/voice/elevenlabs/token" ||
     path === "/api/voice/realtime/session" ||
     path === "/api/voice/realtime/tool" ||
+    path === "/api/voice/realtime/exhausted" ||
     path === "/api/voice/session-token";
 
   // Allow same-machine HUD reads on whitelisted prefixes.
@@ -229,9 +231,10 @@ export async function authMiddleware(
   }
 }
 
-// ─── Init ───────────────────────────────────────────────────────
+// â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function initAuth(): void {
   const key = getApiKey();
   console.log(`[Auth] API key loaded (${key.slice(0, 12)}...)`);
 }
+

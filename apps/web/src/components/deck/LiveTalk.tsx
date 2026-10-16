@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
-import { noticesFromRealtimeEvent } from "@/lib/realtime-notices";
+import { noticesFromRealtimeEvent, realtimeFailure } from "@/lib/realtime-notices";
 import { handsFreeStatus } from "@/lib/voice-status";
 
 interface TranscriptLine {
@@ -223,7 +223,10 @@ function RealtimeSession({
       if (session.disposed) return;
       const body = (await sessionRes.json()) as { token?: string; error?: string };
       if (session.disposed) return;
-      if (!sessionRes.ok || !body.token) throw new Error(body.error || "no session");
+      if (!sessionRes.ok || !body.token) {
+        if (sessionRes.status === 402) void fetch("/api/voice/realtime/exhausted", { method: "POST" }).catch(() => undefined);
+        throw new Error(body.error || "no session");
+      }
       pc = new RTCPeerConnection();
       if (session.disposed) {
         pc.close();
@@ -251,6 +254,13 @@ function RealtimeSession({
         try {
           parsed = JSON.parse(String(event.data));
         } catch {
+          return;
+        }
+        const failure = realtimeFailure(parsed);
+        if (failure) {
+          if (failure === "credit") void fetch("/api/voice/realtime/exhausted", { method: "POST" }).catch(() => undefined);
+          release();
+          onFailRef.current();
           return;
         }
         for (const notice of noticesFromRealtimeEvent(parsed)) {
@@ -313,3 +323,4 @@ function RealtimeSession({
 
   return null;
 }
+

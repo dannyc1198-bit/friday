@@ -42,3 +42,22 @@ function stringField(record: Record<string, unknown>, key: string): string {
   const value = record[key];
   return typeof value === "string" ? value : "";
 }
+
+// A realtime call can connect at $0 credit, then fail on the first response.
+// "credit" means drop to the free voice and tell the orchestrator; "error" means drop to it.
+export function realtimeFailure(event: unknown): "credit" | "error" | null {
+  if (!event || typeof event !== "object") return null;
+  const record = event as Record<string, unknown>;
+  const type = typeof record.type === "string" ? record.type : "";
+  let detail: unknown = null;
+  if (type === "error") detail = record.error ?? record;
+  if (type === "response.done") {
+    const response = record.response as Record<string, unknown> | undefined;
+    if (!response || response.status !== "failed") return null;
+    detail = (response.status_details as Record<string, unknown> | undefined)?.error ?? response.status_details ?? response;
+  }
+  if (detail === null) return null;
+  const text = JSON.stringify(detail);
+  if (/insufficient_quota|credit_balance_exhausted|billing/i.test(text)) return "credit";
+  return type === "response.done" ? "error" : /session|rate|quota|server_error|invalid_api_key/i.test(text) ? "error" : null;
+}

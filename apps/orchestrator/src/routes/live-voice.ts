@@ -7,6 +7,7 @@ import { selectLiveVoice } from "../services/voice-plan.js";
 import { parametersToJsonSchema } from "../services/tool-schema.js";
 import { issueScopedToken } from "../services/access-gate.js";
 import { getApiKey } from "../middleware/auth.js";
+import { isCreditError, markOpenAICreditExhausted, openAIHasCredit } from "../services/openai-credit.js";
 
 const BUTLER = [
   "You are Friday, Daniel's assistant.",
@@ -45,7 +46,13 @@ export function realtimeTools() {
 }
 
 export async function liveVoiceRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/voice/live", async () => selectLiveVoice(process.env));
+  app.get("/api/voice/live", async () => liveVoicePlan());
+
+  // The browser saw a credit error inside a realtime call. Remember it.
+  app.post("/api/voice/realtime/exhausted", async () => {
+    markOpenAICreditExhausted();
+    return liveVoicePlan();
+  });
 
   app.post("/api/voice/session-token", async () => {
     const now = Date.now();
@@ -83,6 +90,10 @@ export async function liveVoiceRoutes(app: FastifyInstance): Promise<void> {
       reply.code(503);
       return { error: "OpenAI Realtime needs OPENAI_API_KEY." };
     }
+    if (!(await openAIHasCredit({ apiKey: key }))) {
+      reply.code(402);
+      return { error: "OpenAI has no credit. Using the free voice.", exhausted: true };
+    }
     const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
       headers: {
@@ -96,6 +107,12 @@ export async function liveVoiceRoutes(app: FastifyInstance): Promise<void> {
       })),
     });
     if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      if (isCreditError(text)) {
+        markOpenAICreditExhausted();
+        reply.code(402);
+        return { error: "OpenAI has no credit. Using the free voice.", exhausted: true };
+      }
       reply.code(502);
       return { error: "OpenAI did not issue a realtime session." };
     }
@@ -125,4 +142,15 @@ export async function liveVoiceRoutes(app: FastifyInstance): Promise<void> {
       return { output: JSON.stringify(result.success ? (result.data ?? { ok: true }) : { error: result.error }) };
     }
   );
+}
+
+export const FREE_VOICE_NOTE =
+  "Free voice: your browser listens, the Gemini brain answers, ElevenLabs speaks, then the Edge voice.";
+
+async function liveVoicePlan() {
+  const plan = selectLiveVoice(process.env);
+  if (plan.mode !== "realtime") return plan;
+  const ok = await openAIHasCredit({ apiKey: process.env.OPENAI_API_KEY || "" });
+  if (ok) return plan;
+  return { ...plan, mode: "speak" as const, openaiCredit: false, note: FREE_VOICE_NOTE };
 }

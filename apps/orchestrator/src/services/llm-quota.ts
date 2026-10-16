@@ -1,4 +1,4 @@
-// Quota and per-minute limits.
+﻿// Quota and per-minute limits.
 // Credit exhaustion (OpenAI insufficient_quota) is remembered for a few minutes.
 // A Gemini 429 is a per-minute limit: wait once, then try flash-lite on the same key.
 
@@ -173,14 +173,14 @@ export async function callWithRecovery<T>(input: {
           continue;
         }
         if (plan.kind === "lite") {
-          tried.push({ label: current.label, reason: "rate limited" });
+          tried.push({ label: current.label, reason: "busy for a moment" });
           current = { ...current, model: plan.model, label: "Gemini lite" };
           geminiRetried = true;
           console.warn(`[FRIDAY LLM] Gemini still limited. Using ${plan.model}.`);
           continue;
         }
       }
-      tried.push({ label: current.label, reason: facts.status === 429 ? "rate limited" : (facts.message || "unavailable").slice(0, 80) });
+      tried.push({ label: current.label, reason: facts.status === 429 ? "busy for a moment" : (facts.message || "unavailable").slice(0, 80) });
       const status = facts.status;
       // A 400/422, or any other non-failover error, stays on the provider that rejected it.
       const stick = !shouldFailover(status, facts.message);
@@ -194,3 +194,4 @@ export async function callWithRecovery<T>(input: {
   }
   return { ok: false, tried, message: "no provider available" };
 }
+

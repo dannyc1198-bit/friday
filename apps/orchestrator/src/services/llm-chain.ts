@@ -1,4 +1,4 @@
-// Brain order: openai, then xAI, then Gemini.
+﻿// Brain order: openai, then xAI, then Gemini.
 // A saved provider is tried first and overrides FRIDAY_LLM_PROVIDER.
 // A missing key or an exhausted quota is skipped. A 400 stays on that provider.
 
@@ -154,7 +154,7 @@ export function shouldFailover(status: number | undefined, message: string): boo
 export function failoverReason(status: number | undefined, message: string): string {
   const text = message || "";
   if (/insufficient_quota|credit_balance_exhausted|billing|quota/i.test(text)) return "quota exhausted";
-  if (status === 429 || /rate.?limit/i.test(text)) return "rate limited";
+  if (status === 429 || /rate.?limit/i.test(text)) return "busy for a moment";
   if (status === 401 || status === 403) return "key rejected";
   return status ? `unavailable (${status})` : "unavailable";
 }
@@ -195,3 +195,4 @@ export function describeChain(env: NodeJS.ProcessEnv = process.env): {
     failoverReady: rest.length > 0,
   };
 }
+
