@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { parseTabCommand } from "@/lib/app-tabs";
 import { useChat } from "@/hooks/useChat";
 import { useVoice } from "@/hooks/useVoice";
 import { getGreeting } from "@/lib/utils";
@@ -15,6 +16,7 @@ export function TalkStudio() {
   const params = useSearchParams();
   const initial = params.get("prefill") || "";
   const { demo } = useDemo();
+  const router = useRouter();
   const {
     messages,
     isLoading,
@@ -42,6 +44,12 @@ export function TalkStudio() {
         setNote("Demo mode does not send. Nothing left this browser.");
         return;
       }
+      const tab = parseTabCommand(text, "/talk");
+      if (tab) {
+        setNote(`Opening ${tab}.`);
+        router.push(tab);
+        return;
+      }
       sendMessage(text);
     },
     enabled: !demo,
@@ -49,6 +57,13 @@ export function TalkStudio() {
   });
 
   const { toggleLiveMode, isLiveMode } = voice;
+  const wantsVoice = params.get("voice") === "1";
+  const voiceStarted = useRef(false);
+  useEffect(() => {
+    if (!wantsVoice || demo || voiceStarted.current) return;
+    voiceStarted.current = true;
+    if (!isLiveMode) toggleLiveMode();
+  }, [wantsVoice, demo, isLiveMode, toggleLiveMode]);
   useEffect(() => {
     if (demo && isLiveMode) toggleLiveMode();
   }, [demo, isLiveMode, toggleLiveMode]);

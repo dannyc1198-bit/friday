@@ -1,4 +1,4 @@
-// FRIDAY orchestrator — SIMPLE edition (amputated 2026-04-20)
+// FRIDAY orchestrator â€” SIMPLE edition (amputated 2026-04-20)
 //
 // Slim Fastify server: one model (Claude via openai.ts), one chat path,
 // memory + tools + TTS + phone routes. No router, no swarm, no learning
@@ -33,6 +33,7 @@ import { todayRoutes } from "./routes/today.js";
 import { integrationRoutes } from "./routes/integrations.js";
 import { upkeepRoutes } from "./routes/upkeep.js";
 import { liveVoiceRoutes } from "./routes/live-voice.js";
+import { liveAppsRoutes } from "./routes/live-apps.js";
 import { neuralRoutes } from "./routes/neural.js";
 import { setupRoutes } from "./routes/setup.js";
 import { brainSettingsRoutes } from "./routes/brain-settings.js";
@@ -49,7 +50,7 @@ import {
   getMCPStatus,
 } from "./services/mcp-client.js";
 // Un-amputation 2026-05-04: re-imported frozen services. Market monitor
-// stays imported but unstarted — Danny will configure its target later
+// stays imported but unstarted â€” Danny will configure its target later
 // from inside FRIDAY herself.
 import { learningEngine } from "./services/learning-engine.js";
 import { proactiveMonitor } from "./services/proactive-monitor.js";
@@ -98,7 +99,7 @@ function toolThoughtDetail(parameters: Record<string, unknown> | undefined): str
   return "ran";
 }
 
-// ─── Conversation transcript persistence ────────────────────────
+// â”€â”€â”€ Conversation transcript persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Every chat turn gets appended to a JSONL file under data/conversations/{id}.jsonl
 // so Danny can scroll back through any past conversation forever, independent of
 // the in-memory conversations Map (which doesn't survive restarts).
@@ -234,6 +235,7 @@ await app.register(todayRoutes);
 await app.register(integrationRoutes);
 await app.register(upkeepRoutes);
 await app.register(liveVoiceRoutes);
+await app.register(liveAppsRoutes);
 await app.register(neuralRoutes);
 await app.register(setupRoutes);
 await app.register(brainSettingsRoutes);
@@ -244,7 +246,7 @@ initializeTools();
 
 // Obsidian brain: index the vault (sub-second at current size), then keep a
 // 5-min incremental rescan running. Non-fatal if the vault is missing.
-initBrain().catch((err) => console.warn("  ⚠ Brain index failed:", (err as Error).message));
+initBrain().catch((err) => console.warn("  âš  Brain index failed:", (err as Error).message));
 
 // Time-based jobs: briefing and reflection wait 2 minutes after boot, then one at a time.
 startScheduler();
@@ -253,7 +255,7 @@ await initializeMCPClients();
 
 // Heartbeat: proactive monitor wakes every 5 min and queues alerts;
 // alert-delivery polls that queue every 15s and speaks high-priority
-// items via TTS. Quiet hours (11 PM–5 AM) gate everything.
+// items via TTS. Quiet hours (11 PMâ€“5 AM) gate everything.
 proactiveMonitor.start();
 startAlertDelivery();
 
@@ -264,22 +266,22 @@ void marketMonitor;
 
 memoryService.initialize().then((connected) => {
   const report = memoryService.getMemoryReport();
-  console.log(connected ? `  ✓ Chat memory: ${report.detail}` : `  ⚠ Chat memory unavailable. ${report.detail}`);
+  console.log(connected ? `  âœ“ Chat memory: ${report.detail}` : `  âš  Chat memory unavailable. ${report.detail}`);
 });
 
 // OpenClaw sync is opt-in (OPENCLAW_SYNC=true). Default = local-only memory.
 if (process.env.OPENCLAW_SYNC === "true") {
   try {
     const syncResult = unifiedMemory.syncWithOpenClaw();
-    console.log(`  ✓ Unified Memory: ${syncResult.imported} imported, ${syncResult.exported} exported`);
+    console.log(`  âœ“ Unified Memory: ${syncResult.imported} imported, ${syncResult.exported} exported`);
   } catch {
-    console.log("  ⚠ Unified Memory: local-only mode");
+    console.log("  âš  Unified Memory: local-only mode");
   }
 } else {
-  console.log("  ✓ Unified Memory: local-only (OPENCLAW_SYNC not enabled)");
+  console.log("  âœ“ Unified Memory: local-only (OPENCLAW_SYNC not enabled)");
 }
 
-// ─── Core endpoints ─────────────────────────────────────────────
+// â”€â”€â”€ Core endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.get("/api/health", async () => {
   const llm = getLLMInfo();
@@ -385,13 +387,13 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
     });
 
     // Append every user turn to the on-disk transcript for this conversation.
-    // Fire-and-forget — never blocks the chat path.
+    // Fire-and-forget â€” never blocks the chat path.
     appendTranscript(conversation.id, "user", message).catch(() => {});
 
     const messages = getMessages(conversation.id);
 
     // Memory context injection: standing memory + cross-agent memory + the
-    // brain's per-message vault recall (local BM25 — free, instant, relevant).
+    // brain's per-message vault recall (local BM25 â€” free, instant, relevant).
     const proceduralUsage = buildProceduralSkillContextWithUsage(message);
     lastProceduralSkillsByConversation.set(conversation.id, proceduralUsage.skills);
     if (lastProceduralSkillsByConversation.size > 1000) {
@@ -527,8 +529,8 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
         toolResultsCount: toolResults.length,
       }).catch(() => {});
 
-      // Lightweight memory save — fire and forget
-      const summary = `User: ${message.slice(0, 100)} → FRIDAY: ${fullContent.slice(0, 100)}`;
+      // Lightweight memory save â€” fire and forget
+      const summary = `User: ${message.slice(0, 100)} â†’ FRIDAY: ${fullContent.slice(0, 100)}`;
       const keyFacts = toolCalls.length > 0 ? [`Used tools: ${toolCalls.map((t) => t.name).join(", ")}`] : [];
       saveConversationSummary(summary, keyFacts).catch(() => {});
 
@@ -640,7 +642,7 @@ app.post<{ Body: { tool: string; parameters: Record<string, unknown> } }>(
   }
 );
 
-// Memory search — keep, it's useful and cheap
+// Memory search â€” keep, it's useful and cheap
 app.post<{ Body: { query: string; limit?: number } }>("/api/memory/search", async (request) => {
   const { query, limit } = request.body;
   const results = unifiedMemory.search(query || "", limit || 10);
@@ -649,7 +651,7 @@ app.post<{ Body: { query: string; limit?: number } }>("/api/memory/search", asyn
 
 app.get("/api/memory/stats", async () => unifiedMemory.getStats());
 
-// ─── TTS ────────────────────────────────────────────────────────
+// â”€â”€â”€ TTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.post<{ Body: { text: string; specialist?: string } }>(
   "/api/tts",
@@ -689,7 +691,7 @@ app.post<{ Body: { text: string; specialist?: string } }>(
 );
 
 app.get("/api/tts/status", async () => {
-  // Resolved per request from the voice registry — reflects switch_voice live.
+  // Resolved per request from the voice registry â€” reflects switch_voice live.
   const activeVoice = getActiveVoice();
   const plan = resolveSpeechPlan(process.env, activeVoice.edgeVoice);
   return {
@@ -704,7 +706,7 @@ app.get("/api/tts/status", async () => {
   };
 });
 
-// ─── Housekeeping ───────────────────────────────────────────────
+// â”€â”€â”€ Housekeeping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Guard against overlapping runs if cleanup ever becomes slow/async.
 let cleanupRunning = false;
@@ -723,21 +725,21 @@ const start = async () => {
     const bindHost = process.env.FRIDAY_BIND_HOST || "127.0.0.1";
     const address = await app.listen({ port: config.port, host: bindHost });
     console.log(`
-╔════════════════════════════════════════════════════════════════╗
-║  FRIDAY (simple edition) — ${address.padEnd(34)}║
-║  Auth: Bearer FRIDAY_API_KEY                                    ║
-║  Tools: ${String(toolRegistry.getToolCount()).padEnd(3)} registered                                          ║
-║                                                                 ║
-║  POST /api/chat             stream chat (SSE)                   ║
-║  POST /api/conversations    new conversation                    ║
-║  POST /api/stop             cancel active task                  ║
-║  POST /api/tools/execute    direct tool call                    ║
-║  GET  /api/tools            list tools                          ║
-║  POST /api/memory/search    search unified memory               ║
-║  GET  /api/memory/stats     memory stats                        ║
-║  POST /api/tts              ElevenLabs TTS                      ║
-║  GET  /api/health           health check                        ║
-╚════════════════════════════════════════════════════════════════╝
+â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+â•‘  FRIDAY (simple edition) â€” ${address.padEnd(34)}â•‘
+â•‘  Auth: Bearer FRIDAY_API_KEY                                    â•‘
+â•‘  Tools: ${String(toolRegistry.getToolCount()).padEnd(3)} registered                                          â•‘
+â•‘                                                                 â•‘
+â•‘  POST /api/chat             stream chat (SSE)                   â•‘
+â•‘  POST /api/conversations    new conversation                    â•‘
+â•‘  POST /api/stop             cancel active task                  â•‘
+â•‘  POST /api/tools/execute    direct tool call                    â•‘
+â•‘  GET  /api/tools            list tools                          â•‘
+â•‘  POST /api/memory/search    search unified memory               â•‘
+â•‘  GET  /api/memory/stats     memory stats                        â•‘
+â•‘  POST /api/tts              ElevenLabs TTS                      â•‘
+â•‘  GET  /api/health           health check                        â•‘
+â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 `);
   } catch (err) {
     app.log.error(err);

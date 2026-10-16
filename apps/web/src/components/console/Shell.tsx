@@ -5,6 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bell,
+  Bone,
+  Globe2,
+  Trophy,
+  Users,
   Building2,
   Clapperboard,
   GraduationCap,
@@ -25,6 +29,9 @@ import {
 import { useDemo } from "@/components/deck/demo";
 import { applyTheme, readTheme, type ThemeName } from "./theme";
 import { useResource } from "./useResource";
+import { TabStrip } from "./TabStrip";
+import { LiveFrames } from "./LiveFrames";
+import { BootIntro } from "./BootIntro";
 
 interface NavItem {
   href: string;
@@ -34,6 +41,7 @@ interface NavItem {
 
 const PRIMARY: NavItem[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/agents", label: "Agents", icon: Users },
   { href: "/mindspace", label: "Mindspace", icon: Hexagon },
   { href: "/talk", label: "Talk", icon: MessageSquare },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
@@ -52,7 +60,13 @@ const REST: NavItem[] = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-const ALL = PRIMARY.concat(BUSINESSES, REST);
+const LIVE: NavItem[] = [
+  { href: "/apps/gods-eye", label: "God's Eye", icon: Globe2 },
+  { href: "/apps/anatomy", label: "Body Anatomy", icon: Bone },
+  { href: "/apps/sports", label: "Sports", icon: Trophy },
+];
+
+const ALL = PRIMARY.concat(LIVE, BUSINESSES, REST);
 
 interface AlertRow {
   id: string;
@@ -138,15 +152,18 @@ export function Shell({ children }: { children: ReactNode }) {
   const noteCount = alerts.data?.alerts?.length || 0;
 
   return (
-    <div className="flex h-screen bg-app font-sans text-ink">
+    <div className="flex h-screen bg-app stark-grid font-sans text-ink">
+      <BootIntro />
       {mobileOpen && <button aria-label="Close menu" className="fixed inset-0 z-30 bg-ink/40 md:hidden" onClick={() => setMobileOpen(false)} />}
       <aside className={`${mobileOpen ? "fixed inset-y-0 left-0 z-40 flex" : "hidden md:flex"} ${collapsed ? "w-14" : "w-60"} shrink-0 flex-col border-r border-line bg-panel`}>
         <div className="flex h-14 items-center gap-2 border-b border-line px-3">
-          <span className="h-2 w-2 shrink-0 rounded-sm bg-brass" aria-hidden />
+          <span className="h-3 w-3 shrink-0 rounded-full bg-info shadow-[0_0_10px_3px_rgba(94,220,255,0.6)] ring-1 ring-brass" aria-hidden />
           {!collapsed && <span className="text-sm font-semibold tracking-tight">Friday</span>}
         </div>
         <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
           <NavList items={PRIMARY} path={path} collapsed={collapsed} onNavigate={() => setMobileOpen(false)} />
+          <p className={`px-2 pb-1 pt-4 text-[11px] font-medium uppercase tracking-[0.14em] text-faint ${collapsed ? "sr-only" : ""}`}>Live apps</p>
+          <NavList items={LIVE} path={path} collapsed={collapsed} onNavigate={() => setMobileOpen(false)} />
           <p className={`px-2 pb-1 pt-4 text-[11px] font-medium uppercase tracking-[0.14em] text-faint ${collapsed ? "sr-only" : ""}`}>Businesses</p>
           <NavList items={BUSINESSES} path={path} collapsed={collapsed} onNavigate={() => setMobileOpen(false)} />
           <div className="mt-3">
@@ -155,7 +172,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 md:px-4">
+        <header className="stark-bar flex h-14 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 md:px-4">
           <button type="button" className="rounded p-2 text-muted hover:bg-raised hover:text-ink md:hidden" aria-label="Open navigation" onClick={() => setMobileOpen(true)}>
             <Menu className="h-4 w-4" />
           </button>
@@ -220,7 +237,11 @@ export function Shell({ children }: { children: ReactNode }) {
             Demo · sample data · nothing is sent
           </p>
         )}
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        <TabStrip />
+        <main className="relative min-h-0 flex-1 overflow-y-auto">
+          {children}
+          <LiveFrames />
+        </main>
       </div>
       {menuOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 px-4 pt-[12vh]" onClick={() => setMenuOpen(false)}>
