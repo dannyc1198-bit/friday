@@ -7,7 +7,7 @@ import { Onboarding } from "./Onboarding";
 import { BrainProvider } from "./BrainProvider";
 import { SAMPLE_INTEGRATIONS, SAMPLE_LEARNING, SAMPLE_TASK, useDemo } from "./demo";
 
-export type FocusId = "today" | "wavelength" | "content" | "ally" | "talk" | "agents" | "learn" | "neural";
+export type FocusId = "today" | "wavelength" | "content" | "ally" | "talk" | "agents" | "learn" | "neural" | "mindspace";
 
 export const FOCUS: { id: FocusId; label: string }[] = [
   { id: "today", label: "Today" },
@@ -18,6 +18,7 @@ export const FOCUS: { id: FocusId; label: string }[] = [
   { id: "agents", label: "Agents" },
   { id: "learn", label: "Learn" },
   { id: "neural", label: "Neural Core" },
+  { id: "mindspace", label: "Mindspace" },
 ];
 
 interface Integration {

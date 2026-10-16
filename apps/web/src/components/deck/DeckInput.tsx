@@ -25,15 +25,25 @@ export function DeckInput({
   onStop,
   voice,
   focusSignal = 0,
+  prefill = "",
+  prefillKey = 0,
 }: {
   onSend: (text: string) => void;
   isLoading: boolean;
   onStop: () => void;
   voice: DeckVoice;
   focusSignal?: number;
+  prefill?: string;
+  prefillKey?: number;
 }) {
   const [text, setText] = useState("");
   const areaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!prefillKey) return;
+    setText(prefill);
+    areaRef.current?.focus();
+  }, [prefillKey, prefill]);
 
   // auto-grow up to ~5 lines
   useEffect(() => {

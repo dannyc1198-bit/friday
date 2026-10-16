@@ -13,6 +13,15 @@ export interface VoiceLike {
   lang: string;
 }
 
+export function pickNamedVoice<T extends VoiceLike>(voices: T[], edgeVoice: string): T | undefined {
+  const token = edgeVoice.toLowerCase().replace(/^en-[a-z]{2}-/, "").replace(/neural$/, "");
+  if (token) {
+    const named = voices.find((voice) => voice.name.toLowerCase().includes(token));
+    if (named) return named;
+  }
+  return pickJarvisVoice(voices);
+}
+
 export function pickJarvisVoice<T extends VoiceLike>(voices: T[]): T | undefined {
   const normalized = (lang: string) => lang.toLowerCase().replace("_", "-");
   const british = voices.filter((v) => normalized(v.lang).startsWith("en-gb"));

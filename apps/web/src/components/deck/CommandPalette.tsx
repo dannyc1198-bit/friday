@@ -104,6 +104,7 @@ export function focusItems(onPick: (id: FocusId) => void, extra: PaletteItem[]):
     { id: "agents", label: "Agents" },
     { id: "learn", label: "Learn" },
     { id: "neural", label: "Neural Core" },
+    { id: "mindspace", label: "Mindspace" },
   ];
   return [
     ...tabs.map((tab) => ({

@@ -20,6 +20,7 @@ import { registerBrowserTools } from "./browser-control.js";
 import { registerObsidianTools } from "./obsidian.js";
 import { registerAgentRouterTools } from "./agent-router.js";
 import { registerBrainProviderTools } from "./brain-provider.js";
+import { registerMindspaceTools } from "./mindspace.js";
 import { registerBrainTools } from "./brain-tools.js";
 import { registerCreativeTools } from "./creative.js";
 import { registerAppControlTools } from "./app-control.js";
@@ -53,7 +54,8 @@ export function initializeTools(): void {
 
   registerAgentRouterTools();
   registerBrainProviderTools();
-  console.log("  ✓ Agents (Codex, Grok code) + brain provider");
+  registerMindspaceTools();
+  console.log("  ✓ Agents (Codex, Grok code) + brain provider + Mindspace");
 
   registerAppControlTools();
   console.log("  ✓ App Control (fleet status/launch/stop/logs + market + intel)");

@@ -36,6 +36,9 @@ import { liveVoiceRoutes } from "./routes/live-voice.js";
 import { neuralRoutes } from "./routes/neural.js";
 import { setupRoutes } from "./routes/setup.js";
 import { brainSettingsRoutes } from "./routes/brain-settings.js";
+import { mindspaceRoutes } from "./routes/mindspace.js";
+import { answerMindspace } from "./services/mindspace/run.js";
+import { elevenVoiceId, specialistById } from "./services/mindspace/specialists.js";
 import { recordIncident } from "./services/upkeep/runtime.js";
 import { isMisfire } from "./services/upkeep/guards.js";
 import { getBootId } from "./services/greeting.js";
@@ -234,6 +237,7 @@ await app.register(liveVoiceRoutes);
 await app.register(neuralRoutes);
 await app.register(setupRoutes);
 await app.register(brainSettingsRoutes);
+await app.register(mindspaceRoutes);
 await app.register(proactiveAlertsRoutes);
 
 initializeTools();
@@ -432,6 +436,18 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
     const toolResults: { toolCallId: string; success: boolean; data?: unknown; error?: string }[] = [];
 
     try {
+      const minded = await answerMindspace(message, { signal: abortController.signal });
+      if (minded) {
+        fullContent = minded.text;
+        if (minded.voice) {
+          reply.raw.write(`data: ${JSON.stringify({
+            type: "voice",
+            specialist: minded.voice.specialist,
+            edge: minded.voice.edge,
+          })}\n\n`);
+        }
+        reply.raw.write(`data: ${JSON.stringify({ type: "text", content: minded.text })}\n\n`);
+      } else {
       for await (const chunk of streamChatCompletion(messages, abortController.signal, memoryContext)) {
         if (chunk.type === "text" && chunk.content) {
           fullContent += chunk.content;
@@ -489,6 +505,7 @@ app.post<{ Body: { message: string; conversationId?: string } }>(
           });
           reply.raw.write(`data: ${JSON.stringify({ type: "error", content: chunk.content })}\n\n`);
         }
+      }
       }
 
       addAssistantMessage(
@@ -634,11 +651,12 @@ app.get("/api/memory/stats", async () => unifiedMemory.getStats());
 
 // ─── TTS ────────────────────────────────────────────────────────
 
-app.post<{ Body: { text: string } }>(
+app.post<{ Body: { text: string; specialist?: string } }>(
   "/api/tts",
   { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
   async (request, reply) => {
     const { text } = request.body;
+    const speaker = request.body.specialist ? specialistById(request.body.specialist) : null;
     if (!text || typeof text !== "string") {
       reply.code(400);
       return { error: "Text is required" };
@@ -652,7 +670,9 @@ app.post<{ Body: { text: string } }>(
       return { error: "TTS unavailable", fallback: true };
     }
     try {
-      const audio = await textToSpeech(text);
+      const audio = await textToSpeech(text, speaker
+        ? { voiceId: elevenVoiceId(speaker), edgeVoice: speaker.voice.edge }
+        : {});
       if (!audio) {
         reply.code(503);
         return { error: "TTS generation failed", fallback: true };

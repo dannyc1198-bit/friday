@@ -8,7 +8,7 @@ const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || "http://localhost:3001"
  * Accepts { text } → returns audio/mpeg buffer or JSON error with fallback flag.
  */
 export async function POST(request: NextRequest) {
-  const { text } = await request.json();
+  const { text, specialist } = await request.json();
 
   if (!text || typeof text !== "string") {
     return NextResponse.json({ error: "Text is required" }, { status: 400 });
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.FRIDAY_API_KEY || ""}`,
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, specialist }),
     });
 
     // If orchestrator returns JSON error (503 = no API key, 500 = failure)

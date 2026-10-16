@@ -27,6 +27,7 @@ import {
 import { LiveTalk } from "./LiveTalk";
 import { NeuralCoreBoard } from "./NeuralCore";
 import { CommandPalette, focusItems } from "./CommandPalette";
+import { MindspaceBoard } from "./Mindspace";
 import { readDemo, useDemo } from "./demo";
 
 // FRIDAY — Flight Deck.
@@ -54,6 +55,8 @@ export default function Deck() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [talkNote, setTalkNote] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [prefill, setPrefill] = useState("");
+  const [prefillKey, setPrefillKey] = useState(0);
   const [history, setHistory] = useState<Array<{ id: string; firstUser: string }>>([]);
   const { demo, toggle } = useDemo();
 
@@ -206,6 +209,19 @@ export default function Deck() {
         {focus === "ally" && <AllyBoard onAct={ask} />}
         {focus === "learn" && <LearnBoard />}
         {focus === "neural" && <NeuralCoreBoard />}
+        {focus === "mindspace" && (
+          <MindspaceBoard
+            onTalk={(prefix) => {
+              if (demo) {
+                setTalkNote("Demo mode does not send. Nothing left this browser.");
+                return;
+              }
+              setPrefill(prefix);
+              setPrefillKey((n) => n + 1);
+              setFocus("talk");
+            }}
+          />
+        )}
         {focus === "agents" && (
           <div className="mx-auto grid w-full max-w-3xl gap-4 px-5 py-6">
             <AgentsCard />
@@ -363,6 +379,8 @@ export default function Deck() {
               }}
               voice={voice}
               focusSignal={focusSignal}
+              prefill={prefill}
+              prefillKey={prefillKey}
             />
           </div>
         </main>

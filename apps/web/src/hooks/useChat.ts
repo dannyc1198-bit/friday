@@ -5,6 +5,7 @@ import { Message, ToolActivity } from "@/types";
 import { generateId } from "@/lib/utils";
 import { SAMPLE_THREAD } from "@/lib/demo-boundary";
 import { readDemo } from "@/components/deck/demo";
+import { setMindspaceSpeaker } from "@/lib/mindspace-voice";
 
 // localStorage keys for persistence across reloads
 const ACTIVE_CONV_KEY = "FRIDAY_active_conversation_id";
@@ -112,6 +113,7 @@ export function useChat() {
     abortRef.current = controller;
 
     setError(null);
+    setMindspaceSpeaker(null);
 
     const userMessage: Message = {
       id: generateId(),
@@ -178,6 +180,8 @@ export function useChat() {
           }
         }
         applyUpdate();
+      } else if (type === "voice" && typeof data.specialist === "string" && typeof data.edge === "string") {
+        setMindspaceSpeaker({ specialist: data.specialist, edge: data.edge });
       } else if (type === "error" && typeof data.content === "string") {
         setError(data.content);
         textAcc += (textAcc ? "\n\n" : "") + data.content;
