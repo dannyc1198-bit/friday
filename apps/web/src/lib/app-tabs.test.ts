@@ -4,7 +4,7 @@ import { parseTabCommand, stepTab, tabIndex } from "./app-tabs";
 
 test("voice tab commands", () => {
   assert.equal(parseTabCommand("Next tab.", "/"), "/agents");
-  assert.equal(parseTabCommand("previous tab", "/"), "/apps/sports");
+  assert.equal(parseTabCommand("previous tab", "/"), "/apps/xrp");
   assert.equal(parseTabCommand("Show God's Eye", "/agents"), "/apps/gods-eye");
   assert.equal(parseTabCommand("open anatomy", "/"), "/apps/anatomy");
   assert.equal(parseTabCommand("Friday, go to sports", "/"), "/apps/sports");
@@ -12,7 +12,10 @@ test("voice tab commands", () => {
 });
 
 test("tab stepping wraps", () => {
-  assert.equal(stepTab("/apps/sports", 1), "/");
+  assert.equal(stepTab("/apps/sports", 1), "/apps/xrp");
+  assert.equal(stepTab("/apps/xrp", 1), "/");
+  assert.equal(parseTabCommand("open the XRP desk", "/"), "/apps/xrp");
+  assert.equal(parseTabCommand("Friday, show me Ripple news", "/"), "/apps/xrp");
   assert.equal(tabIndex("/apps/anatomy"), 4);
   assert.equal(parseTabCommand("show the brain", "/"), "/brain-core");
   assert.equal(tabIndex("/tasks"), -1);

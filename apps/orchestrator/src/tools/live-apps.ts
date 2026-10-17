@@ -6,12 +6,12 @@ import { liveAppsStatus } from "../services/live-apps.js";
 const liveAppsTool: Tool = {
   name: "live_apps_status",
   description:
-    "Read whether Daniel's local apps are up (God's Eye, Osiris, Body Anatomy, Sports) with one live headline each, " +
+    "Read whether Daniel's local apps are up (God's Eye, Osiris, Body Anatomy, Sports, XRP Desk with the live XRP price) with one live headline each, " +
     "and the Friday page that shows each one. Use it for questions like 'is God's Eye up' or 'open anatomy': " +
     "answer with the status and tell him the page (for example /apps/anatomy). Read-only.",
   category: "system",
   parameters: [
-    { name: "app", type: "string", description: "Optional: gods-eye, osiris, anatomy, or sports.", required: false },
+    { name: "app", type: "string", description: "Optional: gods-eye, osiris, anatomy, sports, or xrp-desk.", required: false },
   ],
   execute: async (params): Promise<ToolResult> => {
     const wanted = String(params.app ?? "").trim().toLowerCase();
