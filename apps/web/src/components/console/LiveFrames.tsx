@@ -21,6 +21,7 @@ const FRAMES: Frame[] = [
   { href: "/apps/gods-eye", title: "God's Eye", src: "http://127.0.0.1:5173/?embed=1", open: "http://127.0.0.1:5173" },
   { href: "/apps/anatomy", title: "Body Anatomy", src: "http://127.0.0.1:5180/", open: "http://127.0.0.1:5180" },
   { href: "/apps/sports", title: "Sports", src: "http://127.0.0.1:8800/", open: "http://127.0.0.1:8800" },
+  { href: "/apps/xrp", title: "XRP Desk", src: "http://127.0.0.1:8950/", open: "http://127.0.0.1:8950" },
 ];
 
 interface AppStatus {

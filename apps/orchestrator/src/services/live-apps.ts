@@ -3,7 +3,7 @@
 // read is "down", and a figure is only shown when the app returned it.
 
 export interface LiveAppDef {
-  id: "gods-eye" | "osiris" | "anatomy" | "sports";
+  id: "gods-eye" | "osiris" | "anatomy" | "sports" | "xrp-desk";
   name: string;
   url: string;
   page: string;
@@ -27,6 +27,7 @@ export const LIVE_APPS: LiveAppDef[] = [
   { id: "osiris", name: "Osiris", url: "http://127.0.0.1:3005", page: "/apps/gods-eye", probe: "http://127.0.0.1:3005/api/stats", source: "ADS-B, CelesTrak, USGS, NASA EONET, GDELT (keyless)" },
   { id: "anatomy", name: "Body Anatomy", url: "http://127.0.0.1:5180", page: "/apps/anatomy", probe: "http://127.0.0.1:5180/", source: "Local 3D atlas (no live feed)" },
   { id: "sports", name: "Sports", url: "http://127.0.0.1:8800", page: "/apps/sports", probe: "http://127.0.0.1:8800/api/games", source: "ESPN public scoreboard, Polymarket public odds (keyless)" },
+  { id: "xrp-desk", name: "XRP Desk", url: "http://127.0.0.1:8950", page: "/apps/xrp", probe: "http://127.0.0.1:8950/api/digest", source: "CoinGecko, Google News RSS, CoinDesk, Cointelegraph, Decrypt, Yahoo chart (keyless)" },
 ];
 
 export function headlineFor(id: string, body: unknown): string | null {
@@ -40,6 +41,13 @@ export function headlineFor(id: string, body: unknown): string | null {
   if (id === "osiris" && record.stats && typeof record.stats === "object") {
     const stats = record.stats as Record<string, number>;
     if (typeof stats.flights === "number") return `${stats.flights.toLocaleString("en-US")} flights tracked`;
+  }
+  if (id === "xrp-desk" && record.xrp && typeof record.xrp === "object") {
+    const xrp = record.xrp as { price?: unknown; change24h?: unknown; stale?: unknown };
+    if (typeof xrp.price !== "number") return null;
+    const price = `XRP $${xrp.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+    const change = typeof xrp.change24h === "number" ? ` (${xrp.change24h >= 0 ? "+" : ""}${xrp.change24h.toFixed(2)}% 24h)` : "";
+    return `${price}${change}${xrp.stale ? ", stale" : ""}`;
   }
   if (id === "gods-eye" && Array.isArray(record.ac)) {
     return `${record.ac.length} military aircraft live`;
@@ -73,6 +81,7 @@ const APP_WORDS: Array<[LiveAppDef["id"], RegExp]> = [
   ["osiris", /osiris/i],
   ["anatomy", /anatomy|body atlas/i],
   ["sports", /sports?( dashboard| app)?\b/i],
+  ["xrp-desk", /\bxrp( desk)?\b|\bripple\b/i],
 ];
 
 // "Is God's Eye up?", "open anatomy", "status of the apps". Answered from the

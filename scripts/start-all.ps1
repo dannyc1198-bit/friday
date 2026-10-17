@@ -25,6 +25,7 @@ Start-Hidden "sports" 8800 "$user\sports-dashboard" "node server.js"
 # God's Eye allows Friday (port 3000) to frame its ?embed=1 view.
 Start-Hidden "gods-eye" 5173 "$user\gods-eye-view" "npx vite --port 5173 --host 127.0.0.1" @{ GEV_EMBED_FRAME_ANCESTORS = "http://127.0.0.1:3000 http://localhost:3000" }
 Start-Hidden "osiris" 3005 "$user\Personal-Projects\osiris" "npx next dev -p 3005"
+Start-Hidden "xrp-desk" 8950 "$user\Personal-Projects\xrp-desk" "node server.js"
 Start-Hidden "anatomy" 5180 "$user\Personal-Projects\anatomy-atlas" "npx vite --port 5180 --host 127.0.0.1"
 
 # Wait for Friday's web app, then open it on the right screen.

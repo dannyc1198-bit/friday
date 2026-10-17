@@ -8,12 +8,15 @@ test("headlines come only from data the app returned", () => {
   assert.equal(headlineFor("gods-eye", { ac: [1, 2, 3] }), "3 military aircraft live");
   assert.equal(headlineFor("sports", {}), null);
   assert.equal(headlineFor("anatomy", null), null);
+  assert.equal(headlineFor("xrp-desk", { xrp: { price: 1.31, change24h: -2.5616 } }), "XRP $1.31 (-2.56% 24h)");
+  assert.equal(headlineFor("xrp-desk", { xrp: null }), null);
 });
 import { appsQuestion, describeApps } from "./live-apps.js";
 
 test("app questions are answered from the probe, not the model", () => {
   assert.deepEqual(appsQuestion("Is God's Eye up?"), { ids: ["gods-eye"], open: false });
   assert.equal(appsQuestion("open anatomy")?.open, true);
+  assert.deepEqual(appsQuestion("is the XRP desk up?"), { ids: ["xrp-desk"], open: false });
   assert.equal(appsQuestion("write a post about sports nutrition and why it matters to athletes"), null);
   assert.equal(
     describeApps([{ id: "gods-eye", name: "God's Eye", url: "", page: "/apps/gods-eye", up: false, headline: null, source: "", checkedAt: "" }], false),

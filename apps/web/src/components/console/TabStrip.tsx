@@ -29,7 +29,7 @@ export function TabStrip() {
         router.push(stepTab(path, step));
         return;
       }
-      if (!event.ctrlKey && !event.metaKey && !event.altKey && /^[1-6]$/.test(event.key) && !typing(event.target)) {
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && /^[1-9]$/.test(event.key) && Number(event.key) <= APP_TABS.length && !typing(event.target)) {
         event.preventDefault();
         router.push(APP_TABS[Number(event.key) - 1].href);
       }
@@ -51,7 +51,7 @@ export function TabStrip() {
           {tab.label}
         </Link>
       ))}
-      <span className="ml-auto hidden self-center whitespace-nowrap text-[11px] text-faint lg:inline">1–6 · Alt ← → · Ctrl Tab</span>
+      <span className="ml-auto hidden self-center whitespace-nowrap text-[11px] text-faint lg:inline">1–{APP_TABS.length} · Alt ← → · Ctrl Tab</span>
     </nav>
   );
 }

@@ -19,6 +19,7 @@ const SAMPLE = {
     { id: "osiris", name: "Osiris", page: "/apps/gods-eye", up: true, headline: "SAMPLE", source: "sample" },
     { id: "anatomy", name: "Body Anatomy", page: "/apps/anatomy", up: true, headline: "SAMPLE", source: "sample" },
     { id: "sports", name: "Sports", page: "/apps/sports", up: true, headline: "SAMPLE", source: "sample" },
+    { id: "xrp-desk", name: "XRP Desk", page: "/apps/xrp", up: true, headline: "SAMPLE", source: "sample" },
   ] as AppStatus[],
 };
 
@@ -36,7 +37,7 @@ export function LiveAppsTiles() {
         <h2 className="text-sm font-semibold text-ink">Live apps</h2>
         <span className="text-xs text-faint">{status.error ? status.error : "Checked every 30 seconds"}</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         {(status.data?.apps || []).map((app) => (
           <Link key={app.id} href={app.page} className="rounded-lg border border-line bg-panel p-4 hover:border-line-strong">
             <div className="flex items-center gap-2">

@@ -7,6 +7,7 @@ import {
   Activity,
   Bell,
   Bone,
+  Coins,
   Globe2,
   Trophy,
   Users,
@@ -66,6 +67,7 @@ const LIVE: NavItem[] = [
   { href: "/apps/gods-eye", label: "God's Eye", icon: Globe2 },
   { href: "/apps/anatomy", label: "Body Anatomy", icon: Bone },
   { href: "/apps/sports", label: "Sports", icon: Trophy },
+  { href: "/apps/xrp", label: "XRP Desk", icon: Coins },
 ];
 
 const ALL = PRIMARY.concat(LIVE, BUSINESSES, REST);
