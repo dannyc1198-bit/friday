@@ -1,295 +1,186 @@
-# FRIDAY — A Personal AI Operating System
+# Friday
 
-> Current brain, checked 2026-10-15: OpenAI `gpt-5.4` with xAI `grok-4.7` fallback. Reflection and the thinking loop use `gpt-5.4-mini`. Choices and prices are in `docs/MODELS.md`. A ranked review is in `docs/AUDIT.md`. The sections below still describe an older Claude and Gemini layout.
+A local personal assistant with a console you can put on a screen. Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Once each browser session it plays a short arc-reactor boot and, unless Demo is on, says "Hello, sir."
 
-> *Iron Man-inspired. Claude-powered. Actually does things.*
+Model ids, fallback, and prices: [docs/MODELS.md](docs/MODELS.md). What is still rough: [docs/AUDIT.md](docs/AUDIT.md).
 
-FRIDAY is a local-first personal AI assistant built on **Anthropic Claude**. It listens, reasons, and acts across your desktop, browser, smart home, and the web — orchestrating **120+ tools across 23 categories** from a single conversation.
-
-![Status](https://img.shields.io/badge/Build-Phases%200--9%20Complete-brightgreen)
-![Tools](https://img.shields.io/badge/Tools-120%2B-blueviolet)
-![AI](https://img.shields.io/badge/AI-Anthropic%20Claude%20Sonnet%204-orange)
-![Stack](https://img.shields.io/badge/Stack-Next.js%20%C2%B7%20Fastify%20%C2%B7%20Python%20%C2%B7%20Electron-informational)
-![License](https://img.shields.io/badge/License-MIT-lightgrey)
+The window is Next.js 14. The brain is Fastify on port 3001. A Python sidecar on port 3002 is optional.
 
 ---
 
-## What FRIDAY Does
+## The console
 
-FRIDAY is a complete four-process AI operating system that you talk to. It has persistent memory, a streaming chat interface with an animated boot sequence, a proactive monitoring loop that wakes up on its own, an encrypted credential vault, and an agentic tool-use engine that can chain dozens of operations to complete a request.
+`/` is the enterprise console. The sidebar is the map:
 
-**Today, FRIDAY can:**
-
-- 🎙️ **Speak & listen** — ElevenLabs TTS (British "Daniel" voice) + Wispr Flow STT
-- 🧠 **Remember** — persistent conversation memory, fact store, and vector recall
-- 🖥️ **Control your PC** — launch apps, manage windows, run shell commands
-- 💡 **Run your home** — Philips Hue scenes, FRIDAY Mode arc-reactor blue
-- 🎵 **Play music** — Spotify playback, search, queue
-- 🌐 **Use the browser** — Playwright-driven navigation, form fill, screenshot
-- 👁️ **See the screen** — Claude Vision on screenshots for UI understanding
-- 📊 **Watch the markets** — CoinGecko polling every 5 min with proactive alerts
-- 📰 **Brief you each morning** — calendar, weather, news, portfolio summary
-- 🔐 **Protect secrets** — AES-256-GCM credential vault with scrypt key derivation and auto-lock
-- 🧪 **Write its own code** — code agent with file ops, lint, and test execution
-- ✍️ **Create content** — drafts, scripts, and long-form from templates
-- 📈 **Track business intel** — Wavelength pipeline, KPIs, and deal flow
-- 🔬 **Learn over time** — lightweight learning engine that tunes behavior from feedback
-- ⚡ **Route smart** — Gemini handles simple queries (free), Claude handles complex reasoning (paid), auto-fallback on either side
-
----
-
-## Why This Project
-
-Most "AI assistants" are chat wrappers. FRIDAY is an attempt at the full thing — a real-time, multi-process agent that can take initiative, hold state, and act on the physical and digital world around a single person. It's built around Anthropic's agentic tool-use loop as the reasoning core, with every surface (voice, desktop, browser, home, web) wired in as a tool the model can call.
-
-The goal is to get as close as possible to *"Tony stands in the lab and FRIDAY handles the rest."*
-
----
-
-## Architecture
-
-FRIDAY runs as four coordinated processes:
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│                    Electron Desktop Shell                       │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Next.js 14 Web UI          (port 3000)                  │  │
-│  │  Chat · JarvisOrb · HUD panels · Boot sequence           │  │
-│  │  State machine: Dormant → Clap → Boot → Awake            │  │
-│  └────────────────────┬─────────────────────────────────────┘  │
-│                       │ Server-Sent Events                      │
-│  ┌────────────────────▼─────────────────────────────────────┐  │
-│  │  Fastify 5 Orchestrator     (port 3001)                  │  │
-│  │  ────────────────────────────────────────────────────    │  │
-│  │  • Claude agentic loop (tool-use inside streaming)       │  │
-│  │  • Gemini hybrid router (simple → free, complex → paid)  │  │
-│  │  • Tool registry — 120+ tools, 23 categories             │  │
-│  │  • Proactive monitor (market alerts, briefings)          │  │
-│  │  • Learning engine · Memory · Rate limiting              │  │
-│  │  • AES-256-GCM credential vault                          │  │
-│  └──┬──────────────┬──────────────┬──────────────┬──────────┘  │
-│     │              │              │              │             │
-│  ┌──▼──────┐  ┌───▼──────┐  ┌───▼──────┐  ┌───▼────────────┐  │
-│  │ Anthropic│  │ Playwright│  │  Hue /  │  │ Python Sidecar │  │
-│  │  Claude  │  │  Browser  │  │ Spotify │  │   (port 3002)  │  │
-│  │   API    │  │           │  │ Google  │  │  Voice · CV    │  │
-│  └──────────┘  └───────────┘  └─────────┘  └────────────────┘  │
-└────────────────────────────────────────────────────────────────┘
-```
-
-### Why four processes?
-
-- **Orchestrator (Node/Fastify)** — the brain. Owns the Claude agentic loop, the tool registry, memory, the vault, and the proactive monitor. Streams responses via SSE.
-- **Web UI (Next.js 14)** — the face. The JarvisOrb, the boot animation, the HUD, the chat. Talks to the orchestrator over SSE.
-- **Sidecar (Python)** — the hands for anything Python owns better: voice engine, meta-glasses integration, computer vision.
-- **Electron shell** — the desktop container that boots everything, handles global hotkeys, and gives FRIDAY a real window on your machine.
-
----
-
-## Tool Inventory — 120+ tools, 23 categories
-
-FRIDAY's Claude agentic loop runs with a registered tool palette covering:
-
-| Domain | Examples |
+| Group | Pages |
 |---|---|
-| **Browser Automation** | Navigate, click, fill forms, screenshot, wait, evaluate JS |
-| **PC Control** | Launch apps, focus windows, keyboard, clipboard, shell |
-| **Smart Home** | Hue on/off, color, brightness, scenes, room groups |
-| **Music** | Spotify play/pause, search, queue, volume, device select |
-| **Voice** | TTS, STT, voice profile selection, interrupt handling |
-| **Vision** | Screenshot, region crop, Claude Vision analyze |
-| **Memory** | Fact store, vector recall, session summarization |
-| **Tasks** | Create, complete, list, remind, recurring |
-| **Web** | Tavily search, fetch, scrape, summarize |
-| **Gmail / Calendar** | Read, draft, send, schedule, free-time search |
-| **Notion** | Pages, databases, comments, blocks |
-| **VAPI** | Outbound voice calls with live transcript |
-| **Maps** | Place search, directions, ETA, nearby |
-| **Markets** | CoinGecko prices, portfolio, alert rules |
-| **Code Agent** | File ops, lint, test, diff, patch |
-| **Content** | Drafts, scripts, newsletters from templates |
-| **Business Intel** | Pipeline, KPIs, deal flow, weekly review |
-| **Bluetooth** | Scan, connect, battery status |
-| **Health** | Water tracker, focus timer, metrics |
-| **Learning** | Feedback capture, behavior tuning |
-| **Vault** | Store, retrieve, rotate credentials |
-| **System** | Reload, diagnostics, tool hot-swap |
-| **Proactive** | Morning briefing, market alerts, queued nudges |
+| Primary | Overview (the Today board), Agents, Brain, Mindspace, Talk, Tasks |
+| Live apps | God's Eye, Body Anatomy, Sports |
+| Businesses | Wavelength, Property, Ally |
+| Also | Content, Learning, Repairs, Settings |
+
+The top strip is Overview, Agents, Brain, God's Eye, Body Anatomy, and Sports. Keys `1`–`6`, Alt+Left/Right, and Ctrl+Tab move along it. Ctrl+K or Cmd+K opens page search from any console page. The header search button does the same.
+
+**Brain** (`/brain-core`) draws the Obsidian vault: every note is a node, links are edges, and a note glows when Friday recalls, reads, or writes it. Click a node to read it and open it in Obsidian. Demo mode draws two SAMPLE notes instead of the vault.
+
+**Mindspace** is six specialists. Friday routes the request. Ultron can only criticise. Nobody sends, spends, or trades.
+
+**Overview** shows the next task, open work, live-app tiles (God's Eye, Osiris, Body Anatomy, Sports), and recent activity.
+
+**Demo** is off until you turn it on (header button, or Settings). The flag is `localStorage` key `friday-demo`, so it is per browser profile. On, pages show labelled SAMPLE data, the banner says nothing is sent, and Talk does not call the model or live voice. Turn it on before a screen share.
+
+**Setup** is `GET /api/setup`: booleans and env names only, never a key. Settings lists the checks. The older flight deck at `/deck` still has the Today checklist (green and red dots, the env name in gold on a red row), a Commands button, and a command palette (Ctrl+K or Cmd+K, Esc, arrows, Enter, including Show setup). That deck is also where you arm the thinking loop. The console Brain tab does not.
+
+The thinking loop stays off until that deck toggle, or `FRIDAY_THINKING=1`. It reviews recent chats and vault notes at most 4 times a day, 30 minutes apart, and writes dated notes under `FRIDAY_BRAIN/insights/`. It does not send, spend, or trade.
 
 ---
 
-## Tech Stack
+## Brain
 
-| Layer | Technology |
-|---|---|
-| **Primary AI** | Anthropic Claude (Sonnet 4) |
-| **Secondary AI** | Google Gemini (simple-query router) |
-| **Embeddings** | OpenAI `text-embedding-3-small` |
-| **Orchestrator** | Node.js · Fastify 5.7 |
-| **Frontend** | Next.js 14 · React · TypeScript · Tailwind CSS |
-| **Desktop** | Electron |
-| **Sidecar** | Python 3.13 · FastAPI |
-| **Voice In** | Wispr Flow |
-| **Voice Out** | ElevenLabs |
-| **Browser Automation** | Playwright |
-| **Smart Home** | Philips Hue REST API |
-| **Music** | Spotify Web API |
-| **Markets** | CoinGecko |
-| **Search** | Tavily AI |
-| **Vault** | AES-256-GCM + scrypt (N = 65,536) |
+By default, chat and tool calls use OpenAI `gpt-5.4` (`OPENAI_MODEL` or `FRIDAY_LLM_MODEL`). The next try is xAI `grok-4.7` (`XAI_MODEL`), then Gemini `gemini-2.5-flash` (`GEMINI_MODEL`) when `GEMINI_API_KEY` is set. A provider with no key is skipped.
 
----
+You can pin the first try without editing `.env`:
 
-## Key Engineering Details
+- Settings, or the flight deck, writes `data/settings.json`.
+- Saying it in Talk uses the `set_brain_provider` tool. The choices are `openai`, `xai`, and `gemini`.
 
-**Agentic tool loop is inside the Claude stream.** FRIDAY's tool execution runs inside `streamChatCompletion`, not fire-and-forget after it. This means Claude can call tools mid-stream, consume the results, and keep generating — no round-trip latency per tool call.
+A saved choice is tried first and overrides `FRIDAY_LLM_PROVIDER`. OpenAI credit exhaustion (`insufficient_quota`, `credit_balance_exhausted`, `billing_hard_limit`) is remembered for about five minutes, and the next turn skips that provider. A Gemini per-minute 429 waits for Retry-After (capped at eight seconds), retries `gemini-2.5-flash` once, then tries `gemini-2.5-flash-lite` on the same key. A 400 or 422 stays on the provider that rejected it.
 
-**Gemini hybrid router.** Simple queries (classifiers, short lookups, cheap transforms) are routed to Gemini, which is free. Complex reasoning and tool-use stay on Claude. If either provider fails, the router falls back automatically.
+When a Gemini key is set, Mindspace's classifier and a team fan-out start on `gemini-2.5-flash-lite` so they do not spend the chat minute. Specialist answers on the chain tier use `gemini-2.5-flash`, then flash-lite after a 429. The specialist caller comments this as the Gemini free tier. Ordinary chat does not split "simple" questions onto Gemini. Tool calls stay on the active chat model.
 
-**Dormant → Clap → Boot → Awake state machine.** The UI starts asleep. A clap (or hotkey) triggers the Iron Man boot sequence. The JarvisOrb has two variants — a hero orb when the chat is empty, and a compact orb during conversation.
+Reflection and the thinking loop call `gpt-5.4-mini` (`FRIDAY_REFLECT_MODEL`) with failover off. A bad mini id fails that pass. It does not bill `grok-4.7`.
 
-**AES-256-GCM vault with scrypt.** Credentials for Hue, Spotify, Gmail, Notion, ElevenLabs, etc. are encrypted at rest with `scrypt` (N = 65,536) key derivation, unlocked with a PIN, auto-locks after 30 minutes of inactivity, and rate-limits unlock attempts.
+Chat memory embeddings use `text-embedding-3-small` (`EMBEDDING_MODEL`). Vault recall is local BM25, not an embedding call.
 
-**Proactive monitor.** A background loop polls markets, calendars, and weather, and queues alerts via `proactiveMonitor.queueAlert()`. FRIDAY wakes up on its own to tell you things.
-
-**SSE streaming with chunk buffering.** The orchestrator reflects the origin dynamically and buffers SSE chunks to prevent dropped tokens during fast bursts.
+If nothing is saved and `FRIDAY_LLM_PROVIDER` is `groq` or `anthropic`, that one provider is used by itself. Claude is not the default brain, and Claude Code is not registered.
 
 ---
 
-## Neural Core
+## Voice
 
-The Neural Core tab is a live graph of Friday's real activity. It shows Obsidian notes recalled, tools that ran, learning facts written, and repair events. The language model and the Obsidian vault do the reasoning. The graph is a reading of that work.
+Hands-free lives on Talk. Ctrl+Enter starts it when Demo is off.
 
-A background thinking loop is off until you arm it on that tab (or set `FRIDAY_THINKING=1`). It reviews recent chats and vault notes at most 4 times a day, with 30 minutes between passes. Dated insights go to `FRIDAY_BRAIN/insights/`. Profile lines are written as proposals in `FRIDAY_BRAIN/proposals/DANNY-PROFILE.md` and are not applied. The loop does not send, spend, or trade. Closing the tab stops the live stream. The orchestrator does not keep a simulation running for the graph.
+1. ElevenLabs Agents, when `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID` are set. The agent's custom LLM is Friday's own chat route, so the spoken brain is the chain above. `ELEVENLABS_AGENT_LLM` can name an ElevenLabs model instead (no public URL).
+2. OpenAI Realtime (`gpt-realtime-2.1`, voice `cedar`) when there is an OpenAI key and no agent id.
+3. Speak-every-reply: ElevenLabs TTS if the key is set, then the free Edge neural voice. With no key, Edge speaks. The default Edge voice is `en-GB-RyanNeural` unless `EDGE_TTS_VOICE` is set.
 
-### How to verify
+`FRIDAY_VOICE_MODE` can force `elevenlabs`, `realtime`, or `browser`. Listening in the browser uses the Web Speech API. If server audio cannot play, the browser's speech synthesis is the last speaker. An empty ElevenLabs key does not crash TTS. It falls through to Edge.
+
+---
+
+## Coding
+
+Coding, debugging, and "add a capability" go to `route_agent_task` with agent `codex` (`codex exec`, stdin closed). If Codex is offline, the same tool uses `xai-grok`, the xAI code model `grok-code-fast-1` (`XAI_CODE_MODEL`). Asking for `claude-code` returns an error that names those two. Dispatch does not merge or push.
+
+Grok bots (`GROK_BOTS`) are separate status dots. They are not the coding fallback.
+
+---
+
+## Tools
+
+`initializeTools()` registers **67 tools** at boot. `GET /api/health` reports that count, plus any MCP tools loaded from `~/.friday/mcp.json` (names prefixed `mcp_<server>_`).
+
+What is actually registered:
+
+- PC: open and close apps, system info, volume, screenshot, the active window, lock screen, keyboard
+- Browser (Playwright): navigate, click, type, keys, scroll, select, read, screenshot, close, login
+- Obsidian: search, read, list, recent, create, edit, daily note, tags, delete
+- Brain: recall, remember, status, reflect
+- Tasks, the credential vault, and skill proposals (a proposal does not apply itself)
+- Creative drafts: Meshy, Higgsfield, Blender. A missing key shows as needs-key. Nothing is published
+- Agents, the brain switch, Mindspace, live-app status, fleet controls, a market snapshot, intel
+
+Mouse tools stay in the file and are not registered. Hue, Bluetooth, music, and the health trackers are on disk and are not in the live registry. Email, phone calls, and smart home are not wired. Friday is supposed to say so.
+
+---
+
+## Getting started
+
+Node.js and npm. Python only if you want the sidecar.
+
+Windows, from the repo root:
 
 ```bat
-cd apps\orchestrator
-npm test
-npx tsc --noEmit
-cd ..\web
-npx tsc --noEmit
+install.bat
+start-unified.bat
 ```
 
-Then `start-unified.bat` and open http://127.0.0.1:3000.
+`install.bat` installs the orchestrator, the web app, and Electron. `start-unified.bat` starts the orchestrator (3001), the optional sidecar (3002), and the console (3000). It does not open Electron.
 
-- **Neural Core** shows an empty feed until a chat recalls a note, runs a tool, writes a fact, or journals a repair. The live feed names the link.
-- **Today** shows the same activity in a small graph.
-- **Arm thinking** changes the status line to armed. With no recent chat it stays idle. After a real conversation, the next eligible pass writes `FRIDAY_BRAIN/insights/YYYY-MM-DD.md` and leaves `DANNY-PROFILE.md` untouched.
-- `brain_recall` against the vault returns the note that was just written. A "my business is…" line becomes an entity note plus a profile proposal.
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- Python 3.11+ (for sidecar)
-- npm
-
-### Install & Run
+By hand:
 
 ```bash
-git clone https://github.com/dannyc1198-bit/friday.git
-cd friday
-
-# 1. Orchestrator (brain)
 cd apps/orchestrator
 npm install
-cp .env.example .env    # fill in API keys
-npm run dev             # → port 3001
+cp .env.example .env
+npm run dev
 
-# 2. Web UI (in a new terminal)
 cd apps/web
 npm install
-npm run dev             # → port 3000
-
-# 3. Python sidecar (in a new terminal)
-cd apps/sidecar
-pip install -r requirements.txt
-python main.py          # → port 3002
-
-# 4. Electron shell (optional)
-cd electron
-npm install
-npm start
+npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and watch the boot sequence.
+Copy `apps/web/.env.example` to `apps/web/.env` if the web app should send `FRIDAY_API_KEY`. Put secrets only in those `.env` files. They are gitignored.
 
-### Environment Variables
-
-```env
-# Required
-ANTHROPIC_API_KEY=
-OPENAI_API_KEY=         # embeddings only
-GEMINI_API_KEY=         # hybrid router
-
-# Voice
-ELEVENLABS_API_KEY=
-
-# Integrations
-TAVILY_API_KEY=
-NOTION_API_KEY=
-VAPI_API_KEY=
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-
-# Smart Home
-HUE_BRIDGE_IP=
-HUE_API_KEY=
-
-# Music
-SPOTIFY_CLIENT_ID=
-SPOTIFY_CLIENT_SECRET=
-```
+Then open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 ---
 
-## Project Structure
+## Environment
+
+Names only. `GET /api/setup` checks these:
+
+| Check | Env | Required |
+|---|---|---|
+| OpenAI key | `OPENAI_API_KEY` | Yes. Chat stays offline without it. |
+| xAI fallback | `XAI_API_KEY` | Optional. |
+| Obsidian vault | `OBSIDIAN_VAULT_PATH` | The vault folder. No default folder is assumed found. |
+| Voice | `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID`, or `OPENAI_API_KEY` | The browser voice still speaks if both are missing. |
+
+`apps/orchestrator/.env.example` also names:
+
+`PORT` `HOST` `CORS_ORIGIN` `USER_NAME` `ENABLE_TOOLS` `ENABLE_STREAMING` `MEDIA_PROVIDER` `SMART_HOME_PROVIDER` `USE_REAL_BLUETOOTH` `TTS_PROVIDER` `ELEVENLABS_VOICE_ID` `FRIDAY_VOICE_ID_JARVIS` `FRIDAY_VOICE_ID_FRIDAY` `EDGE_TTS_VOICE` `EDGE_TTS_VOICE_JARVIS` `EDGE_TTS_VOICE_FRIDAY` `GROK_BOTS` `GROK_BOT_TOKEN` `FRIDAY_LLM_PROVIDER` `FRIDAY_LLM_FAILOVER` `OPENAI_MODEL` `FRIDAY_REFLECT_MODEL` `EMBEDDING_MODEL` `ANTHROPIC_API_KEY` `XAI_MODEL` `XAI_BASE_URL` `FRIDAY_VOICE_MODE` `ELEVENLABS_SECRET_ID` `FRIDAY_PUBLIC_URL` `FRIDAY_REALTIME_MODEL` `FRIDAY_REALTIME_VOICE` `FRIDAY_HEALTHCHECK` `FRIDAY_HEALTHCHECK_TESTS` `FRIDAY_THINKING` `CHROMA_ENABLED` `CHROMA_HOST` `CHROMA_PORT` `CHROMA_RETENTION_DAYS` `CHROMA_CONTEXT_LIMIT` `CHROMA_MIN_SIMILARITY` `MESHY_API_KEY` `HF_API_KEY_ID` `HF_API_KEY_SECRET` `HIGGSFIELD_API_KEY` `HIGGSFIELD_IMAGE_MODEL` `HIGGSFIELD_VIDEO_MODEL` `BLENDER_PATH` `FRIDAY_MEDIA_DIR` `TAVILY_API_KEY` `NOTION_API_KEY` `VAPI_API_KEY` `VAPI_ASSISTANT_ID` `VAPI_WEBHOOK_SECRET` `OPENCLAW_BASE_URL` `NETLIFY_AUTH_TOKEN` `RECEPTIONIST_VAPI_ASSISTANT_ID` `RECEPTIONIST_WEBHOOK_SECRET` `RECEPTIONIST_CALENDAR_ID` `DANNY_EMAIL` `NGROK_URL` `GOOGLE_SERVICE_ACCOUNT_JSON` `GMAIL_USER` `GMAIL_APP_PASSWORD` `TELEGRAM_BOT_TOKEN` `TELEGRAM_CHAT_ID` `JARVIS_API_KEY` `FRIDAY_API_KEY` `GEMINI_API_KEY` `AGENT_OS_URL` `AGENT_OS_TOKEN` `BATTLE_STATION_URL` `OSIRIS_URL` `OPENCLAW_SYNC`
+
+`ANTHROPIC_API_KEY` is in that example for a Claude Code CLI. The CLI is not a registered tool.
+
+`apps/web/.env.example` names `NEXT_PUBLIC_API_URL` `ORCHESTRATOR_URL` `FRIDAY_API_KEY` `OBSIDIAN_VAULT_PATH` `HEALTH_CHECK_INTERVAL` `NEXT_PUBLIC_VOICE_ENABLED`.
+
+Code-only overrides, not listed in the example: `FRIDAY_LLM_MODEL`, `FRIDAY_LLM_BASE_URL`, `FRIDAY_LLM_API_KEY`, `GEMINI_MODEL`, `GEMINI_LITE_MODEL`, `GEMINI_BASE_URL`, `XAI_CODE_MODEL`.
+
+---
+
+## Project structure
 
 ```
 friday/
 ├── apps/
-│   ├── orchestrator/       Fastify API, Claude loop, tool registry
+│   ├── orchestrator/     Fastify brain, port 3001
 │   │   └── src/
-│   │       ├── config/     System prompt, validation
-│   │       ├── services/   LLM, memory, vault, proactive monitor
-│   │       └── tools/      120+ tools across 23 categories
-│   ├── web/                Next.js 14 chat UI + HUD
+│   │       ├── config/   System prompt, env
+│   │       ├── services/ Model roles, provider chain, voice, agents
+│   │       └── tools/    The 67 registered tools
+│   ├── web/              Next.js console, port 3000
 │   │   └── src/
-│   │       ├── app/        App router, API routes
-│   │       └── components/ JarvisOrb, HUD panels, chat
-│   └── sidecar/            Python plugins — voice, vision, meta-glasses
-├── electron/               Desktop shell
-├── scripts/                Utility scripts
-├── .planning/              Build state, phase specs
-├── JARVIS-BUILD.md         Full 10-phase build specification
-└── CLAUDE.md               Project context for Claude Code
+│   │       ├── app/(console)/   Overview, Brain, Mindspace, Talk, …
+│   │       └── components/      console/ and the flight deck in deck/
+│   └── sidecar/          Optional Python process, port 3002
+├── electron/             Installed by install.bat. Not started by start-unified.bat
+├── docs/
+│   ├── MODELS.md         Brain order, ids, prices
+│   └── AUDIT.md          What is fixed, and what is still open
+├── scripts/
+├── install.bat
+└── start-unified.bat
 ```
 
 ---
 
-## Build Status
+## Checks
 
-| Phase | Name | Status |
-|---|---|---|
-| 0 | Wire the Brain | ✅ |
-| 1 | Voice I/O | ✅ |
-| 2 | Real Tools | ✅ |
-| 3 | Integration Bridge | ✅ |
-| 4 | Browser Control + Screen Awareness | ✅ |
-| 5 | Credential Vault + Permissions | ✅ |
-| 6 | Electron Shell + Boot Sequence | ✅ |
-| 7 | Proactive Intelligence | ✅ |
-| 8 | Advanced Features (code agent, content, BI) | ✅ |
-| 9 | Hybrid Router + Learning Engine | ✅ |
-
-**Next:** end-to-end scenario testing, distribution.
-
----
-
-## License
-
-MIT — Built for one user, open for anyone.
+```bash
+cd apps/orchestrator
+npm test
+npx tsc --noEmit
+cd ../web
+npx tsc --noEmit
+```
