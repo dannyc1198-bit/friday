@@ -290,6 +290,47 @@ friday/
 
 ---
 
+## Talk to Jarvis (Hey Jarvis)
+
+This is the hands-free ear. It uses the Friday you already run. It does not start a second assistant.
+
+1. Start Friday the usual way, so the orchestrator is on port 3001 and the dashboard is on port 3000.
+2. Open PowerShell in the friday folder.
+3. Run `powershell -ExecutionPolicy Bypass -File scripts\hey-jarvis.ps1`
+4. Allow the microphone if Windows asks.
+5. Wait until the window says the wake word is ready.
+6. Say **Hey Jarvis**, pause, then say the command. Example: `play me Bohemian Rhapsody`.
+7. Open the Friday dashboard. The **Hey Jarvis** pill listens with you. It turns into **Listening**, then **Say yes** when something needs a yes. Click it to mute.
+8. Optional, every sign-in: run the same script with `-Startup`.
+
+What you can say:
+
+- `play me <song>` — finds the top YouTube result and opens it. Pause, stop, next, previous, and volume work after that.
+- `open Chrome`, `open Spotify`, `open Discord`, `open Steam`, plus the other names in `apps/sidecar/voice-ear.config.json`.
+- `go to youtube.com`, `take a screenshot`, `lock the computer`.
+- `add a function that ...` — Jarvis reads a short plan. Say **yes** and it commits on a new `voice/...` branch. It does not push.
+- `type hello` — waits for yes. Clicks stay off until you set `VOICE_COMPUTER_USE=1`.
+
+Say **mute** or click the pill to sleep. Hold **Ctrl+Shift** to talk once without the wake word (that needs the `keyboard` package; the script tries to install it).
+
+Change the mic, wake sensitivity, or allowed apps in `apps/sidecar/voice-ear.config.json`. Sensitivity is `0.1` (eager) to `1` (strict). `micDevice` is the number from Windows sound settings, or `null` for the default mic.
+
+Keys, all optional. A missing key says **needs key** and Friday keeps running.
+
+| Key | What it unlocks |
+|---|---|
+| none | Wake word, app launch, screenshots, lock, yt-dlp YouTube search |
+| `YOUTUBE_API_KEY` | YouTube search when yt-dlp is not installed |
+| `ELEVENLABS_API_KEY` | The ElevenLabs Jarvis voice. Without it, Friday uses the free Edge voice |
+| `OPENAI_API_KEY`, `XAI_API_KEY`, or `GEMINI_API_KEY` | Free-form questions, via the brain you already use |
+| Codex CLI, or `XAI_API_KEY` | Voice coding. Codex is the default |
+| `VOICE_CODING_BACKEND=ollama` | Local coding later, through Ollama at `http://127.0.0.1:11434/v1` |
+| `VOICE_CODING_BACKEND=lmstudio` | Same idea, LM Studio at `http://127.0.0.1:1234/v1` |
+
+Voice will not send messages, spend money, delete files, or shut the PC down. Those phrases ask for yes and then still refuse. Coding never pushes, and it will not commit on `main`. Git needs your name and email already set (`git config user.name`) or the commit step will say so and leave the branch uncommitted.
+
+The cloud check covered the command router, YouTube link choice, and the yes-before-commit rules. It did not use a microphone, speakers, wake-word model, or a Windows desktop. Try those on your PC.
+
 ## License
 
 MIT — Built for one user, open for anyone.

@@ -1,0 +1,25 @@
+{
+  "wakeWord": "hey jarvis",
+  "sensitivity": 0.5,
+  "micDevice": null,
+  "commandSeconds": 8,
+  "conversationSeconds": 12,
+  "orchestratorUrl": "http://127.0.0.1:3001",
+  "pushToTalk": "ctrl+shift",
+  "allowedApps": [
+    "chrome",
+    "firefox",
+    "edge",
+    "spotify",
+    "discord",
+    "steam",
+    "notepad",
+    "vscode",
+    "calculator",
+    "slack",
+    "obsidian",
+    "explorer",
+    "terminal"
+  ],
+  "codingBackend": "auto"
+}

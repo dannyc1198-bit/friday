@@ -1,7 +1,8 @@
 // Tool registration index â€” SIMPLE FRIDAY (amputated 2026-04-20)
 //
 // Only the core daily-driver tools are registered. Frozen tool files
-// (hue, bluetooth, health-*, music, quiet-mode, identity, memory-tools)
+// (hue, bluetooth, health-*, quiet-mode, identity, memory-tools)
+// music-tools is registered: voice ear uses the media keys.
 // remain on disk and can be re-enabled by adding their register call back.
 //
 // memory-tools frozen 2026-07-09: superseded by brain-tools (durable facts)
@@ -26,13 +27,15 @@ import { registerBrainTools } from "./brain-tools.js";
 import { registerCreativeTools } from "./creative.js";
 import { registerAppControlTools } from "./app-control.js";
 import { registerProceduralSkillTools } from "./procedural-skills.js";
+import { registerMusicTools } from "./music-tools.js";
 import { toolRegistry } from "./registry.js";
 
 export function initializeTools(): void {
   console.log("ðŸ”§ Initializing FRIDAY tools (simple)...");
 
   registerPcControlTools();
-  console.log("  âœ“ PC Control");
+  registerMusicTools();
+  console.log("  âœ“ PC Control + media keys");
 
   registerTaskTools();
   console.log("  âœ“ Tasks");
