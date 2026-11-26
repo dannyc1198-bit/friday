@@ -66,3 +66,6 @@ tmpclaude-*
 
 # Local browser snapshots from agent verification
 .playwright-mcp/
+
+# Packaged JARVIS desktop builds
+apps/desktop/release/

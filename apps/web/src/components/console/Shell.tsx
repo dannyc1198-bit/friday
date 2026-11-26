@@ -33,7 +33,6 @@ import { useResource } from "./useResource";
 import { TabStrip } from "./TabStrip";
 import { LiveFrames } from "./LiveFrames";
 import { BootIntro } from "./BootIntro";
-
 interface NavItem {
   href: string;
   label: string;
