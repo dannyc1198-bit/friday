@@ -23,6 +23,7 @@ import { registerBrainProviderTools } from "./brain-provider.js";
 import { registerLiveAppsTools } from "./live-apps.js";
 import { registerMindspaceTools } from "./mindspace.js";
 import { registerBrainTools } from "./brain-tools.js";
+import { registerMemoryPortTools } from "./memory-port-tools.js";
 import { registerCreativeTools } from "./creative.js";
 import { registerAppControlTools } from "./app-control.js";
 import { registerProceduralSkillTools } from "./procedural-skills.js";
@@ -47,6 +48,7 @@ export function initializeTools(): void {
   console.log("  âœ“ Obsidian (second brain â€” read/write/delete)");
 
   registerBrainTools();
+  registerMemoryPortTools();
   registerProceduralSkillTools();
   console.log("  âœ“ Brain (recall / remember / reflect â€” the learning loop)");
 

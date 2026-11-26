@@ -8,7 +8,10 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit",
-    "test": "tsx --test \"src/**/*.test.ts\" \"../web/src/lib/*.test.ts\""
+    "test": "tsx --test \"src/**/*.test.ts\" \"../web/src/lib/*.test.ts\"",
+    "memory:index": "tsx src/scripts/memory-index.ts index",
+    "memory:reindex": "tsx src/scripts/memory-index.ts reindex",
+    "memory:watch": "tsx src/scripts/memory-index.ts watch"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -30,6 +33,7 @@
     "nodemailer": "^8.0.3",
     "openai": "^4.52.0",
     "playwright": "^1.58.2",
+    "sqlite-vec": "^0.1.9",
     "uuid": "^10.0.0",
     "ws": "^8.22.0"
   },

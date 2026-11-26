@@ -1,17 +1,12 @@
-// SQLite-backed memory store — canonical memory layer for FRIDAY.
+// SQLite file for chat transcripts. One file, shared with the memory port.
 //
-// Replaces ChromaDB (kept crashing) + file-based JSON (not indexed).
-// Single SQLite file with two tables:
-//   memories  — hot store with FTS5 virtual table for keyword search
-//   vectors   — embeddings stored as BLOB, cosine similarity in JS
+//   memories + memories_fts  — chat rows, FTS5 keyword search
+//   vectors                  — OpenAI embeddings (1536-dim). The memory port
+//                              must not read or write this table.
 //
-// Implements the existing MemoryClient interface so memory-service.ts
-// can swap backends without code changes in call sites.
-//
-// Why BLOB + in-process cosine instead of a vector extension:
-//   better-sqlite3 doesn't ship sqlite-vec on Windows. For <50k memories
-//   (Danny will never hit that), scanning + cosine in Node is <50ms.
-//   Zero native compilation, zero extra deps.
+// Local nomic-embed-text vectors live in port_items / port_vec (see port.ts)
+// in this same file. Those rows store embedding_model and dim. The two
+// vector spaces are never mixed.
 
 import Database from "better-sqlite3";
 import type { Database as DB, Statement } from "better-sqlite3";
@@ -26,6 +21,11 @@ import type {
 const HOME = process.env.USERPROFILE || process.env.HOME || "C:\\Users\\12368";
 const DB_DIR = join(HOME, "jarvis", "apps", "orchestrator", "data");
 const DB_PATH = join(DB_DIR, "friday-memory.sqlite");
+
+/** Same file the memory port opens. Chat vectors in this file stay 1536-dim. */
+export function sqliteMemoryDbPath(): string {
+  return DB_PATH;
+}
 
 function cosine(a: Float32Array, b: Float32Array): number {
   let dot = 0;
