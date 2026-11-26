@@ -138,6 +138,32 @@ export function grantEffect(binding: EffectBinding, now = Date.now()): void {
   granted.set(bindingKey(binding), now + 2 * 60_000);
 }
 
+/** Local reads and vault notes pass. Posts, sends, and deletes need a grant. */
+export function assessOutgoingAction(action: string, destination: string, content: string): EffectBinding | null {
+  const normalized = action.trim().toLowerCase();
+  if (normalized === "get" || normalized === "read" || normalized === "vault-write" || normalized === "open-file") {
+    return null;
+  }
+  if (/^(post|put|patch|delete|send|publish)$/.test(normalized)) {
+    return {
+      tool: "memory-port",
+      action: normalized,
+      destination: destination.slice(0, 300) || "unknown",
+      content: content.slice(0, 500),
+      amount: amountIn(content),
+    };
+  }
+  return null;
+}
+
+export function requireGrantedOutgoing(action: string, destination: string, content: string): void {
+  const binding = assessOutgoingAction(action, destination, content);
+  if (!binding) return;
+  if (consumeGrantedEffect(binding)) return;
+  const token = stageEffect("memory-port", { action, destination }, binding);
+  throw new Error(`That leaves the machine (${binding.action}). Confirm effect ${token} before I do it.`);
+}
+
 export function resetEffectGate(): void {
   context = { url: "unknown page", stagedText: "" };
   urlLocator = () => context.url;

@@ -65,6 +65,8 @@ import { voiceRoutes } from "./routes/voice.js";
 import { vapiLlmRoutes } from "./routes/vapi-llm.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { brainRoutes } from "./routes/brain.js";
+import { memoryRoutes } from "./routes/memory.js";
+import { startMemoryBackground, stopMemoryBackground } from "./services/memory/port.js";
 import { skillRoutes } from "./routes/skills.js";
 import proactiveAlertsRoutes from "./routes/proactive-alerts.js";
 import { initBrain, stopBrain, formatBrainContext, recallHits } from "./services/brain.js";
@@ -228,6 +230,7 @@ await app.register(voiceRoutes);
 await app.register(vapiLlmRoutes, { prefix: "/vapi/llm" });
 await app.register(dashboardRoutes, { prefix: "/api/dashboard" });
 await app.register(brainRoutes, { prefix: "/api/brain" });
+await app.register(memoryRoutes, { prefix: "/api/memory/layer" });
 await app.register(skillRoutes, { prefix: "/api/skills" });
 await app.register(agentRoutes);
 await app.register(mediaRoutes);
@@ -248,6 +251,7 @@ initializeTools();
 // Obsidian brain: index the vault (sub-second at current size), then keep a
 // 5-min incremental rescan running. Non-fatal if the vault is missing.
 initBrain().catch((err) => console.warn("  âš  Brain index failed:", (err as Error).message));
+startMemoryBackground();
 
 // Time-based jobs: briefing and reflection wait 2 minutes after boot, then one at a time.
 startScheduler();
@@ -755,6 +759,7 @@ const start = async () => {
 async function gracefulShutdown(): Promise<void> {
   stopScheduler();
   stopBrain();
+  stopMemoryBackground();
   stopAlertDelivery();
   proactiveMonitor.stop();
   await shutdownMCPClients();

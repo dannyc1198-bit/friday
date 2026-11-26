@@ -777,7 +777,7 @@ const obsidianDailyTool: Tool = {
 const obsidianDeleteTool: Tool = {
   name: "obsidian_delete",
   description:
-    "Delete an Obsidian note. Requires the confirmed parameter set to true to prevent accidental deletion.",
+    "Refuses to delete notes. The vault is the brain. Append a correction or write a new note under Jarvis/ or Inbox/ instead.",
   category: "obsidian",
   parameters: [
     {
@@ -793,53 +793,12 @@ const obsidianDeleteTool: Tool = {
       required: true,
     },
   ],
-  execute: async (params): Promise<ToolResult> => {
-    const input = (params.note as string).trim();
-    const confirmed = params.confirmed as boolean;
-
-    if (!confirmed) {
-      return { toolCallId: "", success: false, error: "Deletion not confirmed. Set confirmed=true after asking Danny." };
-    }
-
-    let filePath = path.join(vaultPath(), input);
-    if (!filePath.endsWith(".md")) filePath += ".md";
-    try {
-      filePath = await vaultFile(filePath);
-    } catch (error) {
-      return {
-        toolCallId: "",
-        success: false,
-        error: error instanceof Error ? error.message : "Path is outside the vault.",
-      };
-    }
-
-    try {
-      await fs.access(filePath);
-    } catch {
-      const notes = await getAllNotes();
-      const target = input.toLowerCase().replace(/\.md$/, "");
-      const match = notes.find((n) => noteName(n).toLowerCase() === target);
-      if (!match) {
-        return { toolCallId: "", success: false, error: `Note "${input}" not found.` };
-      }
-      filePath = await vaultFile(match);
-    }
-
-    try {
-      const name = noteName(filePath);
-      await fs.unlink(filePath);
-      return {
-        toolCallId: "",
-        success: true,
-        data: { message: `Deleted note "${name}".`, path: relPath(filePath) },
-      };
-    } catch (error) {
-      return {
-        toolCallId: "",
-        success: false,
-        error: `Delete failed: ${error instanceof Error ? error.message : "Unknown"}`,
-      };
-    }
+  execute: async (): Promise<ToolResult> => {
+    return {
+      toolCallId: "",
+      success: false,
+      error: "I don't delete notes. I can append a correction, or write a new note under Jarvis/ or Inbox/.",
+    };
   },
 };
 

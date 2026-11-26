@@ -157,6 +157,29 @@ FRIDAY's Claude agentic loop runs with a registered tool palette covering:
 
 ---
 
+## Memory layer
+
+Friday keeps one local index on this PC. The Obsidian vault is the thing that is real. The index is a rebuildable search over that vault, plus read-only looks at files, tasks, old chat notes, and social accounts you connect yourself. Nothing in this layer is sent to a cloud memory service.
+
+**What works with no extra keys.** If the Wavelength vault is on disk, notes are indexed by heading (links and tags come along as metadata). File names, sizes, and dates are indexed for Documents, Desktop, Downloads, Personal-Projects, Pictures, and Videos. Small text, markdown, code, and PDF files also get their text, with secrets stripped first. Chat search uses keywords already stored on the machine. Asking for one next step reads `Jarvis/Projects.md` and the task list. New notes from Friday go in `Jarvis/` or `Inbox/`. An edit to a note Friday already wrote is either appended or copied to a timestamped `.bak` first (and committed if the vault is a git repo). Friday does not delete notes.
+
+**What needs you.** Semantic search needs [Ollama](https://ollama.com) running locally with `nomic-embed-text` (`ollama pull nomic-embed-text`). Those vectors are 768 numbers and are marked with the model name. They are never mixed with the older OpenAI 1536-number vectors, which stay in the chat table and are not searched by this index. Social accounts do nothing until you put your own keys in `apps/orchestrator/.env`:
+
+- **YouTube.** In Google Cloud, enable YouTube Data API v3, create an API key, and copy your channel id from [youtube.com/account_advanced](https://www.youtube.com/account_advanced). Set `YOUTUBE_API_KEY` and `YOUTUBE_CHANNEL_ID`.
+- **X.** Create an app at [developer.x.com](https://developer.x.com) with read access. Set `X_BEARER_TOKEN` and `X_USERNAME` (or `X_USER_ID`).
+- **Instagram.** Use a professional account, a Meta app, and a long-lived user token with `instagram_basic`. Set `INSTAGRAM_ACCESS_TOKEN` and `INSTAGRAM_USER_ID` (the Graph id, not the @name).
+- **TikTok.** TikTok has no simple API key. A developer app with Login Kit and the Display API `video.list` scope gives you a user token. Set `TIKTOK_ACCESS_TOKEN`. Friday only reads that list. It never posts.
+
+Keys are not printed in errors. A missing key means that account stays off.
+
+**Index it.** From `apps/orchestrator`, run `npm run memory:index`. On Windows you can also run `powershell -ExecutionPolicy Bypass -File scripts\index-memory.ps1`. Leave the orchestrator running and it watches the vault for changes. `npm run memory:reindex` (or the script with `-Reindex`) rebuilds vectors after you change the embedding model. `-Watch` keeps a separate watcher open.
+
+**Wipe or leave something out.** `memory_forget` hides one index entry and leaves the note on disk. To drop the whole index, delete `friday-memory.sqlite` under `%USERPROFILE%\jarvis\apps\orchestrator\data`. That file also holds older chat rows, so deleting it clears those too. It does not delete the vault. Set `FRIDAY_EXCLUDE` to extra folder names to skip (semicolon-separated), on top of the built-in skips: `.env` files, keys, password-manager files, `node_modules`, `.git`, AppData, and browser profiles. `FRIDAY_FILE_ROOTS` replaces the default folders. `FRIDAY_QUIET_HOURS` defaults to `23:00-05:30`. Suggestions during those hours are saved and not spoken. One suggestion at a time.
+
+**What is still separate.** `brain_remember` still writes entity notes in `FRIDAY_BRAIN/entities`, and the vault's BM25 search still lives there. Nightly reflection still distills the day's chat into those notes. The task list, the day store, and `unified-memory.json` are read, not replaced. Chroma and the old JSON file memory are not on this path. The OpenAI embedding column in the chat database is left untouched.
+
+**Limits.** Scanned PDFs (photos of pages) do not yield text. File text is capped at about 256 KB and only a short excerpt is stored. Social stats are whatever the read API returns. If Ollama is off, search still works by words.
+
 ## Neural Core
 
 The Neural Core tab is a live graph of Friday's real activity. It shows Obsidian notes recalled, tools that ran, learning facts written, and repair events. The language model and the Obsidian vault do the reasoning. The graph is a reading of that work.
