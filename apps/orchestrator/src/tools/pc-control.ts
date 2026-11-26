@@ -55,6 +55,7 @@ const APP_ALLOWLIST: Record<string, string> = {
   // Media & Social
   spotify: "spotify",
   discord: "discord",
+  steam: "steam",
   slack: "slack",
   telegram: "telegram",
   "telegram desktop": "telegram",
@@ -80,7 +81,7 @@ const CLOSEABLE_PROCESSES = new Set([
   "notepad", "calc", "mspaint",
   "winword", "excel", "powerpnt", "outlook",
   "code", "wt",
-  "spotify", "discord", "slack",
+  "spotify", "discord", "steam", "slack",
   "explorer", "taskmgr",
   "ms-teams",
 ]);
@@ -140,6 +141,15 @@ const KEY_COMBO_MAP: Record<string, string> = {
   mute: "{VOLUME_MUTE}",
 };
 
+export function resolveAllowedApp(name: string): string | null {
+  const key = name.toLowerCase().trim();
+  return APP_ALLOWLIST[key] || null;
+}
+
+export function allowedAppNames(): string[] {
+  return Object.keys(APP_ALLOWLIST);
+}
+
 // ─── PowerShell Executor (hardened) ──────────────────────────
 // All commands are pre-built — never interpolate user input directly.
 // Timeout: 15 seconds (down from 30).
@@ -174,7 +184,7 @@ const openAppTool: Tool = {
   ],
   execute: async (params): Promise<ToolResult> => {
     const name = (params.name as string).toLowerCase().trim();
-    const executable = APP_ALLOWLIST[name];
+    const executable = resolveAllowedApp(name);
 
     if (!executable) {
       return {
@@ -396,6 +406,47 @@ const takeScreenshotTool: Tool = {
         toolCallId: "",
         success: false,
         error: `Failed to take screenshot: ${error instanceof Error ? error.message : "Unknown"}`,
+      };
+    }
+  },
+};
+
+const focusAppTool: Tool = {
+  name: "focus_app",
+  description: "Bring an allowlisted app to the front. The app must already be open.",
+  category: "pc_control",
+  parameters: [
+    {
+      name: "name",
+      type: "string",
+      description: "App name from the allowlist, such as chrome, spotify, discord, or steam.",
+      required: true,
+    },
+  ],
+  execute: async (params): Promise<ToolResult> => {
+    const name = String(params.name || "").toLowerCase().trim();
+    const executable = resolveAllowedApp(name);
+    if (!executable) {
+      return {
+        toolCallId: "",
+        success: false,
+        error: `"${name}" is not in the allowed app list.`,
+      };
+    }
+    try {
+      await runPS(`
+        $proc = Get-Process -Name '${executable}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+        if (-not $proc) { throw 'not running' }
+        Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class EarFocus { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); }' -ErrorAction SilentlyContinue
+        [EarFocus]::ShowWindow($proc.MainWindowHandle, 9) | Out-Null
+        [EarFocus]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null
+      `);
+      return { toolCallId: "", success: true, data: { message: `Focused ${name}` } };
+    } catch {
+      return {
+        toolCallId: "",
+        success: false,
+        error: `Could not focus ${name}. Open it first.`,
       };
     }
   },
@@ -796,6 +847,7 @@ export function registerPcControlTools(): void {
   // System (6)
   toolRegistry.register(openAppTool);
   toolRegistry.register(closeAppTool);
+  toolRegistry.register(focusAppTool);
   toolRegistry.register(getSystemInfoTool);
   toolRegistry.register(setVolumeTool);
   toolRegistry.register(takeScreenshotTool);

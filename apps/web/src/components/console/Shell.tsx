@@ -33,6 +33,7 @@ import { useResource } from "./useResource";
 import { TabStrip } from "./TabStrip";
 import { LiveFrames } from "./LiveFrames";
 import { BootIntro } from "./BootIntro";
+import { VoiceEarPill, VoiceEarPlayer } from "./VoiceEarChrome";
 
 interface NavItem {
   href: string;
@@ -193,6 +194,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className="truncate">Search</span>
             <span className="ml-auto hidden font-mono text-[10px] sm:inline">Ctrl K</span>
           </button>
+          <VoiceEarPill />
           <StatusPill label="Brain" value={brain} warn={!demo && !health.data?.llm?.configured} />
           <StatusPill label="Voice" value={voice} warn={false} />
           <button
@@ -234,6 +236,7 @@ export function Shell({ children }: { children: ReactNode }) {
             )}
           </div>
         </header>
+        <VoiceEarPlayer />
         {demo && (
           <p className="border-b border-brass/40 bg-brass/10 px-4 py-2 text-center text-xs font-medium text-brass">
             Demo · sample data · nothing is sent
