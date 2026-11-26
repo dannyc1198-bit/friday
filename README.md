@@ -14,6 +14,39 @@ FRIDAY is a local-first personal AI assistant built on **Anthropic Claude**. It 
 
 ---
 
+## JARVIS command centre (Windows)
+
+The voice window is a separate Electron app in `apps/desktop`. It is not a reskin of the Next.js dashboard, and it does not replace the older `electron/` shell (Alt+J and the F.R.I.D.A.Y. loading screen stay there).
+
+**Framework:** Electron + React + Vite + TypeScript, React Three Fiber, drei, and a light bloom pass. Tauri was not used because this machine should not need a Rust toolchain, and Friday is already a Node app. The existing `electron/` folder is a different window, so the new one lives beside it.
+
+The orb is a warm yellow plasma sphere with rings of data blocks, in the Age of Ultron read. Idle motion is slow. After about five idle seconds the opaque command centre hides and a small transparent orb sits in the corner. Listening, thinking, speaking, “Say yes”, and a short alert pulse bring the centre back. Say “ultron mode” for the cold blue palette. The only hidden hotkey is **Ctrl+Alt+J** (settings). There is no menu.
+
+Hey Jarvis is the only wake word. The listener loads that one openWakeWord model and stays silent except for errors. After Jarvis speaks you have about nine seconds to continue without repeating the wake word. Sending, spending, and deleting wait for a spoken yes. Speech audio is played in the window through Web Audio so the rings can follow it. The Python process plays the same line only when that window is not connected.
+
+### Launch
+
+From the `friday` folder, after Node.js and Python are installed:
+
+```bat
+launch-jarvis.cmd
+```
+
+That builds the production UI, starts the orchestrator on port 3001 if it is down, starts the Hey Jarvis listener hidden, and opens the Electron window. It does not start a Vite dev server.
+
+A portable Windows exe, from `apps\desktop` on a Windows PC:
+
+```bat
+npm install
+npm run build:win
+```
+
+The exe is written under `apps\desktop\release\`. Open that file. The orchestrator and `apps\sidecar\hey_jarvis.py` still have to be running; `launch-jarvis.cmd` starts them for you.
+
+Limits: lip-sync follows the amplitude and frequency of the audio the window is playing, not a filmed face. There is no CUDA talking-head model. If both ElevenLabs and the free Edge voice fail, the orb will not mouth real speech. A barge-in while Jarvis is talking depends on the microphone hearing you over the speakers.
+
+---
+
 ## What FRIDAY Does
 
 FRIDAY is a complete four-process AI operating system that you talk to. It has persistent memory, a streaming chat interface with an animated boot sequence, a proactive monitoring loop that wakes up on its own, an encrypted credential vault, and an agentic tool-use engine that can chain dozens of operations to complete a request.

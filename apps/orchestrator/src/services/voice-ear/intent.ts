@@ -14,7 +14,8 @@ export type VoiceIntent =
   | { kind: "computer"; action: "key"; key: string }
   | { kind: "computer"; action: "click"; x: number; y: number }
   | { kind: "coding"; task: string }
-  | { kind: "destructive" }
+  | { kind: "destructive"; summary: string; tool?: string; args?: Record<string, unknown> }
+  | { kind: "settings"; action: "open" | "close" | "theme" | "sensitivity" | "follow"; theme?: "jarvis" | "ultron"; value?: number }
   | { kind: "general"; text: string };
 
 export const VOICE_BRAIN_PROMPT = `You map one spoken command onto one Friday tool. Reply with JSON only.
@@ -26,7 +27,10 @@ Never choose a tool that sends a message, spends money, deletes files, or shuts 
 export function routeVoiceIntent(transcript: string): VoiceIntent {
   const text = stripWake(transcript);
   if (!text) return { kind: "general", text: "" };
-  if (isDestructive(text)) return { kind: "destructive" };
+  const settings = settingsIntent(text);
+  if (settings) return settings;
+  const outgoing = outgoingIntent(text);
+  if (outgoing) return outgoing;
 
   if (/^(mute|stop listening|go to sleep)$/i.test(text)) return { kind: "ear", action: "mute" };
   if (/^(unmute|start listening)$/i.test(text)) return { kind: "ear", action: "unmute" };
@@ -86,7 +90,9 @@ export function decisionFromBrain(raw: string): VoiceIntent | null {
   const say = typeof parsed.say === "string" ? parsed.say.trim() : "";
   const args = parsed.args && typeof parsed.args === "object" ? parsed.args as Record<string, unknown> : {};
   if (!tool || tool === "null") return { kind: "general", text: say };
-  if (blockedTool(tool)) return { kind: "destructive" };
+  if (blockedTool(tool)) {
+    return { kind: "destructive", summary: say || `run ${tool}`, tool, args };
+  }
 
   if (tool === "open_app" || tool === "close_app" || tool === "focus_app") {
     const name = String(args.name || "").trim().toLowerCase();
@@ -116,6 +122,39 @@ export function decisionFromBrain(raw: string): VoiceIntent | null {
 
 function stripWake(transcript: string): string {
   return transcript.trim().replace(/^(?:hey|ok|okay)\s+jarvis\b[,!.:\s]*/i, "").trim();
+}
+
+function settingsIntent(text: string): VoiceIntent | null {
+  if (/^(open|show) settings$/i.test(text)) return { kind: "settings", action: "open" };
+  if (/^(close|hide) settings$/i.test(text)) return { kind: "settings", action: "close" };
+  if (/^(ultron mode|switch to ultron|blue theme)$/i.test(text)) return { kind: "settings", action: "theme", theme: "ultron" };
+  if (/^(jarvis mode|golden mode|yellow theme)$/i.test(text)) return { kind: "settings", action: "theme", theme: "jarvis" };
+  const sensitivity = /^set sensitivity to (\d?\.\d+|\d{1,3})$/i.exec(text);
+  if (sensitivity) {
+    const raw = Number(sensitivity[1]);
+    return { kind: "settings", action: "sensitivity", value: raw > 1 ? raw / 100 : raw };
+  }
+  const follow = /^set follow(?:-up)? to (\d{1,2})(?: seconds)?$/i.exec(text);
+  if (follow) return { kind: "settings", action: "follow", value: Number(follow[1]) };
+  return null;
+}
+
+function outgoingIntent(text: string): VoiceIntent | null {
+  if (!isDestructive(text)) return null;
+  const saying = /(?:saying|that says)\s+(.+)$/i.exec(text)?.[1]?.trim();
+  const who = /\bto\s+([A-Za-z][\w.-]*)/.exec(text)?.[1];
+  if (/\b(send|email|e-mail|text|sms)\b/i.test(text)) {
+    const ready = Boolean(who && saying);
+    return {
+      kind: "destructive",
+      summary: who ? `send a message to ${who}` : "send that message",
+      tool: ready ? "gmail_send" : undefined,
+      args: ready ? { to: who, body: saying } : undefined,
+    };
+  }
+  if (/\b(buy|purchase|pay|spend)\b/i.test(text)) return { kind: "destructive", summary: "spend money" };
+  if (/\b(delete|erase|format|wipe)\b/i.test(text)) return { kind: "destructive", summary: "delete that" };
+  return { kind: "destructive", summary: "do that to the machine" };
 }
 
 function isDestructive(text: string): boolean {

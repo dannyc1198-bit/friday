@@ -8,6 +8,8 @@ import {
   type GitOps,
 } from "./coding.js";
 import { decisionFromBrain, isApproval, isRefusal, routeVoiceIntent, type VoiceIntent } from "./intent.js";
+import { notifyEar } from "./live.js";
+import { planFromTranscript, spokenSummary, stepsFromBrain } from "./voice-plan.js";
 import type { YoutubeHit, YoutubeResult } from "./youtube.js";
 
 export interface ToolOutcome {
@@ -35,8 +37,19 @@ export interface VoiceTurn {
   needsKey?: boolean;
 }
 
+export interface SpeechCue {
+  id: string;
+  text: string;
+  playback: "pending" | "playing" | "done" | "local";
+}
+
+export interface EarLine {
+  role: "you" | "jarvis";
+  text: string;
+}
+
 export interface EarStatus {
-  phase: "asleep" | "listening" | "thinking" | "speaking" | "confirming" | "muted";
+  phase: "asleep" | "listening" | "thinking" | "speaking" | "confirming" | "muted" | "alert";
   wakeWord: string;
   muted: boolean;
   heard: string;
@@ -44,14 +57,22 @@ export interface EarStatus {
   pending: { kind: string; summary: string } | null;
   nowPlaying: YoutubeHit | null;
   codingBackend: string;
+  micLevel: number;
+  alert: string | null;
+  transcript: EarLine[];
+  speech: SpeechCue | null;
+  armed: boolean;
+  settingsOpen: boolean;
+  theme: "jarvis" | "ultron";
+  sensitivity: number;
+  followSeconds: number;
+  followUntil: number;
 }
 
 type Pending =
-  | { kind: "destructive"; summary: string }
+  | { kind: "destructive"; summary: string; tool?: string; args?: Record<string, unknown>; after: VoiceIntent[] }
   | { kind: "computer"; summary: string; intent: Extract<VoiceIntent, { kind: "computer" }> }
   | { kind: "coding"; summary: string; diff: string; branch: string; message: string };
-
-const WONT = "I won't delete files, shut the computer down, send messages, or spend money from voice.";
 
 export function createVoiceEar(deps: VoiceEarDeps) {
   const allowed = new Set(deps.allowedApps.map((name) => name.toLowerCase().trim()));
@@ -61,6 +82,24 @@ export function createVoiceEar(deps: VoiceEarDeps) {
   let say = "";
   let pending: Pending | null = null;
   let nowPlaying: YoutubeHit | null = null;
+  let micLevel = 0;
+  let alert: string | null = null;
+  let speech: SpeechCue | null = null;
+  let speechSeq = 0;
+  let armedUntil = 0;
+  let settingsOpen = false;
+  let theme: "jarvis" | "ultron" = "jarvis";
+  let sensitivity = 0.5;
+  let followSeconds = 9;
+  let followUntil = 0;
+  const transcript: EarLine[] = [];
+
+  function pushLine(role: EarLine["role"], text: string) {
+    const line = text.trim();
+    if (!line) return;
+    transcript.push({ role, text: line });
+    if (transcript.length > 24) transcript.shift();
+  }
 
   function status(): EarStatus {
     return {
@@ -72,14 +111,35 @@ export function createVoiceEar(deps: VoiceEarDeps) {
       pending: pending ? { kind: pending.kind, summary: pending.summary } : null,
       nowPlaying,
       codingBackend: deps.coding?.id || "none",
+      micLevel,
+      alert,
+      transcript: transcript.slice(),
+      speech,
+      armed: Date.now() < armedUntil,
+      settingsOpen,
+      theme,
+      sensitivity,
+      followSeconds,
+      followUntil,
     };
+  }
+
+  function emit() {
+    notifyEar(status());
   }
 
   function finish(turn: VoiceTurn, next: EarStatus["phase"] = "asleep"): VoiceTurn {
     say = turn.say;
+    if (turn.say.trim()) {
+      speechSeq += 1;
+      speech = { id: String(speechSeq), text: turn.say.trim(), playback: "pending" };
+      pushLine("jarvis", turn.say);
+    }
     if (next === "confirming") phase = "confirming";
     else if (muted) phase = "muted";
+    else if (next === "asleep" && turn.say.trim()) phase = "speaking";
     else phase = next;
+    emit();
     return turn;
   }
 
@@ -105,6 +165,10 @@ export function createVoiceEar(deps: VoiceEarDeps) {
       pending = null;
     }
 
+    pushLine("you", spoken);
+    if (!muted) phase = "thinking";
+    const plan = planFromTranscript(spoken);
+    if (plan) return runPlan(plan);
     return runIntent(routeVoiceIntent(spoken));
   }
 
@@ -112,7 +176,18 @@ export function createVoiceEar(deps: VoiceEarDeps) {
     const item = pending;
     pending = null;
     if (!item) return finish({ say: "Nothing is waiting.", acted: false });
-    if (item.kind === "destructive") return finish({ say: WONT, acted: false });
+    if (item.kind === "destructive") {
+      if (!item.tool) {
+        return finish({
+          say: `Tell me exactly what to ${item.summary}. I have not changed anything.`,
+          acted: false,
+        });
+      }
+      const done = await tool(item.tool, item.args || {}, `Done. ${item.summary}.`);
+      if (!item.after.length) return done;
+      const rest = await runPlan(item.after);
+      return finish({ say: `${done.say} ${rest.say}`.trim(), acted: done.acted || rest.acted });
+    }
     if (item.kind === "computer") return runComputer(item.intent, true);
     if (!deps.git) return finish({ say: "I can't touch git from here.", acted: false });
     try {
@@ -129,17 +204,15 @@ export function createVoiceEar(deps: VoiceEarDeps) {
 
   async function runIntent(intent: VoiceIntent): Promise<VoiceTurn> {
     if (intent.kind === "destructive") {
-      pending = { kind: "destructive", summary: "blocked action" };
-      return finish({
-        say: `That needs a yes, and even then I won't do it from voice. Say yes if you meant it.`,
-        acted: false,
-      }, "confirming");
+      pending = { kind: "destructive", summary: intent.summary, tool: intent.tool, args: intent.args, after: [] };
+      return finish({ say: `Say yes to ${intent.summary}.`, acted: false }, "confirming");
     }
+    if (intent.kind === "settings") return applySettings(intent);
     if (intent.kind === "ear") {
       muted = intent.action === "mute";
       if (muted) pending = null;
       return finish(
-        { say: muted ? "Muted. Hold the push-to-talk keys if you need me." : "Listening again.", acted: true },
+        { say: muted ? "Muted. Say Hey Jarvis, unmute, when you want me back." : "Listening again.", acted: true },
         muted ? "muted" : "asleep"
       );
     }
@@ -265,6 +338,8 @@ export function createVoiceEar(deps: VoiceEarDeps) {
     }
     try {
       const raw = await deps.brain(text);
+      const steps = stepsFromBrain(raw);
+      if (steps && steps.length > 1) return runPlan(steps);
       const decided = decisionFromBrain(raw);
       if (!decided) return finish({ say: "I didn't catch a command.", acted: false });
       if (decided.kind === "general") {
@@ -285,6 +360,51 @@ export function createVoiceEar(deps: VoiceEarDeps) {
     }
   }
 
+  async function runPlan(steps: VoiceIntent[]): Promise<VoiceTurn> {
+    const said: string[] = [];
+    for (let index = 0; index < steps.length; index++) {
+      const intent = steps[index];
+      if (intent.kind === "destructive") {
+        pending = {
+          kind: "destructive",
+          summary: intent.summary,
+          tool: intent.tool,
+          args: intent.args,
+          after: steps.slice(index + 1),
+        };
+        return finish({ say: `${spokenSummary(said)} Say yes to ${intent.summary}.`.trim(), acted: said.length > 0 }, "confirming");
+      }
+      const turn = await runIntent(intent);
+      if (phase === "confirming") return turn;
+      if (turn.say) said.push(turn.say);
+    }
+    return finish({ say: spokenSummary(said), acted: true });
+  }
+
+  function applySettings(intent: Extract<VoiceIntent, { kind: "settings" }>): VoiceTurn {
+    if (intent.action === "open") {
+      settingsOpen = true;
+      return finish({ say: "Settings are open. Ctrl Alt J hides them.", acted: true });
+    }
+    if (intent.action === "close") {
+      settingsOpen = false;
+      return finish({ say: "Settings closed.", acted: true });
+    }
+    if (intent.action === "theme" && intent.theme) {
+      theme = intent.theme;
+      return finish({ say: intent.theme === "ultron" ? "Ultron palette." : "Jarvis palette.", acted: true });
+    }
+    if (intent.action === "sensitivity" && typeof intent.value === "number") {
+      sensitivity = Math.min(1, Math.max(0.1, intent.value));
+      return finish({ say: `Sensitivity ${sensitivity.toFixed(2)}.`, acted: true });
+    }
+    if (intent.action === "follow" && typeof intent.value === "number") {
+      followSeconds = Math.min(60, Math.max(4, Math.round(intent.value)));
+      return finish({ say: `Follow-up window is ${followSeconds} seconds.`, acted: true });
+    }
+    return finish({ say: "I didn't catch that setting.", acted: false });
+  }
+
   return {
     hear,
     status,
@@ -292,10 +412,41 @@ export function createVoiceEar(deps: VoiceEarDeps) {
       muted = next;
       phase = next ? "muted" : "asleep";
       if (next) pending = null;
+      emit();
     },
-    setPresence(next: "asleep" | "listening") {
-      if (muted || pending) return;
+    setPresence(next: "asleep" | "listening" | "thinking" | "speaking" | "alert") {
+      if (muted) return;
+      if (pending && next !== "alert") return;
       phase = next;
+      if (next === "alert") alert = alert || "Attention.";
+      if (next === "asleep") alert = null;
+      emit();
+    },
+    setMicLevel(level: number) {
+      micLevel = Math.min(1, Math.max(0, level));
+      emit();
+    },
+    arm(ms = 8000) {
+      armedUntil = Date.now() + ms;
+      if (!muted) phase = "listening";
+      emit();
+    },
+    consumeArm() {
+      const armed = Date.now() < armedUntil;
+      armedUntil = 0;
+      return armed;
+    },
+    notePlayback(id: string, playback: SpeechCue["playback"]) {
+      if (!speech || speech.id !== id) return status();
+      speech = { ...speech, playback };
+      if (playback === "done" || playback === "local") {
+        if (!pending && !muted && phase === "speaking") {
+          phase = "listening";
+          followUntil = Date.now() + followSeconds * 1000;
+        }
+      }
+      emit();
+      return status();
     },
   };
 }

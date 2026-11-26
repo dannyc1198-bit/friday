@@ -3,7 +3,7 @@
   "sensitivity": 0.5,
   "micDevice": null,
   "commandSeconds": 8,
-  "conversationSeconds": 12,
+  "conversationSeconds": 9,
   "orchestratorUrl": "http://127.0.0.1:3001",
   "pushToTalk": "ctrl+shift",
   "allowedApps": [

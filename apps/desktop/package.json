@@ -1,0 +1,51 @@
+{
+  "name": "jarvis-command-centre",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Age of Ultron JARVIS command centre. Electron window for Friday.",
+  "main": "main.cjs",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "start": "electron .",
+    "build:win": "vite build && electron-builder --win portable",
+    "test": "tsx --test src/lib/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/orbitron": "^5.2.8",
+    "@fontsource/rajdhani": "^5.2.7",
+    "@fontsource/share-tech-mono": "^5.2.7",
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@react-three/postprocessing": "^2.19.1",
+    "framer-motion": "^11.18.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.170.0",
+    "ws": "^8.18.3",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@types/three": "^0.170.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.5.2",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "build": {
+    "appId": "com.wavelength.jarvis",
+    "productName": "JARVIS",
+    "directories": { "output": "release" },
+    "files": ["main.cjs", "preload.cjs", "dist/**", "package.json"],
+    "win": {
+      "target": ["portable"],
+      "signAndEditExecutable": false
+    }
+  }
+}

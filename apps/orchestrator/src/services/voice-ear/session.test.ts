@@ -81,19 +81,20 @@ test("pause, next, screenshot, and lock call the existing tools", async () => {
   assert.deepEqual(tools.map((call) => call.name), ["music_pause", "music_next", "take_screenshot", "lock_screen"]);
 });
 
-test("delete, send, and purchase are refused even after yes", async () => {
+test("delete and purchase ask out loud and do not run without a concrete tool", async () => {
   const { ear, tools, gitCalls } = harness();
   const asked = await ear.hear("delete my downloads");
   assert.match(asked.say, /say yes/i);
   assert.equal(ear.status().phase, "confirming");
-  const refused = await ear.hear("yes");
-  assert.match(refused.say, /won't/i);
+  const details = await ear.hear("yes");
+  assert.match(details.say, /exactly/i);
   assert.equal(tools.length, 0);
   assert.equal(gitCalls.length, 0);
-  const send = await ear.hear("send a message to Sam");
-  await ear.hear("yes");
+  const send = await ear.hear("send a message to Sam saying the invoice is ready");
   assert.match(send.say, /say yes/i);
   assert.equal(tools.length, 0);
+  await ear.hear("yes");
+  assert.equal(tools[0]?.name, "gmail_send");
 });
 
 test("typing waits for yes, clicking stays off unless computer use is armed", async () => {
@@ -170,7 +171,7 @@ test("mute ignores commands until unmute or push to talk", async () => {
   assert.equal(ear.status().muted, false);
 });
 
-test("the brain can open an app and cannot send mail", async () => {
+test("the brain can open an app, and mail waits for a spoken yes", async () => {
   const { ear, tools } = harness({
     brain: async (text) => {
       if (text.includes("mail")) return JSON.stringify({ tool: "gmail_send", args: { to: "a@b.c" }, say: "Sending." });
@@ -180,11 +181,12 @@ test("the brain can open an app and cannot send mail", async () => {
   const open = await ear.hear("put spotify on");
   assert.equal(tools[0]?.name, "open_app");
   assert.match(open.say, /Spotify|done|Opened/i);
-  const mail = await ear.hear("email the invoice");
-  assert.match(mail.say, /say yes|won't/i);
+  const mail = await ear.hear("please mail the invoice");
+  assert.match(mail.say, /say yes/i);
   const after = await ear.hear("yes");
-  assert.match(after.say, /won't/i);
-  assert.equal(tools.length, 1);
+  assert.match(after.say, /done|send/i);
+  assert.equal(tools.at(-1)?.name, "gmail_send");
+  assert.equal(tools.length, 2);
 });
 
 test("a spoken answer from the brain is not asked again", async () => {
@@ -198,6 +200,14 @@ test("a spoken answer from the brain is not asked again", async () => {
   const turn = await ear.hear("what time is it");
   assert.equal(calls, 1);
   assert.match(turn.say, /three/);
+});
+
+test("a two-step request opens the app and then the site", async () => {
+  const { ear, tools, opened } = harness();
+  const turn = await ear.hear("open chrome and then go to github.com");
+  assert.equal(tools[0]?.name, "open_app");
+  assert.equal(opened[0], "https://github.com");
+  assert.match(turn.say, /Chrome|github/i);
 });
 
 test("a missing coding backend says needs key", async () => {
